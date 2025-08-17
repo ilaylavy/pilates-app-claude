@@ -1,0 +1,53 @@
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+from ..models.booking import BookingStatus, CancellationReason
+from .class_schedule import ClassInstanceResponse
+from .user import UserResponse
+
+
+class BookingBase(BaseModel):
+    class_instance_id: int
+
+
+class BookingCreate(BookingBase):
+    user_package_id: Optional[int] = None
+
+
+class BookingResponse(BookingBase):
+    id: int
+    user_id: int
+    user: UserResponse
+    class_instance: ClassInstanceResponse
+    user_package_id: Optional[int] = None
+    status: BookingStatus
+    booking_date: datetime
+    cancellation_date: Optional[datetime] = None
+    cancellation_reason: Optional[CancellationReason] = None
+    notes: Optional[str] = None
+    can_cancel: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BookingCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class WaitlistEntryResponse(BaseModel):
+    id: int
+    user_id: int
+    class_instance_id: int
+    user: UserResponse
+    class_instance: ClassInstanceResponse
+    position: int
+    joined_date: datetime
+    notified_date: Optional[datetime] = None
+    promoted_date: Optional[datetime] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

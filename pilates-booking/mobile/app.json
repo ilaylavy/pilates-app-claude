@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Pilates Booking",
+    "slug": "pilates-booking",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.pilatesbooking"
+    },
+    "android": {
+      "package": "com.yourcompany.pilatesbooking"
+    },
+    "web": {},
+    "plugins": [
+      "expo-secure-store",
+      "expo-local-authentication"
+    ],
+    "scheme": "pilates",
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
