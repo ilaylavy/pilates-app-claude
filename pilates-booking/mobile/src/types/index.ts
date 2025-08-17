@@ -1,0 +1,124 @@
+export interface User {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  role: 'student' | 'instructor' | 'admin';
+  is_active: boolean;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClassTemplate {
+  id: number;
+  name: string;
+  description?: string;
+  duration_minutes: number;
+  capacity: number;
+  level: 'beginner' | 'intermediate' | 'advanced' | 'all_levels';
+  day_of_week: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+  start_time: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Instructor {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
+export interface ClassInstance {
+  id: number;
+  template_id: number;
+  instructor_id: number;
+  start_datetime: string;
+  end_datetime: string;
+  status: 'scheduled' | 'cancelled' | 'completed';
+  actual_capacity?: number;
+  notes?: string;
+  template: ClassTemplate;
+  instructor: Instructor;
+  available_spots: number;
+  is_full: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Package {
+  id: number;
+  name: string;
+  description?: string;
+  credits: number;
+  price: number;
+  validity_days: number;
+  is_active: boolean;
+  is_unlimited: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPackage {
+  id: number;
+  user_id: number;
+  package_id: number;
+  package: Package;
+  credits_remaining: number;
+  purchase_date: string;
+  expiry_date: string;
+  is_active: boolean;
+  is_expired: boolean;
+  is_valid: boolean;
+  days_until_expiry: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Booking {
+  id: number;
+  user_id: number;
+  class_instance_id: number;
+  user_package_id?: number;
+  status: 'confirmed' | 'cancelled' | 'no_show' | 'completed';
+  booking_date: string;
+  cancellation_date?: string;
+  cancellation_reason?: string;
+  notes?: string;
+  user: User;
+  class_instance: ClassInstance;
+  can_cancel: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  role?: 'student' | 'instructor' | 'admin';
+}
+
+export interface BookingRequest {
+  class_instance_id: number;
+  user_package_id?: number;
+}
+
+export interface ApiError {
+  detail: string;
+}
