@@ -5,7 +5,7 @@
 // - Physical device: your actual IP (check with ipconfig/ifconfig)
 const getDevApiUrl = () => {
   // Replace this IP with your actual local IP address
-  const LOCAL_IP = '192.168.99.110';
+  const LOCAL_IP = '10.100.102.24';
   return `http://${LOCAL_IP}:8000/api/v1`;
 };
 
