@@ -481,11 +481,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.success,
   },
-  periodText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
   revenueItem: {
     backgroundColor: COLORS.white,
     padding: SPACING.md,

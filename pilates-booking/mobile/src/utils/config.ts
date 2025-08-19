@@ -32,6 +32,8 @@ export const COLORS = {
   textSecondary: '#6B7280',
   border: '#E5E7EB',
   disabled: '#9CA3AF',
+  white: '#FFFFFF',
+  lightGray: '#F3F4F6',
 } as const;
 
 export const FONTS = {
