@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:19006", 
-        "http://192.168.99.110:19006",
+        "http://10.100.102.24:19006",
         "http://10.0.2.2:8000",  # Android emulator
         "*"  # Allow all origins for development
     ]
