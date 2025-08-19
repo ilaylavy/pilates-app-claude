@@ -16,8 +16,11 @@ interface PackageCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onPurchase?: () => void;
+  onToggle?: () => void;
   showActions?: boolean;
   userOwnsPackage?: boolean;
+  isAdminMode?: boolean;
+  style?: any;
 }
 
 const PackageCard: React.FC<PackageCardProps> = ({
@@ -26,8 +29,11 @@ const PackageCard: React.FC<PackageCardProps> = ({
   onEdit,
   onDelete,
   onPurchase,
+  onToggle,
   showActions = true,
   userOwnsPackage = false,
+  isAdminMode = false,
+  style,
 }) => {
   const { isAdmin, isStudent } = useUserRole();
 
@@ -65,6 +71,7 @@ const PackageCard: React.FC<PackageCardProps> = ({
         styles.card,
         !pkg.is_active && styles.inactiveCard,
         userOwnsPackage && styles.ownedCard,
+        style,
       ]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -187,12 +194,23 @@ const PackageCard: React.FC<PackageCardProps> = ({
           )}
 
           {/* Admin actions */}
-          {isAdmin && (
+          {isAdmin && isAdminMode && (
             <>
-              <TouchableOpacity style={styles.viewButton} onPress={onPress}>
-                <Ionicons name="eye" size={16} color={COLORS.primary} />
-                <Text style={styles.viewButtonText}>View</Text>
-              </TouchableOpacity>
+              {onToggle && (
+                <TouchableOpacity 
+                  style={[styles.toggleButton, pkg.is_active ? styles.deactivateButton : styles.activateButton]} 
+                  onPress={onToggle}
+                >
+                  <Ionicons 
+                    name={pkg.is_active ? "pause" : "play"} 
+                    size={16} 
+                    color={pkg.is_active ? COLORS.warning : COLORS.success} 
+                  />
+                  <Text style={[styles.toggleButtonText, pkg.is_active ? styles.deactivateText : styles.activateText]}>
+                    {pkg.is_active ? 'Deactivate' : 'Activate'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {onEdit && (
                 <TouchableOpacity style={styles.editButton} onPress={onEdit}>
                   <Ionicons name="pencil" size={16} color={COLORS.primary} />
@@ -206,6 +224,13 @@ const PackageCard: React.FC<PackageCardProps> = ({
                 </TouchableOpacity>
               )}
             </>
+          )}
+          
+          {isAdmin && !isAdminMode && (
+            <TouchableOpacity style={styles.viewButton} onPress={onPress}>
+              <Ionicons name="eye" size={16} color={COLORS.primary} />
+              <Text style={styles.viewButtonText}>View</Text>
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -409,6 +434,30 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: 12,
     fontWeight: '600',
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 6,
+    gap: 4,
+  },
+  activateButton: {
+    backgroundColor: '#e8f5e8',
+  },
+  deactivateButton: {
+    backgroundColor: '#fff3e0',
+  },
+  toggleButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  activateText: {
+    color: COLORS.success,
+  },
+  deactivateText: {
+    color: COLORS.warning,
   },
 });
 
