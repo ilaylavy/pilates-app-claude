@@ -1,5 +1,5 @@
-from typing import Generator, Optional
-from fastapi import Depends, HTTPException, status
+from typing import Generator, Optional, List
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -88,3 +88,47 @@ def require_roles(*allowed_roles: UserRole):
 get_admin_user = require_roles(UserRole.ADMIN)
 get_instructor_user = require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
 get_any_staff_user = require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)
+
+
+def require_admin_or_self(user_id_key: str = "user_id"):
+    """Dependency factory that allows admin access or access to own resources."""
+    def check_admin_or_self(
+        request: Request,
+        current_user: User = Depends(get_current_active_user)
+    ):
+        # Get the user_id from path parameters
+        path_params = request.path_params
+        target_user_id = path_params.get(user_id_key)
+        
+        # Allow if admin or accessing own resource
+        if current_user.role == UserRole.ADMIN or (target_user_id and str(current_user.id) == str(target_user_id)):
+            return current_user
+            
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation not permitted"
+        )
+    return check_admin_or_self
+
+
+def require_instructor_for_class():
+    """Dependency to check if user is instructor for a specific class."""
+    def check_instructor_access(
+        request: Request,
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_db)
+    ):
+        # Admin always has access
+        if current_user.role == UserRole.ADMIN:
+            return current_user
+            
+        # For instructors, we would check if they're assigned to the specific class
+        # This would require additional logic with class_id from path params
+        if current_user.role == UserRole.INSTRUCTOR:
+            return current_user
+            
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only instructors can access this resource"
+        )
+    return check_instructor_access

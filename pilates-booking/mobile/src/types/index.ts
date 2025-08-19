@@ -94,6 +94,18 @@ export interface Booking {
   updated_at: string;
 }
 
+export interface WaitlistEntry {
+  id: number;
+  user_id: number;
+  class_instance_id: number;
+  position: number;
+  joined_at: string;
+  user: User;
+  class_instance: ClassInstance;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuthTokens {
   access_token: string;
   refresh_token: string;
@@ -121,4 +133,62 @@ export interface BookingRequest {
 
 export interface ApiError {
   detail: string;
+}
+
+// Admin-specific types
+export interface UserListItem {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: 'student' | 'instructor' | 'admin';
+  is_active: boolean;
+  is_verified: boolean;
+  created_at: string;
+  total_bookings: number;
+  active_packages: number;
+}
+
+export interface DashboardAnalytics {
+  total_users: number;
+  new_users_last_30_days: number;
+  total_bookings: number;
+  total_revenue: number;
+  monthly_revenue: number;
+  popular_packages: Array<{
+    name: string;
+    count: number;
+  }>;
+}
+
+export interface RevenueReport {
+  total_revenue: number;
+  period: {
+    start_date: string;
+    end_date: string;
+  };
+  revenue_by_package: Array<{
+    package: string;
+    revenue: number;
+    sales_count: number;
+  }>;
+  revenue_by_date: Array<{
+    date: string;
+    revenue: number;
+  }>;
+}
+
+export interface AttendanceReport {
+  period: {
+    start_date: string;
+    end_date: string;
+  };
+  popular_times: Array<{
+    time: string;
+    bookings: number;
+  }>;
+  bookings_by_date: Array<{
+    date: string;
+    bookings: number;
+  }>;
 }

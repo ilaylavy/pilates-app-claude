@@ -11,6 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import type { RootStackParamList } from '../navigation/Navigation';
 
 import { useAuth } from '../hooks/useAuth';
 import { classesApi } from '../api/classes';
@@ -21,7 +23,7 @@ import { ClassInstance, Booking, UserPackage } from '../types';
 
 const HomeScreen: React.FC = () => {
   const { user } = useAuth();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
 
   const {
     data: upcomingClasses,
@@ -119,9 +121,9 @@ const HomeScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.nextClassCard}
               onPress={() =>
-                navigation.navigate('ClassDetails' as never, {
+                navigation.navigate('ClassDetails', {
                   classId: nextBooking.class_instance.id,
-                } as never)
+                })
               }
             >
               <View style={styles.nextClassInfo}>
@@ -159,9 +161,9 @@ const HomeScreen: React.FC = () => {
               key={classInstance.id}
               style={styles.classCard}
               onPress={() =>
-                navigation.navigate('ClassDetails' as never, {
+                navigation.navigate('ClassDetails', {
                   classId: classInstance.id,
-                } as never)
+                })
               }
             >
               <View style={styles.classCardContent}>

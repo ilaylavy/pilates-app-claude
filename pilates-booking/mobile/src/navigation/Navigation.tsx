@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../hooks/useAuth';
+import { useUserRole } from '../hooks/useUserRole';
 import { COLORS } from '../utils/config';
 
 // Auth screens
@@ -19,11 +20,21 @@ import ProfileScreen from '../screens/ProfileScreen';
 import ClassDetailsScreen from '../screens/ClassDetailsScreen';
 import PackagesScreen from '../screens/PackagesScreen';
 
+// Admin screens
+import UserManagementScreen from '../screens/UserManagementScreen';
+import PackageManagementScreen from '../screens/PackageManagementScreen';
+import ReportsScreen from '../screens/ReportsScreen';
+import SystemSettingsScreen from '../screens/SystemSettingsScreen';
+
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
   ClassDetails: { classId: number };
   Packages: undefined;
+  UserManagement: undefined;
+  PackageManagement: undefined;
+  Reports: undefined;
+  SystemSettings: undefined;
 };
 
 export type AuthStackParamList = {
@@ -37,6 +48,9 @@ export type MainTabParamList = {
   Schedule: undefined;
   Bookings: undefined;
   Profile: undefined;
+  Users?: undefined; // Only for admin/instructor
+  Packages?: undefined; // Only for admin
+  Reports?: undefined; // Only for admin
 };
 
 const RootStack = createStackNavigator<RootStackParamList>();
@@ -58,24 +72,28 @@ const AuthNavigator = () => {
 };
 
 const MainNavigator = () => {
+  const { isAdmin, isInstructor, isStudent } = useUserRole();
+
+  const getIconName = (routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap => {
+    const iconMap: Record<string, [string, string]> = {
+      'Home': ['home', 'home-outline'],
+      'Schedule': ['calendar', 'calendar-outline'],
+      'Bookings': ['list', 'list-outline'],
+      'Profile': ['person', 'person-outline'],
+      'Users': ['people', 'people-outline'],
+      'Packages': ['cube', 'cube-outline'],
+      'Reports': ['analytics', 'analytics-outline'],
+    };
+
+    const [focusedIcon, unfocusedIcon] = iconMap[routeName] || ['help-outline', 'help-outline'];
+    return (focused ? focusedIcon : unfocusedIcon) as keyof typeof Ionicons.glyphMap;
+  };
+
   return (
     <MainTab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap;
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Schedule') {
-            iconName = focused ? 'calendar' : 'calendar-outline';
-          } else if (route.name === 'Bookings') {
-            iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else {
-            iconName = 'help-outline';
-          }
-
+          const iconName = getIconName(route.name, focused);
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: COLORS.primary,
@@ -83,9 +101,34 @@ const MainNavigator = () => {
         headerShown: false,
       })}
     >
-      <MainTab.Screen name="Home" component={HomeScreen} />
-      <MainTab.Screen name="Schedule" component={ScheduleScreen} />
-      <MainTab.Screen name="Bookings" component={BookingsScreen} />
+      {/* Common screens for all users */}
+      {isStudent && (
+        <>
+          <MainTab.Screen name="Home" component={HomeScreen} />
+          <MainTab.Screen name="Schedule" component={ScheduleScreen} />
+          <MainTab.Screen name="Bookings" component={BookingsScreen} />
+        </>
+      )}
+
+      {/* Instructor screens */}
+      {isInstructor && (
+        <>
+          <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'My Classes' }} />
+          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
+        </>
+      )}
+
+      {/* Admin screens */}
+      {isAdmin && (
+        <>
+          <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'Classes' }} />
+          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Users' }} />
+          <MainTab.Screen name="Packages" component={PackageManagementScreen} />
+          <MainTab.Screen name="Reports" component={ReportsScreen} />
+        </>
+      )}
+
+      {/* Profile is common for all roles */}
       <MainTab.Screen name="Profile" component={ProfileScreen} />
     </MainTab.Navigator>
   );
@@ -117,6 +160,26 @@ const Navigation = () => {
             name="Packages" 
             component={PackagesScreen}
             options={{ headerShown: true, title: 'Packages' }}
+          />
+          <RootStack.Screen 
+            name="UserManagement" 
+            component={UserManagementScreen}
+            options={{ headerShown: true, title: 'User Management' }}
+          />
+          <RootStack.Screen 
+            name="PackageManagement" 
+            component={PackageManagementScreen}
+            options={{ headerShown: true, title: 'Package Management' }}
+          />
+          <RootStack.Screen 
+            name="Reports" 
+            component={ReportsScreen}
+            options={{ headerShown: true, title: 'Reports' }}
+          />
+          <RootStack.Screen 
+            name="SystemSettings" 
+            component={SystemSettingsScreen}
+            options={{ headerShown: true, title: 'System Settings' }}
           />
         </>
       ) : (
