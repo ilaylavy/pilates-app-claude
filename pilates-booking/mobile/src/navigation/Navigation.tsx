@@ -19,6 +19,7 @@ import BookingsScreen from '../screens/BookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ClassDetailsScreen from '../screens/ClassDetailsScreen';
 import PackagesScreen from '../screens/PackagesScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 // Admin screens
 import UserManagementScreen from '../screens/UserManagementScreen';
@@ -31,6 +32,9 @@ export type RootStackParamList = {
   Main: undefined;
   ClassDetails: { classId: number };
   Packages: undefined;
+  Settings: undefined;
+  BookingHistory: undefined;
+  AdminPackages: undefined;
   UserManagement: undefined;
   PackageManagement: undefined;
   Reports: undefined;
@@ -180,6 +184,21 @@ const Navigation = () => {
             name="SystemSettings" 
             component={SystemSettingsScreen}
             options={{ headerShown: true, title: 'System Settings' }}
+          />
+          <RootStack.Screen 
+            name="Settings" 
+            component={SettingsScreen}
+            options={{ headerShown: true, title: 'Settings' }}
+          />
+          <RootStack.Screen 
+            name="BookingHistory" 
+            component={BookingsScreen}
+            options={{ headerShown: true, title: 'Booking History' }}
+          />
+          <RootStack.Screen 
+            name="AdminPackages" 
+            component={PackageManagementScreen}
+            options={{ headerShown: true, title: 'Manage Packages' }}
           />
         </>
       ) : (

@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Dict, Any
+import os
+import uuid
+from pathlib import Path
 
-from ....schemas.user import UserResponse, UserUpdate
+from ....schemas.user import UserResponse, UserUpdate, UserStats, UserPreferences
 from ....models.user import User
+from ....models.booking import Booking
+from ....models.class_schedule import ClassInstance
 from ..deps import get_db, get_current_active_user, get_admin_user
 
 router = APIRouter()
@@ -72,3 +77,149 @@ async def get_user_by_id(
         )
     
     return user
+
+
+@router.post("/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Upload user avatar."""
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files are allowed"
+        )
+    
+    # Validate file size (5MB max)
+    file_size = 0
+    content = await file.read()
+    file_size = len(content)
+    if file_size > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large. Maximum size is 5MB"
+        )
+    
+    # Create upload directory
+    upload_dir = Path("uploads/avatars")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate unique filename
+    file_extension = Path(file.filename).suffix if file.filename else '.jpg'
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = upload_dir / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        buffer.write(content)
+    
+    # Update user avatar path
+    current_user.avatar_url = f"/uploads/avatars/{unique_filename}"
+    await db.commit()
+    
+    return {"avatar_url": current_user.avatar_url}
+
+
+@router.get("/me/stats", response_model=UserStats)
+async def get_user_stats(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user booking statistics."""
+    from sqlalchemy import select, func, extract
+    from datetime import datetime, timedelta
+    
+    # Get total bookings
+    total_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id,
+        Booking.status == "confirmed"
+    )
+    total_result = await db.execute(total_stmt)
+    total_bookings = total_result.scalar() or 0
+    
+    # Get this month's bookings
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+    
+    month_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id,
+        Booking.status == "confirmed",
+        extract('month', Booking.created_at) == current_month,
+        extract('year', Booking.created_at) == current_year
+    )
+    month_result = await db.execute(month_stmt)
+    month_bookings = month_result.scalar() or 0
+    
+    # Calculate attendance rate (attended vs total confirmed bookings)
+    attended_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id,
+        Booking.status == "attended"
+    )
+    attended_result = await db.execute(attended_stmt)
+    attended_bookings = attended_result.scalar() or 0
+    
+    attendance_rate = (attended_bookings / total_bookings * 100) if total_bookings > 0 else 0
+    
+    # Get member since date
+    member_since = current_user.created_at
+    
+    return UserStats(
+        total_bookings=total_bookings,
+        bookings_this_month=month_bookings,
+        attendance_rate=round(attendance_rate, 1),
+        member_since=member_since
+    )
+
+
+@router.patch("/me/preferences", response_model=UserPreferences)
+async def update_user_preferences(
+    preferences: UserPreferences,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update user notification preferences."""
+    # Store preferences as JSON in user model (we'll need to add this field)
+    preferences_dict = preferences.dict()
+    current_user.preferences = preferences_dict
+    await db.commit()
+    
+    return preferences
+
+
+@router.get("/me/booking-history")
+async def get_booking_history(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user's booking history."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    
+    stmt = (
+        select(Booking)
+        .where(Booking.user_id == current_user.id)
+        .options(selectinload(Booking.class_instance))
+        .order_by(Booking.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(stmt)
+    bookings = result.scalars().all()
+    
+    return [
+        {
+            "id": booking.id,
+            "class_name": booking.class_instance.class_template.name,
+            "date": booking.class_instance.start_time,
+            "instructor": booking.class_instance.instructor.full_name if booking.class_instance.instructor else None,
+            "status": booking.status,
+            "created_at": booking.created_at
+        }
+        for booking in bookings
+    ]

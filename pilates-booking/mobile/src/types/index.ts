@@ -7,6 +7,8 @@ export interface User {
   role: 'student' | 'instructor' | 'admin';
   is_active: boolean;
   is_verified: boolean;
+  avatar_url?: string;
+  preferences?: UserPreferences;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +46,8 @@ export interface ClassInstance {
   instructor: Instructor;
   available_spots: number;
   is_full: boolean;
+  waitlist_count: number;
+  participant_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +61,8 @@ export interface Package {
   validity_days: number;
   is_active: boolean;
   is_unlimited: boolean;
+  order_index: number;
+  is_featured: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -191,4 +197,29 @@ export interface AttendanceReport {
     date: string;
     bookings: number;
   }>;
+}
+
+// New profile-related types
+export interface UserPreferences {
+  email_notifications: boolean;
+  sms_notifications: boolean;
+  booking_reminders: boolean;
+  class_updates: boolean;
+  marketing_emails: boolean;
+}
+
+export interface UserStats {
+  total_bookings: number;
+  bookings_this_month: number;
+  attendance_rate: number;
+  member_since: string;
+}
+
+export interface BookingHistory {
+  id: number;
+  class_name: string;
+  date: string;
+  instructor: string;
+  status: string;
+  created_at: string;
 }

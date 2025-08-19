@@ -126,3 +126,80 @@ async def update_package(
     await db.refresh(package)
     
     return package
+
+
+@router.get("/catalog", response_model=List[PackageResponse])
+async def get_package_catalog(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get package catalog with all available packages."""
+    stmt = select(Package).where(Package.is_active == True).order_by(Package.order_index, Package.price)
+    result = await db.execute(stmt)
+    packages = result.scalars().all()
+    
+    return packages
+
+
+@router.delete("/{package_id}")
+async def delete_package(
+    package_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    """Delete a package (admin only)."""
+    stmt = select(Package).where(Package.id == package_id)
+    result = await db.execute(stmt)
+    package = result.scalar_one_or_none()
+    
+    if not package:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Package not found"
+        )
+    
+    await db.delete(package)
+    await db.commit()
+    
+    return {"message": "Package deleted successfully"}
+
+
+@router.patch("/{package_id}/toggle")
+async def toggle_package_status(
+    package_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    """Toggle package active status (admin only)."""
+    stmt = select(Package).where(Package.id == package_id)
+    result = await db.execute(stmt)
+    package = result.scalar_one_or_none()
+    
+    if not package:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Package not found"
+        )
+    
+    package.is_active = not package.is_active
+    await db.commit()
+    
+    return {"message": f"Package {'activated' if package.is_active else 'deactivated'} successfully"}
+
+
+@router.patch("/reorder")
+async def reorder_packages(
+    package_order: List[int],
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    """Reorder packages (admin only)."""
+    for index, package_id in enumerate(package_order):
+        stmt = select(Package).where(Package.id == package_id)
+        result = await db.execute(stmt)
+        package = result.scalar_one_or_none()
+        if package:
+            package.order_index = index
+    
+    await db.commit()
+    return {"message": "Package order updated successfully"}

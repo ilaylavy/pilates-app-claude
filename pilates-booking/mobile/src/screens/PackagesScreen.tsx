@@ -1,15 +1,337 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  FlatList,
+  Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING } from '../utils/config';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../api/client';
+import { useUserRole } from '../hooks/useUserRole';
+import { Ionicons } from '@expo/vector-icons';
+import PackageCard from '../components/PackageCard';
+import PackageEditModal from '../components/PackageEditModal';
+import Button from '../components/common/Button';
+import PurchaseModal from '../components/PurchaseModal';
+
+interface Package {
+  id: number;
+  name: string;
+  description: string;
+  credits: number;
+  price: number;
+  validity_days: number;
+  is_active: boolean;
+  is_unlimited: boolean;
+  is_featured: boolean;
+  order_index: number;
+}
+
+interface UserPackage {
+  id: number;
+  credits_remaining: number;
+  expiry_date: string;
+  is_active: boolean;
+  package: Package;
+  purchase_date: string;
+}
 
 const PackagesScreen: React.FC = () => {
+  const { isAdmin } = useUserRole();
+  const queryClient = useQueryClient();
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [packageToPurchase, setPackageToPurchase] = useState<Package | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Queries
+  const { data: availablePackages, isLoading: packagesLoading } = useQuery<Package[]>({
+    queryKey: ['packages', isAdminMode ? 'all' : 'available'],
+    queryFn: async () => {
+      const endpoint = isAdminMode ? '/api/v1/packages/' : '/api/v1/packages/catalog';
+      const response = await apiClient.get(endpoint);
+      return response.data;
+    },
+  });
+
+  const { data: userPackages, isLoading: userPackagesLoading } = useQuery<UserPackage[]>({
+    queryKey: ['user-packages'],
+    queryFn: async () => {
+      const response = await apiClient.get('/api/v1/packages/my-packages');
+      return response.data;
+    },
+  });
+
+  // Get current active package with credits
+  const activePackage = userPackages?.find(
+    (up) => up.is_active && up.credits_remaining > 0 && new Date(up.expiry_date) > new Date()
+  );
+
+  // Mutations
+  const togglePackageMutation = useMutation({
+    mutationFn: async (packageId: number) => {
+      await apiClient.patch(`/api/v1/packages/${packageId}/toggle`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+    },
+  });
+
+  const deletePackageMutation = useMutation({
+    mutationFn: async (packageId: number) => {
+      await apiClient.delete(`/api/v1/packages/${packageId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+    },
+  });
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ['packages'] });
+    await queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+    setRefreshing(false);
+  };
+
+  const handleEditPackage = (pkg: Package) => {
+    setSelectedPackage(pkg);
+    setShowEditModal(true);
+  };
+
+  const handlePurchasePackage = (pkg: Package) => {
+    setPackageToPurchase(pkg);
+    setShowPurchaseModal(true);
+  };
+
+  const handleDeletePackage = (pkg: Package) => {
+    Alert.alert(
+      'Delete Package',
+      `Are you sure you want to delete "${pkg.name}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deletePackageMutation.mutate(pkg.id),
+        },
+      ]
+    );
+  };
+
+  const handleTogglePackage = (pkg: Package) => {
+    togglePackageMutation.mutate(pkg.id);
+  };
+
+  const formatExpiry = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Expired';
+    if (diffDays === 0) return 'Expires today';
+    if (diffDays === 1) return 'Expires tomorrow';
+    return `Expires in ${diffDays} days`;
+  };
+
+  const renderCurrentBalance = () => {
+    if (!activePackage) {
+      return (
+        <View style={styles.balanceCard}>
+          <View style={styles.balanceHeader}>
+            <Ionicons name="card" size={24} color={COLORS.textSecondary} />
+            <Text style={styles.balanceTitle}>No Active Package</Text>
+          </View>
+          <Text style={styles.balanceSubtitle}>
+            Purchase a package to start booking classes
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.balanceCard}>
+        <View style={styles.balanceHeader}>
+          <Ionicons name="card" size={24} color={COLORS.primary} />
+          <Text style={styles.balanceTitle}>Current Balance</Text>
+        </View>
+        
+        <View style={styles.balanceContent}>
+          <Text style={styles.creditsNumber}>{activePackage.credits_remaining}</Text>
+          <Text style={styles.creditsLabel}>Credits Remaining</Text>
+        </View>
+        
+        <View style={styles.balanceFooter}>
+          <Text style={styles.expiryText}>{formatExpiry(activePackage.expiry_date)}</Text>
+          <View style={styles.progressBarContainer}>
+            <View 
+              style={[
+                styles.progressBar,
+                {
+                  width: `${(activePackage.credits_remaining / activePackage.package.credits) * 100}%`
+                }
+              ]}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderPackageHistory = () => {
+    const expiredPackages = userPackages?.filter(
+      (up) => !up.is_active || up.credits_remaining === 0 || new Date(up.expiry_date) <= new Date()
+    );
+
+    if (!expiredPackages || expiredPackages.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Package History</Text>
+          <Ionicons name="chevron-down" size={20} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+        
+        {expiredPackages.slice(0, 3).map((userPackage) => (
+          <View key={userPackage.id} style={styles.historyItem}>
+            <View style={styles.historyContent}>
+              <Text style={styles.historyName}>{userPackage.package.name}</Text>
+              <Text style={styles.historyDate}>
+                Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
+              </Text>
+            </View>
+            <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
+              {userPackage.credits_remaining === 0 ? 'Used' : 'Expired'}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Packages</Text>
-        <Text style={styles.subtitle}>Credit packages coming soon...</Text>
-      </View>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Admin Toggle */}
+        {isAdmin && (
+          <View style={styles.adminHeader}>
+            <Text style={styles.adminTitle}>Package Management</Text>
+            <TouchableOpacity
+              style={[styles.adminToggle, isAdminMode && styles.adminToggleActive]}
+              onPress={() => setIsAdminMode(!isAdminMode)}
+            >
+              <Text style={[styles.adminToggleText, isAdminMode && styles.adminToggleTextActive]}>
+                {isAdminMode ? 'Admin View' : 'Student View'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!isAdminMode && (
+          <>
+            {/* Current Balance Card */}
+            {renderCurrentBalance()}
+
+            {/* Available Packages */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Available Packages</Text>
+              <FlatList
+                data={availablePackages}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => (
+                  <PackageCard
+                    package={item}
+                    onPress={() => handlePurchasePackage(item)}
+                    style={styles.packageCardHorizontal}
+                  />
+                )}
+                contentContainerStyle={styles.horizontalList}
+              />
+            </View>
+
+            {/* Package History */}
+            {renderPackageHistory()}
+          </>
+        )}
+
+        {/* Admin View */}
+        {isAdminMode && (
+          <View style={styles.adminSection}>
+            <View style={styles.adminActions}>
+              <Button
+                title="Add New Package"
+                onPress={() => {
+                  setSelectedPackage(null);
+                  setShowEditModal(true);
+                }}
+                style={styles.addButton}
+              />
+            </View>
+
+            <FlatList
+              data={availablePackages}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <PackageCard
+                  package={item}
+                  isAdminMode
+                  onEdit={() => handleEditPackage(item)}
+                  onDelete={() => handleDeletePackage(item)}
+                  onToggle={() => handleTogglePackage(item)}
+                  style={styles.adminPackageCard}
+                />
+              )}
+              scrollEnabled={false}
+            />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Modals */}
+      {showEditModal && (
+        <PackageEditModal
+          visible={showEditModal}
+          package={selectedPackage}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedPackage(null);
+          }}
+          onSave={() => {
+            setShowEditModal(false);
+            setSelectedPackage(null);
+            queryClient.invalidateQueries({ queryKey: ['packages'] });
+          }}
+        />
+      )}
+
+      {showPurchaseModal && packageToPurchase && (
+        <PurchaseModal
+          visible={showPurchaseModal}
+          package={packageToPurchase}
+          onClose={() => {
+            setShowPurchaseModal(false);
+            setPackageToPurchase(null);
+          }}
+          onPurchase={() => {
+            setShowPurchaseModal(false);
+            setPackageToPurchase(null);
+            queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -19,22 +341,160 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.lg,
   },
-  title: {
-    fontSize: 24,
+  adminHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  adminTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  adminToggle: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 16,
+  },
+  adminToggleActive: {
+    backgroundColor: COLORS.primary,
+  },
+  adminToggleText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  adminToggleTextActive: {
+    color: COLORS.background,
+  },
+  balanceCard: {
+    backgroundColor: COLORS.card,
+    margin: SPACING.lg,
+    padding: SPACING.lg,
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  balanceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginLeft: SPACING.sm,
+  },
+  balanceContent: {
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  creditsNumber: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  creditsLabel: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  balanceFooter: {
+    gap: SPACING.sm,
+  },
+  expiryText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  progressBarContainer: {
+    height: 6,
+    backgroundColor: COLORS.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+  },
+  balanceSubtitle: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+  },
+  section: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.md,
   },
-  subtitle: {
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  horizontalList: {
+    paddingLeft: SPACING.lg,
+  },
+  packageCardHorizontal: {
+    marginRight: SPACING.md,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    padding: SPACING.md,
+    borderRadius: 8,
+    marginBottom: SPACING.sm,
+  },
+  historyContent: {
+    flex: 1,
+  },
+  historyName: {
     fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  historyDate: {
+    fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    marginTop: 2,
+  },
+  historyStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  adminSection: {
+    padding: SPACING.lg,
+  },
+  adminActions: {
+    marginBottom: SPACING.lg,
+  },
+  addButton: {
+    marginBottom: SPACING.md,
+  },
+  adminPackageCard: {
+    marginBottom: SPACING.md,
   },
 });
 

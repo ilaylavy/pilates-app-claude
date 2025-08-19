@@ -43,6 +43,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_verified: bool
+    avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -78,3 +79,18 @@ class PasswordResetConfirm(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError('Password must contain at least one digit')
         return v
+
+
+class UserStats(BaseModel):
+    total_bookings: int
+    bookings_this_month: int
+    attendance_rate: float
+    member_since: datetime
+
+
+class UserPreferences(BaseModel):
+    email_notifications: bool = True
+    sms_notifications: bool = False
+    booking_reminders: bool = True
+    class_updates: bool = True
+    marketing_emails: bool = False

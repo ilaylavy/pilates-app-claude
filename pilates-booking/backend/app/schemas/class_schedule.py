@@ -68,6 +68,15 @@ class InstructorResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ParticipantResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    booking_date: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ClassInstanceResponse(ClassInstanceBase):
     id: int
     template_id: int
@@ -76,7 +85,15 @@ class ClassInstanceResponse(ClassInstanceBase):
     instructor: InstructorResponse
     available_spots: int
     is_full: bool
+    waitlist_count: int
+    participant_count: int
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ClassInstanceWithParticipants(ClassInstanceResponse):
+    participants: List[ParticipantResponse] = []
 
     model_config = {"from_attributes": True}

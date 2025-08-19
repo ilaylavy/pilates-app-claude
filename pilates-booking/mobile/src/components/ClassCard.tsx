@@ -104,10 +104,15 @@ const ClassCard: React.FC<ClassCardProps> = ({
         <View style={styles.capacityInfo}>
           <Ionicons name="people" size={16} color={getCapacityColor()} />
           <Text style={[styles.detailText, { color: getCapacityColor() }]}>
-            {classInstance.available_spots}/{classInstance.template.capacity} spots
+            {classInstance.participant_count}/{classInstance.template.capacity} spots
           </Text>
           {classInstance.is_full && (
             <Text style={styles.fullText}>FULL</Text>
+          )}
+          {classInstance.waitlist_count > 0 && (
+            <Text style={styles.waitlistText}>
+              {classInstance.waitlist_count} waiting
+            </Text>
           )}
         </View>
       </View>
@@ -251,6 +256,16 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontWeight: 'bold',
     backgroundColor: '#ffebee',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: SPACING.xs,
+  },
+  waitlistText: {
+    fontSize: 12,
+    color: COLORS.warning,
+    fontWeight: 'bold',
+    backgroundColor: '#fff3cd',
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: 4,

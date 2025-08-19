@@ -83,5 +83,15 @@ class ClassInstance(Base):
     def is_full(self) -> bool:
         return self.available_spots <= 0
 
+    @property
+    def waitlist_count(self) -> int:
+        """Get the number of active waitlist entries for this class."""
+        return len([w for w in self.waitlist_entries if w.is_active])
+
+    @property
+    def participant_count(self) -> int:
+        """Get the number of confirmed participants."""
+        return len([b for b in self.bookings if b.status == "confirmed"])
+
     def __repr__(self):
         return f"<ClassInstance(id={self.id}, template='{self.template.name}', datetime='{self.start_datetime}')>"
