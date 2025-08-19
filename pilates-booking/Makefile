@@ -51,10 +51,10 @@ format: ## Format all code
 
 migration: ## Create new database migration
 	@read -p "Enter migration message: " msg; \
-	cd backend && python -m alembic revision --autogenerate -m "$$msg"
+	docker-compose exec backend python -m alembic revision --autogenerate -m "$$msg"
 
 migrate: ## Run database migrations
-	cd backend && python -m alembic upgrade head
+	docker-compose exec backend python -m alembic upgrade head
 
 seed: ## Seed database with initial data
 	cd backend && python -m app.scripts.seed_data

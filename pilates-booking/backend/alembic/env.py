@@ -16,8 +16,15 @@ from app.models import *  # Import all models
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the sqlalchemy.url from our settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Set the sqlalchemy.url from our settings (convert from asyncpg to psycopg2 for migrations)
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgresql+asyncpg://"):
+    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+elif "postgresql://" in database_url and "asyncpg" not in database_url:
+    # Already synchronous, keep as is
+    pass
+
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
