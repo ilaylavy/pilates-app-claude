@@ -13,9 +13,12 @@ const getDevApiUrl = () => {
 
 // Backup URLs to try if primary fails
 export const BACKUP_API_URLS = [
-  'http://localhost:8000',
+  'http://172.31.208.1:8000',  // WSL/Docker host IP
+  'http://127.0.0.1:8000',     // localhost
+  'http://10.0.2.2:8000',      // Android emulator host
+  'http://localhost:8000',     // standard localhost
   'http://192.168.1.107:8000', // Common router IP range
-  'http://192.168.0.107:8000',  // Common router IP range
+  'http://192.168.0.107:8000', // Common router IP range
 ];
 
 export const API_BASE_URL = __DEV__ 

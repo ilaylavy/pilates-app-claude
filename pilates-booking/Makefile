@@ -30,7 +30,7 @@ db-logs: ## Show database logs
 	docker-compose logs -f postgres
 
 test-backend: ## Run backend tests
-	cd backend && python -m pytest tests/ -v
+	docker-compose exec backend python -m pytest tests/ -v
 
 test-mobile: ## Run mobile tests
 	cd mobile && npm test
@@ -38,7 +38,7 @@ test-mobile: ## Run mobile tests
 test: test-backend test-mobile ## Run all tests
 
 lint-backend: ## Lint backend code
-	cd backend && python -m black . && python -m isort . && python -m flake8 .
+	docker-compose exec backend python -m black . && docker-compose exec backend python -m isort . && docker-compose exec backend python -m flake8 .
 
 lint-mobile: ## Lint mobile code
 	cd mobile && npm run lint
@@ -46,7 +46,7 @@ lint-mobile: ## Lint mobile code
 lint: lint-backend lint-mobile ## Lint all code
 
 format: ## Format all code
-	cd backend && python -m black . && python -m isort .
+	docker-compose exec backend python -m black . && docker-compose exec backend python -m isort .
 	cd mobile && npm run format
 
 migration: ## Create new database migration
@@ -57,7 +57,7 @@ migrate: ## Run database migrations
 	docker-compose exec backend python -m alembic upgrade head
 
 seed: ## Seed database with initial data
-	cd backend && python -m app.scripts.seed_data
+	docker-compose exec backend python -m app.scripts.seed_data
 
 clean: ## Clean up containers and volumes
 	docker-compose down -v

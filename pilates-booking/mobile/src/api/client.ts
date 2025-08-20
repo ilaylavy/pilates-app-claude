@@ -9,7 +9,7 @@ class ApiClient {
   constructor() {
     this.instance = axios.create({
       baseURL: this.currentBaseURL,
-      timeout: 15000, // Reduced timeout for faster fallback
+      timeout: 8000, // Faster timeout for quicker fallback to backup URLs
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -22,27 +22,28 @@ class ApiClient {
 
   private async testConnection(): Promise<void> {
     try {
-      await axios.get(`${this.currentBaseURL}/health`, { timeout: 5000 });
-      console.log(`✅ Connected to API at: ${this.currentBaseURL}`);
+      const response = await axios.get(`${this.currentBaseURL}/health`, { timeout: 3000 });
+      console.log(`✅ Connected to API at: ${this.currentBaseURL}`, response.data);
     } catch (error) {
-      console.warn(`❌ Failed to connect to primary URL: ${this.currentBaseURL}`);
+      console.warn(`❌ Failed to connect to primary URL: ${this.currentBaseURL}`, error.message);
       await this.tryBackupUrls();
     }
   }
 
   private async tryBackupUrls(): Promise<void> {
+    console.log('🔄 Trying backup URLs...');
     for (const backupUrl of BACKUP_API_URLS) {
       try {
-        await axios.get(`${backupUrl}/health`, { timeout: 5000 });
-        console.log(`✅ Found working backup URL: ${backupUrl}`);
+        const response = await axios.get(`${backupUrl}/health`, { timeout: 3000 });
+        console.log(`✅ Found working backup URL: ${backupUrl}`, response.data);
         this.currentBaseURL = backupUrl;
         this.instance.defaults.baseURL = backupUrl;
         return;
       } catch (error) {
-        console.warn(`❌ Backup URL failed: ${backupUrl}`);
+        console.warn(`❌ Backup URL failed: ${backupUrl} - ${error.message}`);
       }
     }
-    console.error('❌ No working API URLs found');
+    console.error('❌ No working API URLs found. Check your network connection and backend status.');
   }
 
   private setupInterceptors() {
@@ -91,11 +92,6 @@ class ApiClient {
             message: error.message
           });
           
-          // For auth endpoints that fail, suggest backend issue
-          if (error.config?.url?.includes('/auth/')) {
-            console.error('🔥 Auth endpoint failed - this is likely a backend database issue');
-            console.error('💡 Try: make reset-db or check backend logs');
-          }
         }
 
         if (error.response?.status === 401 && !originalRequest._retry) {
