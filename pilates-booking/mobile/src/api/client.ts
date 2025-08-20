@@ -6,6 +6,10 @@ class ApiClient {
   private instance: AxiosInstance;
   private currentBaseURL: string = API_BASE_URL;
 
+  private buildUrl(url: string): string {
+    return url.startsWith('/') ? url : `/${url}`;
+  }
+
   constructor() {
     this.instance = axios.create({
       baseURL: this.currentBaseURL,
@@ -65,7 +69,8 @@ class ApiClient {
         }
         
         // Debug logging
-        console.log(`API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+        const fullUrl = new URL(config.url ?? '', config.baseURL).toString();
+        console.log(`API Request: ${config.method?.toUpperCase()} ${fullUrl}`);
         
         return config;
       },
@@ -138,23 +143,23 @@ class ApiClient {
   }
 
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.instance.get(url, config);
+    return this.instance.get(this.buildUrl(url), config);
   }
 
   async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.instance.post(url, data, config);
+    return this.instance.post(this.buildUrl(url), data, config);
   }
 
   async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.instance.put(url, data, config);
+    return this.instance.put(this.buildUrl(url), data, config);
   }
 
   async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.instance.patch(url, data, config);
+    return this.instance.patch(this.buildUrl(url), data, config);
   }
 
   async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return this.instance.delete(url, config);
+    return this.instance.delete(this.buildUrl(url), config);
   }
 }
 
