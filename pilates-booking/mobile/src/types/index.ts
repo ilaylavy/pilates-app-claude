@@ -223,3 +223,73 @@ export interface BookingHistory {
   status: string;
   created_at: string;
 }
+
+// Payment-related types
+export interface PaymentIntent {
+  client_secret: string;
+  payment_intent_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  card: {
+    brand: string;
+    last4: string;
+    exp_month: number;
+    exp_year: number;
+  };
+  created: number;
+}
+
+export interface PaymentHistoryItem {
+  id: number;
+  user_id: number;
+  package_id?: number;
+  user_package_id?: number;
+  amount: number;
+  currency: string;
+  payment_type: 'package_purchase' | 'single_class' | 'late_cancellation_fee' | 'no_show_fee' | 'refund';
+  payment_method: 'stripe' | 'credit_card' | 'cash' | 'bank_transfer' | 'paypal';
+  status: 'pending' | 'completed' | 'failed' | 'refunded' | 'cancelled';
+  external_transaction_id?: string;
+  external_payment_id?: string;
+  payment_date?: string;
+  refund_date?: string;
+  refund_amount?: number;
+  extra_data?: string;
+  is_successful: boolean;
+  is_refundable: boolean;
+  created_at: string;
+  updated_at: string;
+  description?: string;
+}
+
+export interface PaymentHistory {
+  payments: PaymentHistoryItem[];
+  total_count: number;
+  page: number;
+  per_page: number;
+}
+
+export interface Subscription {
+  id: string;
+  status: string;
+  current_period_start: number;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+  client_secret?: string;
+}
+
+export interface Invoice {
+  id: string;
+  number?: string;
+  amount_paid: number;
+  currency: string;
+  status: string;
+  created: number;
+  invoice_pdf?: string;
+  hosted_invoice_url?: string;
+}

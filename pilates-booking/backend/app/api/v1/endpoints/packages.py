@@ -26,13 +26,13 @@ async def get_available_packages(
     return packages
 
 
-@router.post("/purchase", response_model=UserPackageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/purchase", status_code=status.HTTP_200_OK)
 async def purchase_package(
     purchase_data: PackagePurchase,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Purchase a package for the current user."""
+    """Initiate package purchase - returns payment intent for client to complete."""
     
     # Get package
     stmt = select(Package).where(
@@ -47,29 +47,13 @@ async def purchase_package(
             detail="Package not found"
         )
     
-    # Calculate expiry date
-    expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
-    
-    # Create user package
-    user_package = UserPackage(
-        user_id=current_user.id,
-        package_id=package.id,
-        credits_remaining=package.credits,
-        expiry_date=expiry_date
-    )
-    
-    db.add(user_package)
-    await db.commit()
-    await db.refresh(user_package)
-    
-    # Reload with package relationship
-    stmt = select(UserPackage).options(selectinload(UserPackage.package)).where(UserPackage.id == user_package.id)
-    result = await db.execute(stmt)
-    user_package_with_package = result.scalar_one()
-    
-    # TODO: Create payment record and process payment
-    
-    return user_package_with_package
+    return {
+        "message": "Please use the /api/v1/payments/create-payment-intent endpoint to complete the purchase",
+        "package_id": package.id,
+        "package_name": package.name,
+        "price": float(package.price),
+        "currency": "ILS"
+    }
 
 
 @router.get("/my-packages", response_model=List[UserPackageResponse])

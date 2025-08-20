@@ -31,6 +31,7 @@ interface PurchaseModalProps {
   package: Package;
   onClose: () => void;
   onPurchase: () => void;
+  onNavigateToPayment?: (packageData: { packageId: number; packageName: string; price: number; currency: string }) => void;
 }
 
 const PurchaseModal: React.FC<PurchaseModalProps> = ({
@@ -38,6 +39,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   package: pkg,
   onClose,
   onPurchase,
+  onNavigateToPayment,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'cash'>('card');
@@ -70,9 +72,24 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   };
 
   const handlePurchase = async () => {
+    if (paymentMethod === 'card') {
+      // Navigate to payment screen for card payments
+      if (onNavigateToPayment) {
+        onNavigateToPayment({
+          packageId: pkg.id,
+          packageName: pkg.name,
+          price: pkg.price,
+          currency: 'ils'
+        });
+        onClose();
+      }
+      return;
+    }
+
+    // Handle non-card payments (legacy flow)
     Alert.alert(
       'Confirm Purchase',
-      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)}?`,
+      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)} via ${paymentMethod === 'bank' ? 'bank transfer' : 'cash payment'}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {

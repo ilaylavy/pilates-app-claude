@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     
     # Timezone
     DEFAULT_TIMEZONE: str = "Asia/Jerusalem"
+    
+    # Stripe Configuration
+    STRIPE_SECRET_KEY: str = "sk_test_51234567890abcdef"  # Replace with your test secret key
+    STRIPE_PUBLISHABLE_KEY: str = "pk_test_51234567890abcdef"  # Replace with your test publishable key
+    STRIPE_WEBHOOK_SECRET: str = "whsec_test_1234567890abcdef"  # Replace with your webhook secret
+    STRIPE_CURRENCY: str = "ils"  # Israeli Shekel
+    STRIPE_MONTHLY_SUBSCRIPTION_PRICE_ID: str = "price_1234567890abcdef"  # Monthly subscription price ID
 
     @field_validator("CORS_ORIGINS")
     @classmethod

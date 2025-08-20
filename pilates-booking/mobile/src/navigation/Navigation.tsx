@@ -21,6 +21,8 @@ import ClassDetailsScreen from '../screens/ClassDetailsScreen';
 import PackagesScreen from '../screens/PackagesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
+import PaymentScreen from '../screens/PaymentScreen';
+import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
 
 // Admin screens
 import UserManagementScreen from '../screens/UserManagementScreen';
@@ -41,6 +43,13 @@ export type RootStackParamList = {
   Reports: undefined;
   SystemSettings: undefined;
   EditProfile: undefined;
+  Payment: { 
+    packageId: number; 
+    packageName: string; 
+    price: number; 
+    currency: string; 
+  };
+  PaymentHistory: undefined;
 };
 
 export type AuthStackParamList = {
@@ -206,6 +215,16 @@ const Navigation = () => {
             name="EditProfile" 
             component={EditProfileScreen}
             options={{ headerShown: false }}
+          />
+          <RootStack.Screen 
+            name="Payment" 
+            component={PaymentScreen}
+            options={{ headerShown: true, title: 'Payment' }}
+          />
+          <RootStack.Screen 
+            name="PaymentHistory" 
+            component={PaymentHistoryScreen}
+            options={{ headerShown: true, title: 'Payment History' }}
           />
         </>
       ) : (
