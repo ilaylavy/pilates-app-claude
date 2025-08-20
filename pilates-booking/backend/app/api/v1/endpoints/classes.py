@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 import calendar
 
 from ....schemas.class_schedule import (
@@ -13,10 +13,33 @@ from ....schemas.class_schedule import (
 )
 from ....models.class_schedule import ClassTemplate, ClassInstance, ClassStatus
 from ....models.user import User, UserRole
-from ....models.booking import Booking, WaitlistEntry
+from ....models.booking import Booking, WaitlistEntry, BookingStatus
 from ..deps import get_db, get_current_active_user, get_admin_user, get_instructor_user
 
 router = APIRouter()
+
+
+def class_instance_to_response(class_instance: ClassInstance) -> dict:
+    """Convert ClassInstance model to response dict with computed fields."""
+    response_dict = {
+        "id": class_instance.id,
+        "template_id": class_instance.template_id,
+        "instructor_id": class_instance.instructor_id,
+        "start_datetime": class_instance.start_datetime,
+        "end_datetime": class_instance.end_datetime,
+        "status": class_instance.status,
+        "actual_capacity": class_instance.actual_capacity,
+        "notes": class_instance.notes,
+        "created_at": class_instance.created_at,
+        "updated_at": class_instance.updated_at,
+        "template": class_instance.template,
+        "instructor": class_instance.instructor,
+        "available_spots": class_instance.get_available_spots(),
+        "is_full": class_instance.get_is_full(),
+        "waitlist_count": class_instance.get_waitlist_count(),
+        "participant_count": class_instance.get_participant_count(),
+    }
+    return response_dict
 
 
 @router.get("/upcoming", response_model=List[ClassInstanceResponse])
@@ -26,7 +49,7 @@ async def get_upcoming_classes(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get upcoming class instances within the next N days."""
-    start_date = datetime.utcnow()
+    start_date = datetime.now(timezone.utc)
     end_date = start_date + timedelta(days=days_ahead)
     
     stmt = (
@@ -41,7 +64,7 @@ async def get_upcoming_classes(
             and_(
                 ClassInstance.start_datetime >= start_date,
                 ClassInstance.start_datetime <= end_date,
-                ClassInstance.status == "scheduled"
+                ClassInstance.status == ClassStatus.SCHEDULED
             )
         )
         .order_by(ClassInstance.start_datetime)
@@ -50,7 +73,8 @@ async def get_upcoming_classes(
     result = await db.execute(stmt)
     class_instances = result.scalars().all()
     
-    return class_instances
+    # Convert to response format with computed fields
+    return [class_instance_to_response(instance) for instance in class_instances]
 
 
 @router.get("/{class_id}", response_model=ClassInstanceResponse)
@@ -79,7 +103,7 @@ async def get_class_instance(
             detail="Class not found"
         )
     
-    return class_instance
+    return class_instance_to_response(class_instance)
 
 
 # Template management endpoints (admin/instructor only)
@@ -155,7 +179,21 @@ async def create_class_instance(
     await db.commit()
     await db.refresh(db_instance)
     
-    return db_instance
+    # Load relationships for computed fields
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries)
+        )
+        .where(ClassInstance.id == db_instance.id)
+    )
+    result = await db.execute(stmt)
+    loaded_instance = result.scalar_one()
+    
+    return class_instance_to_response(loaded_instance)
 
 
 @router.get("/week/{week_date}", response_model=List[ClassInstanceResponse])
@@ -191,7 +229,8 @@ async def get_classes_for_week(
     result = await db.execute(stmt)
     class_instances = result.scalars().all()
     
-    return class_instances
+    # Convert to response format with computed fields
+    return [class_instance_to_response(instance) for instance in class_instances]
 
 
 @router.get("/month/{year}/{month}", response_model=List[ClassInstanceResponse])
@@ -233,7 +272,8 @@ async def get_classes_for_month(
     result = await db.execute(stmt)
     class_instances = result.scalars().all()
     
-    return class_instances
+    # Convert to response format with computed fields
+    return [class_instance_to_response(instance) for instance in class_instances]
 
 
 @router.get("/{class_id}/participants", response_model=List[ParticipantResponse])
@@ -261,7 +301,7 @@ async def get_class_participants(
         .where(
             and_(
                 Booking.class_instance_id == class_id,
-                Booking.status == "confirmed"
+                Booking.status == BookingStatus.CONFIRMED
             )
         )
         .order_by(Booking.created_at)
@@ -320,7 +360,21 @@ async def update_class(
     await db.commit()
     await db.refresh(class_instance)
     
-    return class_instance
+    # Load relationships for computed fields
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries)
+        )
+        .where(ClassInstance.id == class_instance.id)
+    )
+    result = await db.execute(stmt)
+    loaded_instance = result.scalar_one()
+    
+    return class_instance_to_response(loaded_instance)
 
 
 @router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -345,7 +399,7 @@ async def delete_class(
     stmt = select(func.count(Booking.id)).where(
         and_(
             Booking.class_instance_id == class_id,
-            Booking.status == "confirmed"
+            Booking.status == BookingStatus.CONFIRMED
         )
     )
     result = await db.execute(stmt)

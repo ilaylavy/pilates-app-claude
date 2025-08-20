@@ -39,7 +39,6 @@ class Booking(Base):
     class_instance = relationship("ClassInstance", back_populates="bookings")
     user_package = relationship("UserPackage")
 
-    @property
     def can_cancel(self) -> bool:
         """Check if booking can be cancelled based on business rules."""
         if self.status != BookingStatus.CONFIRMED:
@@ -48,10 +47,16 @@ class Booking(Base):
         from datetime import datetime, timedelta, timezone
         from ..core.config import settings
         
-        cancellation_deadline = self.class_instance.start_datetime - timedelta(
-            hours=settings.CANCELLATION_HOURS_LIMIT
-        )
-        return datetime.now(timezone.utc) < cancellation_deadline
+        # Only access class_instance if it's loaded
+        if not hasattr(self, '_sa_instance_state') or not self._sa_instance_state.expired:
+            if hasattr(self, 'class_instance') and self.class_instance:
+                cancellation_deadline = self.class_instance.start_datetime - timedelta(
+                    hours=settings.CANCELLATION_HOURS_LIMIT
+                )
+                return datetime.now(timezone.utc) < cancellation_deadline
+        
+        # Fallback - assume cannot cancel if we can't check
+        return False
 
     def __repr__(self):
         return f"<Booking(id={self.id}, user_id={self.user_id}, class_id={self.class_instance_id}, status='{self.status}')>"

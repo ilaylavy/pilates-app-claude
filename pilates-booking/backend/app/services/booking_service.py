@@ -77,9 +77,9 @@ class BookingService:
         await self._check_weekly_booking_limit(user.id, class_instance.start_datetime)
         
         # If class has available spots, create booking
-        if class_instance.available_spots > 0:
+        if class_instance.get_available_spots() > 0:
             booking_logger.info(
-                f"Class has {class_instance.available_spots} available spots - creating confirmed booking"
+                f"Class has {class_instance.get_available_spots()} available spots - creating confirmed booking"
             )
             
             # If user package specified, validate and use credit
@@ -114,14 +114,20 @@ class BookingService:
         else:
             # Add to waitlist
             booking_logger.info(
-                f"Class is full ({class_instance.available_spots} spots) - adding to waitlist"
+                f"Class is full ({class_instance.get_available_spots()} spots) - adding to waitlist"
             )
             return await self._add_to_waitlist(user.id, class_instance_id)
 
     async def cancel_booking(self, booking_id: int, user: User, reason: Optional[str] = None) -> Booking:
         """Cancel a booking."""
         
-        stmt = select(Booking).where(Booking.id == booking_id)
+        from sqlalchemy.orm import selectinload
+        
+        stmt = (
+            select(Booking)
+            .options(selectinload(Booking.class_instance))
+            .where(Booking.id == booking_id)
+        )
         result = await self.db.execute(stmt)
         booking = result.scalar_one_or_none()
         
@@ -139,7 +145,7 @@ class BookingService:
             )
         
         # Check if booking can be cancelled
-        if not booking.can_cancel:
+        if not booking.can_cancel():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Booking cannot be cancelled within the cancellation window"

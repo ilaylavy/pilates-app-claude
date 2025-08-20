@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from typing import Optional, List
 from datetime import datetime, time
 from ..models.class_schedule import WeekDay, ClassLevel, ClassStatus

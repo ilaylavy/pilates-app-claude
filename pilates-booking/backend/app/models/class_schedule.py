@@ -74,24 +74,28 @@ class ClassInstance(Base):
     def capacity(self) -> int:
         return self.actual_capacity or self.template.capacity
 
-    @property
-    def available_spots(self) -> int:
-        confirmed_bookings = len([b for b in self.bookings if b.status == "confirmed"])
-        return self.capacity - confirmed_bookings
+    def get_available_spots(self) -> int:
+        """Calculate available spots. Only call when bookings are loaded."""
+        if not hasattr(self, '_sa_instance_state') or not self._sa_instance_state.expired:
+            confirmed_bookings = len([b for b in self.bookings if b.status.value == "confirmed"])
+            return self.capacity - confirmed_bookings
+        return self.capacity  # Fallback when bookings not loaded
 
-    @property
-    def is_full(self) -> bool:
-        return self.available_spots <= 0
+    def get_is_full(self) -> bool:
+        """Check if class is full. Only call when bookings are loaded."""
+        return self.get_available_spots() <= 0
 
-    @property
-    def waitlist_count(self) -> int:
-        """Get the number of active waitlist entries for this class."""
-        return len([w for w in self.waitlist_entries if w.is_active])
+    def get_waitlist_count(self) -> int:
+        """Get the number of active waitlist entries. Only call when waitlist_entries are loaded."""
+        if not hasattr(self, '_sa_instance_state') or not self._sa_instance_state.expired:
+            return len([w for w in self.waitlist_entries if w.is_active])
+        return 0  # Fallback when waitlist_entries not loaded
 
-    @property
-    def participant_count(self) -> int:
-        """Get the number of confirmed participants."""
-        return len([b for b in self.bookings if b.status == "confirmed"])
+    def get_participant_count(self) -> int:
+        """Get the number of confirmed participants. Only call when bookings are loaded."""
+        if not hasattr(self, '_sa_instance_state') or not self._sa_instance_state.expired:
+            return len([b for b in self.bookings if b.status.value == "confirmed"])
+        return 0  # Fallback when bookings not loaded
 
     def __repr__(self):
         return f"<ClassInstance(id={self.id}, template='{self.template.name}', datetime='{self.start_datetime}')>"
