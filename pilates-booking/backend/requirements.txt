@@ -19,3 +19,4 @@ isort==5.12.0
 flake8==6.1.0
 python-dotenv==1.0.0
 celery==5.3.4
+stripe==8.7.0

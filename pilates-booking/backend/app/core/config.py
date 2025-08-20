@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     
     # Timezone
     DEFAULT_TIMEZONE: str = "Asia/Jerusalem"
+    
+    # Stripe Configuration
+    STRIPE_SECRET_KEY: str
+    STRIPE_PUBLISHABLE_KEY: str 
+    STRIPE_WEBHOOK_SECRET: str
+    STRIPE_CURRENCY: str = "ils"  # Israeli Shekel
+    STRIPE_MONTHLY_SUBSCRIPTION_PRICE_ID: str
 
     @field_validator("CORS_ORIGINS")
     @classmethod

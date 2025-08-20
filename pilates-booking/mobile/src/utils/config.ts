@@ -13,6 +13,11 @@ export const API_BASE_URL = __DEV__
   ? getDevApiUrl()
   : 'https://your-production-api.com';
 
+// Stripe Configuration
+export const STRIPE_PUBLISHABLE_KEY = __DEV__
+  ? process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST || ''
+  : process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY_LIVE || '';
+
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',

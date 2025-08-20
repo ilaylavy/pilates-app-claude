@@ -27,6 +27,7 @@ class User(Base):
     reset_token = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     preferences = Column(JSON, nullable=True)
+    stripe_customer_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
