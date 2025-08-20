@@ -15,7 +15,7 @@ export const API_BASE_URL = __DEV__
 
 // Stripe Configuration
 export const STRIPE_PUBLISHABLE_KEY = __DEV__
-  ? 'pk_test_51234567890abcdef' // Replace with your test publishable key
+  ? 'pk_test_51RyG191cnfikEKjflX0sQjDVuW7rEIAXdzYSmuyuQJXPSe0ndJqEqjicDR9TKABC5fTvE8F9MUIqwsVwD80VK4Cf00oVrAH3vF' // Replace with your test publishable key
   : 'pk_live_1234567890abcdef'; // Replace with your live publishable key
 
 export const STORAGE_KEYS = {
