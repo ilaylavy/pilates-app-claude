@@ -30,29 +30,29 @@ export interface WaitlistLeaveResult {
 
 export const bookingsApi = {
   createBooking: async (bookingData: BookingRequest): Promise<Booking> => {
-    const response = await apiClient.post<Booking>('/bookings/create', bookingData);
+    const response = await apiClient.post<Booking>('/api/v1/bookings/create', bookingData);
     return response.data;
   },
 
   cancelBooking: async (bookingId: number, reason?: string): Promise<Booking> => {
-    const response = await apiClient.delete<Booking>(`/bookings/${bookingId}/cancel`, {
+    const response = await apiClient.delete<Booking>(`/api/v1/bookings/${bookingId}/cancel`, {
       data: { reason },
     });
     return response.data;
   },
 
   getUserBookings: async (includePast = false): Promise<Booking[]> => {
-    const response = await apiClient.get<Booking[]>(`/bookings?include_past=${includePast}`);
+    const response = await apiClient.get<Booking[]>(`/api/v1/bookings?include_past=${includePast}`);
     return response.data;
   },
 
   getBookingStatus: async (classInstanceId: number): Promise<BookingStatus> => {
-    const response = await apiClient.get<BookingStatus>(`/classes/${classInstanceId}/booking-status`);
+    const response = await apiClient.get<BookingStatus>(`/api/v1/classes/${classInstanceId}/booking-status`);
     return response.data;
   },
 
   getUserWaitlistEntries: async (): Promise<WaitlistEntry[]> => {
-    const response = await apiClient.get<WaitlistEntry[]>('/bookings/waitlist');
+    const response = await apiClient.get<WaitlistEntry[]>('/api/v1/bookings/waitlist');
     return response.data;
   },
 
@@ -73,7 +73,7 @@ export const bookingsApi = {
 
   joinWaitlist: async (classInstanceId: number): Promise<WaitlistJoinResult> => {
     try {
-      const response = await apiClient.post<WaitlistEntry>(`/classes/${classInstanceId}/waitlist`);
+      const response = await apiClient.post<WaitlistEntry>(`/api/v1/classes/${classInstanceId}/waitlist`);
       return { success: true, waitlist_entry: response.data };
     } catch (error: any) {
       return {
@@ -85,7 +85,7 @@ export const bookingsApi = {
 
   leaveWaitlist: async (classInstanceId: number): Promise<WaitlistLeaveResult> => {
     try {
-      await apiClient.delete(`/classes/${classInstanceId}/waitlist`);
+      await apiClient.delete(`/api/v1/classes/${classInstanceId}/waitlist`);
       return { success: true, message: 'Left waitlist successfully' };
     } catch (error: any) {
       return {

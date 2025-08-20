@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from typing import List, Dict, Any
 import os
 import uuid
@@ -7,7 +8,7 @@ from pathlib import Path
 
 from ....schemas.user import UserResponse, UserUpdate, UserStats, UserPreferences
 from ....models.user import User
-from ....models.booking import Booking
+from ....models.booking import Booking, BookingStatus
 from ....models.class_schedule import ClassInstance
 from ..deps import get_db, get_current_active_user, get_admin_user
 
@@ -153,10 +154,10 @@ async def get_user_stats(
     month_result = await db.execute(month_stmt)
     month_bookings = month_result.scalar() or 0
     
-    # Calculate attendance rate (attended vs total confirmed bookings)
+    # Calculate attendance rate (completed vs total confirmed bookings)
     attended_stmt = select(func.count(Booking.id)).where(
         Booking.user_id == current_user.id,
-        Booking.status == "attended"
+        Booking.status == BookingStatus.COMPLETED
     )
     attended_result = await db.execute(attended_stmt)
     attended_bookings = attended_result.scalar() or 0

@@ -6,12 +6,12 @@
 const getDevApiUrl = () => {
   // Replace this IP with your actual local IP address
   const LOCAL_IP = '10.100.102.24';
-  return `http://${LOCAL_IP}:8000/api/v1`;
+  return `http://${LOCAL_IP}:8000`;
 };
 
 export const API_BASE_URL = __DEV__ 
   ? getDevApiUrl()
-  : 'https://your-production-api.com/api/v1';
+  : 'https://your-production-api.com';
 
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',

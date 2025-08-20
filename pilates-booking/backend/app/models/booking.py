@@ -45,13 +45,13 @@ class Booking(Base):
         if self.status != BookingStatus.CONFIRMED:
             return False
         
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         from ..core.config import settings
         
         cancellation_deadline = self.class_instance.start_datetime - timedelta(
             hours=settings.CANCELLATION_HOURS_LIMIT
         )
-        return datetime.utcnow() < cancellation_deadline
+        return datetime.now(timezone.utc) < cancellation_deadline
 
     def __repr__(self):
         return f"<Booking(id={self.id}, user_id={self.user_id}, class_id={self.class_instance_id}, status='{self.status}')>"

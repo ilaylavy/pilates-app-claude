@@ -2,7 +2,7 @@ from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from fastapi import HTTPException, status
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ..models.booking import Booking, BookingStatus, CancellationReason, WaitlistEntry
 from ..models.class_schedule import ClassInstance
@@ -35,7 +35,7 @@ class BookingService:
             )
         
         # Check if class is in the future
-        if class_instance.start_datetime <= datetime.utcnow():
+        if class_instance.start_datetime <= datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot book past or ongoing classes"
@@ -115,7 +115,7 @@ class BookingService:
         
         # Cancel the booking
         booking.status = BookingStatus.CANCELLED
-        booking.cancellation_date = datetime.utcnow()
+        booking.cancellation_date = datetime.now(timezone.utc)
         booking.cancellation_reason = CancellationReason.USER_CANCELLED
         booking.notes = reason
         
@@ -144,7 +144,7 @@ class BookingService:
                 .where(
                     and_(
                         *conditions,
-                        ClassInstance.start_datetime > datetime.utcnow()
+                        ClassInstance.start_datetime > datetime.now(timezone.utc)
                     )
                 )
                 .order_by(ClassInstance.start_datetime)
@@ -307,7 +307,7 @@ class BookingService:
             
             # Mark waitlist entry as promoted
             next_entry.is_active = False
-            next_entry.promoted_date = datetime.utcnow()
+            next_entry.promoted_date = datetime.now(timezone.utc)
             
             self.db.add(booking)
             await self.db.commit()

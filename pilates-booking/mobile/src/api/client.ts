@@ -44,7 +44,7 @@ class ApiClient {
           try {
             const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
             if (refreshToken) {
-              const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+              const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
                 refresh_token: refreshToken,
               });
 

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..core.database import Base
 
 
@@ -47,7 +47,7 @@ class UserPackage(Base):
 
     @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.expiry_date
+        return datetime.now(timezone.utc) > self.expiry_date
 
     @property
     def is_valid(self) -> bool:
@@ -61,7 +61,7 @@ class UserPackage(Base):
     def days_until_expiry(self) -> int:
         if self.is_expired:
             return 0
-        return (self.expiry_date - datetime.utcnow()).days
+        return (self.expiry_date - datetime.now(timezone.utc)).days
 
     def use_credit(self) -> bool:
         """Use one credit from this package. Returns True if successful."""

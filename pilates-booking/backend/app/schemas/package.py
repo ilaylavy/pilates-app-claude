@@ -27,6 +27,10 @@ class PackageUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class PackagePurchase(BaseModel):
+    package_id: int
+
+
 class PackageResponse(PackageBase):
     id: int
     is_active: bool

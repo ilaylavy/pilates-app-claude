@@ -28,41 +28,41 @@ export interface ClassUpdateData {
 
 export const classesApi = {
   getUpcomingClasses: async (daysAhead = 7): Promise<ClassInstance[]> => {
-    const response = await apiClient.get<ClassInstance[]>(`/classes/upcoming?days_ahead=${daysAhead}`);
+    const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/upcoming?days_ahead=${daysAhead}`);
     return response.data;
   },
 
   getClassById: async (classId: number): Promise<ClassInstance> => {
-    const response = await apiClient.get<ClassInstance>(`/classes/${classId}`);
+    const response = await apiClient.get<ClassInstance>(`/api/v1/classes/${classId}`);
     return response.data;
   },
 
   getWeekClasses: async (weekDate: string): Promise<ClassInstance[]> => {
-    const response = await apiClient.get<ClassInstance[]>(`/classes/week/${weekDate}`);
+    const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/week/${weekDate}`);
     return response.data;
   },
 
   getMonthClasses: async (year: number, month: number): Promise<ClassInstance[]> => {
-    const response = await apiClient.get<ClassInstance[]>(`/classes/month/${year}/${month}`);
+    const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/month/${year}/${month}`);
     return response.data;
   },
 
   getClassParticipants: async (classId: number): Promise<ParticipantResponse[]> => {
-    const response = await apiClient.get<ParticipantResponse[]>(`/classes/${classId}/participants`);
+    const response = await apiClient.get<ParticipantResponse[]>(`/api/v1/classes/${classId}/participants`);
     return response.data;
   },
 
   createClass: async (classData: ClassCreateData): Promise<ClassInstance> => {
-    const response = await apiClient.post<ClassInstance>('/classes/create', classData);
+    const response = await apiClient.post<ClassInstance>('/api/v1/classes/create', classData);
     return response.data;
   },
 
   updateClass: async (classId: number, classData: ClassUpdateData): Promise<ClassInstance> => {
-    const response = await apiClient.patch<ClassInstance>(`/classes/${classId}`, classData);
+    const response = await apiClient.patch<ClassInstance>(`/api/v1/classes/${classId}`, classData);
     return response.data;
   },
 
   deleteClass: async (classId: number): Promise<void> => {
-    await apiClient.delete(`/classes/${classId}`);
+    await apiClient.delete(`/api/v1/classes/${classId}`);
   },
 };

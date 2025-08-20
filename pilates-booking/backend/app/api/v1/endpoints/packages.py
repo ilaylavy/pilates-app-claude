@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from ....schemas.package import PackageCreate, PackageUpdate, PackageResponse, UserPackageResponse
+from ....schemas.package import PackageCreate, PackageUpdate, PackageResponse, UserPackageResponse, PackagePurchase
 from ....models.package import Package, UserPackage
 from ....models.user import User
 from ..deps import get_db, get_current_active_user, get_admin_user
@@ -27,7 +28,7 @@ async def get_available_packages(
 
 @router.post("/purchase", response_model=UserPackageResponse, status_code=status.HTTP_201_CREATED)
 async def purchase_package(
-    package_id: int,
+    purchase_data: PackagePurchase,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -35,7 +36,7 @@ async def purchase_package(
     
     # Get package
     stmt = select(Package).where(
-        and_(Package.id == package_id, Package.is_active == True)
+        and_(Package.id == purchase_data.package_id, Package.is_active == True)
     )
     result = await db.execute(stmt)
     package = result.scalar_one_or_none()
@@ -47,7 +48,7 @@ async def purchase_package(
         )
     
     # Calculate expiry date
-    expiry_date = datetime.utcnow() + timedelta(days=package.validity_days)
+    expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
     
     # Create user package
     user_package = UserPackage(
@@ -61,9 +62,14 @@ async def purchase_package(
     await db.commit()
     await db.refresh(user_package)
     
+    # Reload with package relationship
+    stmt = select(UserPackage).options(selectinload(UserPackage.package)).where(UserPackage.id == user_package.id)
+    result = await db.execute(stmt)
+    user_package_with_package = result.scalar_one()
+    
     # TODO: Create payment record and process payment
     
-    return user_package
+    return user_package_with_package
 
 
 @router.get("/my-packages", response_model=List[UserPackageResponse])
@@ -74,6 +80,7 @@ async def get_user_packages(
     """Get current user's packages."""
     stmt = (
         select(UserPackage)
+        .options(selectinload(UserPackage.package))
         .where(UserPackage.user_id == current_user.id)
         .order_by(UserPackage.created_at.desc())
     )

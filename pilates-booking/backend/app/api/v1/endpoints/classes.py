@@ -13,7 +13,7 @@ from ....schemas.class_schedule import (
 )
 from ....models.class_schedule import ClassTemplate, ClassInstance, ClassStatus
 from ....models.user import User, UserRole
-from ....models.booking import Booking
+from ....models.booking import Booking, WaitlistEntry
 from ..deps import get_db, get_current_active_user, get_admin_user, get_instructor_user
 
 router = APIRouter()
@@ -31,6 +31,12 @@ async def get_upcoming_classes(
     
     stmt = (
         select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries)
+        )
         .where(
             and_(
                 ClassInstance.start_datetime >= start_date,
@@ -54,7 +60,16 @@ async def get_class_instance(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get specific class instance by ID."""
-    stmt = select(ClassInstance).where(ClassInstance.id == class_id)
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries)
+        )
+        .where(ClassInstance.id == class_id)
+    )
     result = await db.execute(stmt)
     class_instance = result.scalar_one_or_none()
     
@@ -160,7 +175,8 @@ async def get_classes_for_week(
         .options(
             selectinload(ClassInstance.template),
             selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings).selectinload(Booking.user)
+            selectinload(ClassInstance.bookings).selectinload(Booking.user),
+            selectinload(ClassInstance.waitlist_entries)
         )
         .where(
             and_(
@@ -201,7 +217,8 @@ async def get_classes_for_month(
         .options(
             selectinload(ClassInstance.template),
             selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings).selectinload(Booking.user)
+            selectinload(ClassInstance.bookings).selectinload(Booking.user),
+            selectinload(ClassInstance.waitlist_entries)
         )
         .where(
             and_(

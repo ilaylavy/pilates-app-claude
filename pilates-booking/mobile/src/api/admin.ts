@@ -10,7 +10,7 @@ export const adminApi = {
     role?: string;
     active_only?: boolean;
   }): Promise<UserListItem[]> => {
-    const response = await apiClient.get('/admin/users', { params });
+    const response = await apiClient.get('/api/v1/admin/users', { params });
     return response.data;
   },
 
@@ -23,18 +23,18 @@ export const adminApi = {
     is_active?: boolean;
     is_verified?: boolean;
   }): Promise<UserListItem> => {
-    const response = await apiClient.patch(`/admin/users/${userId}`, updates);
+    const response = await apiClient.patch(`/api/v1/admin/users/${userId}`, updates);
     return response.data;
   },
 
   deactivateUser: async (userId: number): Promise<{ message: string }> => {
-    const response = await apiClient.delete(`/admin/users/${userId}`);
+    const response = await apiClient.delete(`/api/v1/admin/users/${userId}`);
     return response.data;
   },
 
   // Analytics
   getDashboardAnalytics: async (): Promise<DashboardAnalytics> => {
-    const response = await apiClient.get('/admin/analytics/dashboard');
+    const response = await apiClient.get('/api/v1/admin/analytics/dashboard');
     return response.data;
   },
 
@@ -48,7 +48,7 @@ export const adminApi = {
     validity_days: number;
     is_active?: boolean;
   }): Promise<Package> => {
-    const response = await apiClient.post('/admin/packages', packageData);
+    const response = await apiClient.post('/api/v1/admin/packages', packageData);
     return response.data;
   },
 
@@ -61,12 +61,12 @@ export const adminApi = {
     validity_days?: number;
     is_active?: boolean;
   }): Promise<Package> => {
-    const response = await apiClient.patch(`/admin/packages/${packageId}`, updates);
+    const response = await apiClient.patch(`/api/v1/admin/packages/${packageId}`, updates);
     return response.data;
   },
 
   deletePackage: async (packageId: number): Promise<{ message: string }> => {
-    const response = await apiClient.delete(`/admin/packages/${packageId}`);
+    const response = await apiClient.delete(`/api/v1/admin/packages/${packageId}`);
     return response.data;
   },
 
@@ -76,7 +76,7 @@ export const adminApi = {
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     
-    const response = await apiClient.get('/admin/reports/revenue', { params });
+    const response = await apiClient.get('/api/v1/admin/reports/revenue', { params });
     return response.data;
   },
 
@@ -85,7 +85,7 @@ export const adminApi = {
     if (startDate) params.start_date = startDate;
     if (endDate) params.end_date = endDate;
     
-    const response = await apiClient.get('/admin/reports/attendance', { params });
+    const response = await apiClient.get('/api/v1/admin/reports/attendance', { params });
     return response.data;
   },
 };
