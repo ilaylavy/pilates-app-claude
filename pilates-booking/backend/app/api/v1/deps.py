@@ -8,16 +8,20 @@ import redis.asyncio as redis
 from ...core.database import AsyncSessionLocal
 from ...core.config import settings
 from ...core.security import verify_token
+from ...core.logging import auth_logger, db_logger
 from ...models.user import User, UserRole
 
 security = HTTPBearer()
 
 
-async def get_db() -> Generator[AsyncSession, None, None]:
+async def get_db() -> AsyncSession:
     """Database dependency."""
     async with AsyncSessionLocal() as session:
         try:
             yield session
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             await session.close()
 
@@ -42,6 +46,7 @@ async def get_current_user(
     user_id = verify_token(token)
     
     if user_id is None:
+        auth_logger.warning("Authentication failed - Invalid token")
         raise credentials_exception
     
     stmt = select(User).where(User.id == int(user_id))
@@ -49,14 +54,17 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     
     if user is None:
+        auth_logger.warning(f"Authentication failed - User not found: {user_id}")
         raise credentials_exception
     
     if not user.is_active:
+        auth_logger.warning(f"Authentication failed - Inactive user: {user.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
     
+    auth_logger.debug(f"User authenticated successfully: {user.email}")
     return user
 
 

@@ -30,13 +30,6 @@ metadata = MetaData(naming_convention=convention)
 Base = declarative_base(metadata=metadata)
 
 
-async def get_db() -> AsyncSession:
-    """Dependency for getting database session."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 
 async def init_db():

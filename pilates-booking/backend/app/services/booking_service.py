@@ -9,6 +9,7 @@ from ..models.class_schedule import ClassInstance
 from ..models.package import UserPackage
 from ..models.user import User
 from ..core.config import settings
+from ..core.logging import booking_logger
 
 
 class BookingService:
@@ -23,12 +24,20 @@ class BookingService:
     ) -> Booking:
         """Create a booking for a user."""
         
+        booking_logger.info(
+            f"Creating booking - User: {user.id} ({user.email}), "
+            f"Class: {class_instance_id}, Package: {user_package_id}"
+        )
+        
         # Get class instance
         stmt = select(ClassInstance).where(ClassInstance.id == class_instance_id)
         result = await self.db.execute(stmt)
         class_instance = result.scalar_one_or_none()
         
         if not class_instance:
+            booking_logger.warning(
+                f"Booking failed - Class not found: {class_instance_id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Class not found"
@@ -63,11 +72,20 @@ class BookingService:
         
         # If class has available spots, create booking
         if class_instance.available_spots > 0:
+            booking_logger.info(
+                f"Class has {class_instance.available_spots} available spots - creating confirmed booking"
+            )
+            
             # If user package specified, validate and use credit
             if user_package_id:
                 user_package = await self._validate_and_use_package(user.id, user_package_id)
+                booking_logger.info(
+                    f"Using package credit - Package: {user_package_id}, "
+                    f"Credits remaining: {user_package.credits_remaining}"
+                )
             else:
                 user_package_id = None
+                booking_logger.info("Booking without package (direct payment)")
             
             booking = Booking(
                 user_id=user.id,
@@ -80,10 +98,18 @@ class BookingService:
             await self.db.commit()
             await self.db.refresh(booking)
             
+            booking_logger.info(
+                f"Booking created successfully - ID: {booking.id}, "
+                f"User: {user.email}, Class: {class_instance_id}"
+            )
+            
             return booking
         
         else:
             # Add to waitlist
+            booking_logger.info(
+                f"Class is full ({class_instance.available_spots} spots) - adding to waitlist"
+            )
             return await self._add_to_waitlist(user.id, class_instance_id)
 
     async def cancel_booking(self, booking_id: int, user: User, reason: Optional[str] = None) -> Booking:
@@ -162,6 +188,45 @@ class BookingService:
         
         return bookings
 
+    async def get_user_bookings_filtered(
+        self, 
+        user_id: int, 
+        status: Optional[str] = None, 
+        upcoming: bool = False, 
+        limit: Optional[int] = None
+    ) -> List[Booking]:
+        """Get filtered bookings for a user."""
+        
+        conditions = [Booking.user_id == user_id]
+        
+        # Filter by status if provided
+        if status:
+            try:
+                booking_status = BookingStatus(status.upper())
+                conditions.append(Booking.status == booking_status)
+            except ValueError:
+                # Invalid status, return empty list
+                return []
+        
+        # Filter for upcoming bookings
+        if upcoming:
+            conditions.append(ClassInstance.start_datetime > datetime.now(timezone.utc))
+        
+        stmt = (
+            select(Booking)
+            .join(ClassInstance)
+            .where(and_(*conditions))
+            .order_by(ClassInstance.start_datetime)
+        )
+        
+        if limit:
+            stmt = stmt.limit(limit)
+        
+        result = await self.db.execute(stmt)
+        bookings = result.scalars().all()
+        
+        return bookings
+
     async def _check_weekly_booking_limit(self, user_id: int, class_datetime: datetime):
         """Check if user has exceeded weekly booking limit."""
         
@@ -193,10 +258,16 @@ class BookingService:
     async def _validate_and_use_package(self, user_id: int, user_package_id: int) -> UserPackage:
         """Validate and use a credit from user package."""
         
-        stmt = select(UserPackage).where(
-            and_(
-                UserPackage.id == user_package_id,
-                UserPackage.user_id == user_id
+        from sqlalchemy.orm import selectinload
+        
+        stmt = (
+            select(UserPackage)
+            .options(selectinload(UserPackage.package))
+            .where(
+                and_(
+                    UserPackage.id == user_package_id,
+                    UserPackage.user_id == user_id
+                )
             )
         )
         result = await self.db.execute(stmt)
@@ -226,7 +297,13 @@ class BookingService:
     async def _refund_package_credit(self, user_package_id: int):
         """Refund a credit to user package."""
         
-        stmt = select(UserPackage).where(UserPackage.id == user_package_id)
+        from sqlalchemy.orm import selectinload
+        
+        stmt = (
+            select(UserPackage)
+            .options(selectinload(UserPackage.package))
+            .where(UserPackage.id == user_package_id)
+        )
         result = await self.db.execute(stmt)
         user_package = result.scalar_one_or_none()
         

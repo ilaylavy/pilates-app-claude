@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 
 from ....schemas.booking import BookingCreate, BookingResponse, BookingCancelRequest, WaitlistEntryResponse
 from ....services.booking_service import BookingService
@@ -54,5 +54,24 @@ async def get_user_bookings(
     bookings = await booking_service.get_user_bookings(
         user_id=current_user.id,
         include_past=include_past
+    )
+    return bookings
+
+
+@router.get("/my-bookings", response_model=List[BookingResponse])
+async def get_my_bookings(
+    status: Optional[str] = None,
+    upcoming: bool = False,
+    limit: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get current user's bookings with filtering options."""
+    booking_service = BookingService(db)
+    bookings = await booking_service.get_user_bookings_filtered(
+        user_id=current_user.id,
+        status=status,
+        upcoming=upcoming,
+        limit=limit
     )
     return bookings
