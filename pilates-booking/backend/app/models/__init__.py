@@ -4,6 +4,7 @@ from .package import Package, UserPackage
 from .booking import Booking, WaitlistEntry
 from .payment import Payment
 from .refresh_token import RefreshToken
+from .audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -15,4 +16,5 @@ __all__ = [
     "WaitlistEntry",
     "Payment",
     "RefreshToken",
+    "AuditLog",
 ]

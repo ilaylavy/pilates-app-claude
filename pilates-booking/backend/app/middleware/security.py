@@ -122,12 +122,14 @@ class InputSanitizationMiddleware(BaseHTTPMiddleware):
         
         # Get request body if it exists
         try:
-            if hasattr(request, "_body"):
-                body = request._body
-            else:
-                body = await request.body()
-                # Store body for later use
-                request._body = body
+            # Read body only once and store it properly
+            body = await request.body()
+            
+            # Create a new request with the body stored for FastAPI to read later
+            async def receive():
+                return {"type": "http.request", "body": body}
+            
+            request._receive = receive
                 
             if body:
                 body_str = body.decode('utf-8')
