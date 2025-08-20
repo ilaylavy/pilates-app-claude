@@ -119,11 +119,7 @@ const AvatarUpload: React.FC<AvatarUploadProps> = ({ visible, onClose, onUpload 
         name: 'avatar.jpg',
       } as any);
 
-      const response = await apiClient.post('/api/v1/users/me/avatar', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await apiClient.post('/api/v1/users/me/avatar', formData);
 
       onUpload(response.data.avatar_url);
       Alert.alert('Success', 'Avatar updated successfully!');

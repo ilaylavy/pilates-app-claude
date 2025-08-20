@@ -20,6 +20,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import ClassDetailsScreen from '../screens/ClassDetailsScreen';
 import PackagesScreen from '../screens/PackagesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 // Admin screens
 import UserManagementScreen from '../screens/UserManagementScreen';
@@ -39,6 +40,7 @@ export type RootStackParamList = {
   PackageManagement: undefined;
   Reports: undefined;
   SystemSettings: undefined;
+  EditProfile: undefined;
 };
 
 export type AuthStackParamList = {
@@ -199,6 +201,11 @@ const Navigation = () => {
             name="AdminPackages" 
             component={PackageManagementScreen}
             options={{ headerShown: true, title: 'Manage Packages' }}
+          />
+          <RootStack.Screen 
+            name="EditProfile" 
+            component={EditProfileScreen}
+            options={{ headerShown: false }}
           />
         </>
       ) : (

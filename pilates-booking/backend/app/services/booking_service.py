@@ -29,8 +29,14 @@ class BookingService:
             f"Class: {class_instance_id}, Package: {user_package_id}"
         )
         
-        # Get class instance
-        stmt = select(ClassInstance).where(ClassInstance.id == class_instance_id)
+        # Get class instance with bookings loaded
+        from sqlalchemy.orm import selectinload
+        
+        stmt = (
+            select(ClassInstance)
+            .options(selectinload(ClassInstance.bookings))
+            .where(ClassInstance.id == class_instance_id)
+        )
         result = await self.db.execute(stmt)
         class_instance = result.scalar_one_or_none()
         

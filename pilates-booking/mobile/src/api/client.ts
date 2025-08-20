@@ -25,6 +25,12 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        
+        // Handle FormData uploads properly
+        if (config.data instanceof FormData) {
+          delete config.headers['Content-Type']; // Let browser set it
+        }
+        
         return config;
       },
       (error) => {

@@ -14,7 +14,7 @@ import { useAuth } from '../hooks/useAuth';
 import { COLORS, SPACING } from '../utils/config';
 import Button from '../components/common/Button';
 import { useNavigation } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import AvatarUpload from '../components/AvatarUpload';
 import { useUserRole } from '../hooks/useUserRole';
@@ -33,6 +33,7 @@ const ProfileScreen: React.FC = () => {
   const { user, logout } = useAuth();
   const navigation = useNavigation();
   const { isAdmin } = useUserRole();
+  const queryClient = useQueryClient();
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
 
   const { data: userStats } = useQuery<UserStats>({
@@ -124,7 +125,7 @@ const ProfileScreen: React.FC = () => {
             </View>
           </View>
           
-          <TouchableOpacity style={styles.editButton}>
+          <TouchableOpacity style={styles.editButton} onPress={() => handleNavigation('EditProfile')}>
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
@@ -216,8 +217,9 @@ const ProfileScreen: React.FC = () => {
         <AvatarUpload
           visible={showAvatarUpload}
           onClose={() => setShowAvatarUpload(false)}
-          onUpload={() => {
-            // Refresh user data
+          onUpload={(avatarUrl: string) => {
+            // Refresh user data and close modal
+            queryClient.invalidateQueries({ queryKey: ['user'] });
             setShowAvatarUpload(false);
           }}
         />
