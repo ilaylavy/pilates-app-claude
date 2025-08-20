@@ -14,8 +14,17 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = secrets.token_urlsafe(32)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    
+    # Rate limiting
+    LOGIN_RATE_LIMIT_PER_MINUTE: int = 5
+    
+    # Email verification
+    EMAIL_VERIFICATION_EXPIRE_MINUTES: int = 10
+    
+    # Password reset
+    PASSWORD_RESET_EXPIRE_HOURS: int = 1
     
     # Email
     SMTP_HOST: Optional[str] = None

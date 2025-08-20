@@ -35,6 +35,7 @@ class User(Base):
     waitlist_entries = relationship("WaitlistEntry", back_populates="user", cascade="all, delete-orphan")
     user_packages = relationship("UserPackage", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     
     # For instructors
     taught_classes = relationship("ClassInstance", back_populates="instructor")

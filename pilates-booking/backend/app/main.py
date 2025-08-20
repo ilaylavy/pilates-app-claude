@@ -3,11 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
 import uuid
+import redis
 
 from .core.config import settings
 from .core.database import init_db
 from .core.logging import setup_logging, get_logger, access_logger
 from .api.v1.api import api_router
+from .middleware.security import (
+    SecurityMiddleware,
+    RateLimitMiddleware,
+    InputSanitizationMiddleware,
+    IPWhitelistMiddleware
+)
 
 
 @asynccontextmanager
@@ -18,6 +25,16 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Pilates Booking System API")
     logger.info(f"Environment: {'Development' if settings.DEBUG else 'Production'}")
     
+    # Initialize Redis connection
+    try:
+        redis_client = redis.from_url(settings.REDIS_URL)
+        redis_client.ping()
+        logger.info("Redis connection established")
+        app.state.redis = redis_client
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. Rate limiting will be disabled.")
+        app.state.redis = None
+    
     await init_db()
     logger.info("Database initialized")
     
@@ -25,6 +42,8 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Pilates Booking System API")
+    if hasattr(app.state, 'redis') and app.state.redis:
+        app.state.redis.close()
 
 
 app = FastAPI(
@@ -77,14 +96,31 @@ async def log_requests(request: Request, call_next):
         raise
 
 
+# Add security middleware (order matters - last added = first executed)
+app.add_middleware(SecurityMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(InputSanitizationMiddleware)
+
+# Add IP whitelist for admin operations (if configured)
+admin_whitelist = []  # Configure this in production
+if admin_whitelist:
+    app.add_middleware(IPWhitelistMiddleware, whitelist=admin_whitelist)
+
 # Set all CORS enabled origins
 if settings.CORS_ORIGINS:
+    # Configure CORS properly for production
+    cors_origins = settings.CORS_ORIGINS
+    if settings.ENVIRONMENT == "production":
+        # Remove wildcard in production
+        cors_origins = [origin for origin in cors_origins if origin != "*"]
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[str(origin) for origin in settings.CORS_ORIGINS],
+        allow_origins=[str(origin) for origin in cors_origins],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Specific methods in production
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],  # Specific headers
+        expose_headers=["X-Request-ID", "API-Version"],
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

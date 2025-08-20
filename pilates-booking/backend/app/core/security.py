@@ -1,5 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Optional, Union, Any
+import secrets
+import hashlib
+import random
+import string
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from .config import settings
@@ -89,3 +93,43 @@ def verify_password_reset_token(token: str) -> Optional[str]:
         return decoded_token["sub"]
     except JWTError:
         return None
+
+
+def generate_refresh_token() -> str:
+    """Generate a secure random refresh token."""
+    return secrets.token_urlsafe(64)
+
+
+def hash_token(token: str) -> str:
+    """Hash a token using SHA-256."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_otp() -> str:
+    """Generate a 6-digit OTP."""
+    return ''.join(random.choices(string.digits, k=6))
+
+
+def generate_verification_token() -> str:
+    """Generate a secure verification token."""
+    return secrets.token_urlsafe(32)
+
+
+def validate_password_strength(password: str) -> dict:
+    """Validate password strength and return requirements status."""
+    requirements = {
+        'min_length': len(password) >= 8,
+        'has_uppercase': any(c.isupper() for c in password),
+        'has_lowercase': any(c.islower() for c in password),
+        'has_digit': any(c.isdigit() for c in password),
+        'has_special': any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in password),
+    }
+    
+    strength_score = sum(requirements.values())
+    
+    return {
+        'is_valid': strength_score >= 4,  # Require at least 4 out of 5 criteria
+        'score': strength_score,
+        'requirements': requirements,
+        'strength': 'weak' if strength_score < 3 else 'medium' if strength_score < 5 else 'strong'
+    }

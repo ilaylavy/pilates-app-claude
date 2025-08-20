@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { authApi } from '../api/auth';
 import { User, AuthTokens, LoginRequest, RegisterRequest } from '../types';
 import { STORAGE_KEYS } from '../utils/config';
+import { secureStorage } from '../utils/secureStorage';
+import { securityManager } from '../utils/securityManager';
 
 interface AuthContextType {
   user: User | null;
@@ -18,6 +18,10 @@ interface AuthContextType {
   disableBiometric: () => Promise<void>;
   isBiometricEnabled: boolean;
   authenticateWithBiometric: () => Promise<boolean>;
+  resetActivity: () => void;
+  clearAllData: () => Promise<void>;
+  getUserSessions: () => Promise<any[]>;
+  logoutAllDevices: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,16 +36,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
   const queryClient = useQueryClient();
 
-  // Check for stored authentication on app start
+  // Initialize security manager and check for stored authentication on app start
   useEffect(() => {
+    initializeSecurity();
     checkStoredAuth();
     checkBiometricSettings();
   }, []);
 
+  const initializeSecurity = async () => {
+    await securityManager.initialize({
+      autoLogoutMinutes: 15,
+      enableBiometric: false,
+      clearDataOnBackground: true,
+      enableJailbreakDetection: true,
+    });
+    
+    securityManager.setCallbacks(
+      () => logout(), // Auto logout callback
+      () => clearSensitiveData() // App background callback
+    );
+  };
+
   const checkStoredAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-      const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
+      const token = await secureStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const userData = await secureStorage.getItem(STORAGE_KEYS.USER_DATA);
 
       if (token && userData) {
         setUser(JSON.parse(userData));
@@ -56,7 +75,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const checkBiometricSettings = async () => {
-    const biometricEnabled = await AsyncStorage.getItem(STORAGE_KEYS.BIOMETRIC_ENABLED);
+    const biometricEnabled = await secureStorage.getItem(STORAGE_KEYS.BIOMETRIC_ENABLED);
     setIsBiometricEnabled(biometricEnabled === 'true');
   };
 
@@ -64,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const currentUser = await authApi.getCurrentUser();
       setUser(currentUser);
-      await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(currentUser));
+      await secureStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(currentUser));
     } catch (error) {
       // Token might be invalid, clear storage
       await clearAuthData();
@@ -72,21 +91,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const clearAuthData = async () => {
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.ACCESS_TOKEN,
-      STORAGE_KEYS.REFRESH_TOKEN,
-      STORAGE_KEYS.USER_DATA,
+    await Promise.all([
+      secureStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN),
+      secureStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN),
+      secureStorage.removeItem(STORAGE_KEYS.USER_DATA),
     ]);
     setUser(null);
     queryClient.clear();
   };
 
+  const clearSensitiveData = async () => {
+    // Clear sensitive data when app goes to background
+    queryClient.clear();
+    // Don't clear auth tokens, just clear cached data
+  };
+
   const loginMutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: async (tokens: AuthTokens) => {
-      // Store tokens
-      await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.access_token);
-      await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refresh_token);
+      // Store tokens securely
+      await secureStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.access_token);
+      await secureStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refresh_token);
+      
+      // Reset security timer
+      securityManager.resetAutoLogoutTimer();
       
       // Fetch user data
       await fetchCurrentUser();
@@ -118,53 +146,66 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    // Logout from server if possible
+    try {
+      const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      if (refreshToken) {
+        await authApi.logout(refreshToken);
+      }
+    } catch (error) {
+      console.warn('Failed to logout from server:', error);
+    }
+    
     await clearAuthData();
+    securityManager.cleanup();
   };
 
   const enableBiometric = async () => {
-    try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      
-      if (!hasHardware || !isEnrolled) {
-        throw new Error('Biometric authentication not available');
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Enable biometric authentication',
-        fallbackLabel: 'Use password',
-      });
-
-      if (result.success) {
-        await AsyncStorage.setItem(STORAGE_KEYS.BIOMETRIC_ENABLED, 'true');
-        setIsBiometricEnabled(true);
-      }
-    } catch (error) {
-      console.error('Error enabling biometric:', error);
-      throw error;
+    const success = await securityManager.enableBiometric();
+    if (success) {
+      await secureStorage.setItem(STORAGE_KEYS.BIOMETRIC_ENABLED, 'true');
+      setIsBiometricEnabled(true);
     }
   };
 
   const disableBiometric = async () => {
-    await AsyncStorage.setItem(STORAGE_KEYS.BIOMETRIC_ENABLED, 'false');
+    await securityManager.disableBiometric();
+    await secureStorage.setItem(STORAGE_KEYS.BIOMETRIC_ENABLED, 'false');
     setIsBiometricEnabled(false);
   };
 
   const authenticateWithBiometric = async (): Promise<boolean> => {
-    try {
-      if (!isBiometricEnabled) {
-        return false;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate to access the app',
-        fallbackLabel: 'Use password',
-      });
-
-      return result.success;
-    } catch (error) {
-      console.error('Biometric authentication error:', error);
+    if (!isBiometricEnabled) {
       return false;
+    }
+    return await secureStorage.authenticateWithBiometric();
+  };
+
+  const resetActivity = () => {
+    securityManager.resetAutoLogoutTimer();
+  };
+
+  const clearAllData = async () => {
+    await securityManager.clearAllSecureData();
+    await clearAuthData();
+  };
+
+  const getUserSessions = async () => {
+    try {
+      return await authApi.getUserSessions();
+    } catch (error) {
+      console.error('Failed to get user sessions:', error);
+      return [];
+    }
+  };
+
+  const logoutAllDevices = async () => {
+    try {
+      await authApi.logoutAllDevices();
+      await clearAuthData();
+    } catch (error) {
+      console.error('Failed to logout all devices:', error);
+      throw error;
     }
   };
 
@@ -179,6 +220,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     disableBiometric,
     isBiometricEnabled,
     authenticateWithBiometric,
+    resetActivity,
+    clearAllData,
+    getUserSessions,
+    logoutAllDevices,
   };
 
   return (

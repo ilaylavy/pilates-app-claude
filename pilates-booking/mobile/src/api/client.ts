@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL, STORAGE_KEYS } from '../utils/config';
 
 class ApiClient {
@@ -21,9 +21,13 @@ class ApiClient {
     // Request interceptor to add auth token
     this.instance.interceptors.request.use(
       async (config) => {
-        const token = await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+        try {
+          const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        } catch (error) {
+          console.warn('Failed to retrieve access token from secure store:', error);
         }
         
         // Handle FormData uploads properly
@@ -48,7 +52,7 @@ class ApiClient {
           originalRequest._retry = true;
 
           try {
-            const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+            const refreshToken = await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
             if (refreshToken) {
               const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
                 refresh_token: refreshToken,
@@ -56,8 +60,8 @@ class ApiClient {
 
               const { access_token, refresh_token: newRefreshToken } = response.data;
               
-              await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, access_token);
-              await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+              await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
+              await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
 
               originalRequest.headers.Authorization = `Bearer ${access_token}`;
               return this.instance(originalRequest);
@@ -76,11 +80,15 @@ class ApiClient {
   }
 
   async clearTokens() {
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.ACCESS_TOKEN,
-      STORAGE_KEYS.REFRESH_TOKEN,
-      STORAGE_KEYS.USER_DATA,
-    ]);
+    try {
+      await Promise.all([
+        SecureStore.deleteItemAsync(STORAGE_KEYS.ACCESS_TOKEN),
+        SecureStore.deleteItemAsync(STORAGE_KEYS.REFRESH_TOKEN),
+        SecureStore.deleteItemAsync(STORAGE_KEYS.USER_DATA),
+      ]);
+    } catch (error) {
+      console.warn('Failed to clear tokens from secure store:', error);
+    }
   }
 
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {

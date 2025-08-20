@@ -3,6 +3,7 @@ from .class_schedule import ClassTemplate, ClassInstance
 from .package import Package, UserPackage
 from .booking import Booking, WaitlistEntry
 from .payment import Payment
+from .refresh_token import RefreshToken
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "Booking",
     "WaitlistEntry",
     "Payment",
+    "RefreshToken",
 ]
