@@ -63,4 +63,4 @@ clean: ## Clean up containers and volumes
 	docker-compose down -v
 	docker system prune -f
 
-reset-db: clean migrate seed ## Reset database completely
+reset-db: clean up migrate seed ## Reset database completely

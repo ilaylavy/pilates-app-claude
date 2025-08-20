@@ -7,7 +7,8 @@ from .config import settings
 engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=settings.DEBUG,
-    future=True
+    future=True,
+    connect_args={"server_settings": {"jit": "off"}}
 )
 
 # Create async session factory
@@ -33,6 +34,7 @@ Base = declarative_base(metadata=metadata)
 
 
 async def init_db():
-    """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Initialize database connection."""
+    # Database tables are managed by Alembic migrations
+    # Do not auto-create tables here - use Alembic migrations instead
+    pass

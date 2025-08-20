@@ -3,11 +3,20 @@
 // - Android emulator: 10.0.2.2:8000
 // - iOS simulator: localhost:8000  
 // - Physical device: your actual IP (check with ipconfig/ifconfig)
+import { Platform } from 'react-native';
+
 const getDevApiUrl = () => {
-  // Replace this IP with your actual local IP address
+  // For physical device, use actual IP
   const LOCAL_IP = '10.100.102.24';
   return `http://${LOCAL_IP}:8000`;
 };
+
+// Backup URLs to try if primary fails
+export const BACKUP_API_URLS = [
+  'http://localhost:8000',
+  'http://192.168.1.107:8000', // Common router IP range
+  'http://192.168.0.107:8000',  // Common router IP range
+];
 
 export const API_BASE_URL = __DEV__ 
   ? getDevApiUrl()

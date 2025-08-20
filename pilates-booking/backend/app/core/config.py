@@ -6,10 +6,10 @@ import secrets
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql://pilates_user:pilates_password@localhost:5432/pilates_db"
+    DATABASE_URL: str = "postgresql://pilates_user:pilates_password@postgres:5432/pilates_db"
     
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"
     
     # Security
     SECRET_KEY: str = secrets.token_urlsafe(32)
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
             return v
         return ["http://localhost:3000", "http://localhost:19006"]
 
-    model_config = {"case_sensitive": True}
+    model_config = {"case_sensitive": True, "env_file": "../.env"}
 
 
 settings = Settings()
