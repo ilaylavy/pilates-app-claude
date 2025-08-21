@@ -1,15 +1,15 @@
-from .user import User
-from .class_schedule import ClassTemplate, ClassInstance
-from .package import Package, UserPackage
+from .audit_log import AuditLog
 from .booking import Booking, WaitlistEntry
+from .class_schedule import ClassInstance, ClassTemplate
+from .package import Package, UserPackage
 from .payment import Payment
 from .refresh_token import RefreshToken
-from .audit_log import AuditLog
+from .user import User
 
 __all__ = [
     "User",
     "ClassTemplate",
-    "ClassInstance", 
+    "ClassInstance",
     "Package",
     "UserPackage",
     "Booking",

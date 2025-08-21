@@ -1,7 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Numeric, Text
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import enum
+
+from sqlalchemy import (Column, DateTime, Enum, ForeignKey, Integer, Numeric,
+                        String, Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from ..core.database import Base
 
 
@@ -41,22 +44,24 @@ class Payment(Base):
     payment_type = Column(Enum(PaymentType), nullable=False)
     payment_method = Column(Enum(PaymentMethod), nullable=False)
     status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    
+
     # External payment provider fields
     external_transaction_id = Column(String, nullable=True)
     external_payment_id = Column(String, nullable=True)
-    
+
     # Payment details
     payment_date = Column(DateTime(timezone=True), nullable=True)
     refund_date = Column(DateTime(timezone=True), nullable=True)
     refund_amount = Column(Numeric(10, 2), nullable=True)
-    
+
     # Additional information
     description = Column(Text, nullable=True)
     extra_data = Column(Text, nullable=True)  # JSON string for additional data
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     user = relationship("User", back_populates="payments")

@@ -5,14 +5,14 @@ This module provides endpoints for collecting logs and events from mobile applic
 It handles log ingestion, validation, and forwarding to the centralized logging system.
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request, status, Depends
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, validator
 
 from ....core.logging_config import get_logger
 from ....services.business_logging_service import business_logger
-
 
 router = APIRouter()
 logger = get_logger("app.mobile_logs")
@@ -20,6 +20,7 @@ logger = get_logger("app.mobile_logs")
 
 class DeviceInfo(BaseModel):
     """Device information from mobile app."""
+
     brand: str
     model: str
     system_version: str = Field(alias="systemVersion")
@@ -35,6 +36,7 @@ class DeviceInfo(BaseModel):
 
 class NetworkInfo(BaseModel):
     """Network information from mobile app."""
+
     is_connected: bool = Field(alias="isConnected")
     type: str
     is_internet_reachable: bool = Field(alias="isInternetReachable")
@@ -45,6 +47,7 @@ class NetworkInfo(BaseModel):
 
 class LogContext(BaseModel):
     """Log context from mobile app."""
+
     user_id: Optional[str] = Field(None, alias="userId")
     session_id: str = Field(alias="sessionId")
     request_id: Optional[str] = Field(None, alias="requestId")
@@ -61,6 +64,7 @@ class LogContext(BaseModel):
 
 class MobileLogEntry(BaseModel):
     """Mobile log entry model."""
+
     id: str
     timestamp: str
     level: str
@@ -72,24 +76,25 @@ class MobileLogEntry(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-    @validator('level')
+    @validator("level")
     def validate_level(cls, v):
-        valid_levels = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'CRITICAL']
+        valid_levels = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
-            raise ValueError(f'Invalid log level: {v}')
+            raise ValueError(f"Invalid log level: {v}")
         return v.upper()
 
-    @validator('timestamp')
+    @validator("timestamp")
     def validate_timestamp(cls, v):
         try:
-            datetime.fromisoformat(v.replace('Z', '+00:00'))
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
             return v
         except ValueError:
-            raise ValueError('Invalid timestamp format')
+            raise ValueError("Invalid timestamp format")
 
 
 class MobileEventData(BaseModel):
     """Mobile event data model."""
+
     event_type: str = Field(alias="eventType")
     properties: Dict[str, Any]
     timestamp: str
@@ -98,17 +103,18 @@ class MobileEventData(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-    @validator('timestamp')
+    @validator("timestamp")
     def validate_timestamp(cls, v):
         try:
-            datetime.fromisoformat(v.replace('Z', '+00:00'))
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
             return v
         except ValueError:
-            raise ValueError('Invalid timestamp format')
+            raise ValueError("Invalid timestamp format")
 
 
 class MobileLogBatch(BaseModel):
     """Batch of mobile logs."""
+
     logs: List[MobileLogEntry]
     session_id: str = Field(alias="sessionId")
     device_info: DeviceInfo = Field(alias="deviceInfo")
@@ -116,15 +122,16 @@ class MobileLogBatch(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-    @validator('logs')
+    @validator("logs")
     def validate_logs_count(cls, v):
         if len(v) > 100:  # Prevent abuse
-            raise ValueError('Too many logs in batch (max 100)')
+            raise ValueError("Too many logs in batch (max 100)")
         return v
 
 
 class MobileEventBatch(BaseModel):
     """Batch of mobile events."""
+
     events: List[MobileEventData]
     session_id: str = Field(alias="sessionId")
     device_info: DeviceInfo = Field(alias="deviceInfo")
@@ -132,32 +139,31 @@ class MobileEventBatch(BaseModel):
     class Config:
         allow_population_by_field_name = True
 
-    @validator('events')
+    @validator("events")
     def validate_events_count(cls, v):
         if len(v) > 100:  # Prevent abuse
-            raise ValueError('Too many events in batch (max 100)')
+            raise ValueError("Too many events in batch (max 100)")
         return v
 
 
-@router.post("/mobile", 
-             status_code=status.HTTP_202_ACCEPTED,
-             summary="Collect mobile app logs",
-             description="Endpoint for mobile applications to submit log batches")
-async def collect_mobile_logs(
-    log_batch: MobileLogBatch,
-    request: Request
-):
+@router.post(
+    "/mobile",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Collect mobile app logs",
+    description="Endpoint for mobile applications to submit log batches",
+)
+async def collect_mobile_logs(log_batch: MobileLogBatch, request: Request):
     """
     Collect and process mobile application logs.
-    
+
     This endpoint receives batched logs from mobile applications and forwards them
     to the centralized logging system with proper context and metadata.
     """
-    
+
     try:
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
-        
+
         # Log the batch receipt
         logger.info(
             f"Received mobile log batch: {len(log_batch.logs)} logs from {log_batch.device_info.platform}",
@@ -168,19 +174,19 @@ async def collect_mobile_logs(
                 "app_version": log_batch.device_info.app_version,
                 "device_model": f"{log_batch.device_info.brand} {log_batch.device_info.model}",
                 "client_ip": client_ip,
-                "user_agent": user_agent
-            }
+                "user_agent": user_agent,
+            },
         )
-        
+
         # Process each log entry
         processed_count = 0
         error_count = 0
-        
+
         for log_entry in log_batch.logs:
             try:
                 # Forward to centralized logging with mobile prefix
                 mobile_logger = get_logger("app.mobile")
-                
+
                 # Prepare log data
                 log_data = {
                     "mobile_log_id": log_entry.id,
@@ -192,27 +198,30 @@ async def collect_mobile_logs(
                     "platform": log_entry.context.platform,
                     "app_version": log_entry.context.app_version,
                     "device_info": log_entry.context.device_info.dict(),
-                    "network_info": log_entry.context.network_info.dict() if log_entry.context.network_info else None,
+                    "network_info": log_entry.context.network_info.dict()
+                    if log_entry.context.network_info
+                    else None,
                     "client_ip": client_ip,
                     "extra": log_entry.extra,
-                    "stack_trace": log_entry.stack_trace
+                    "stack_trace": log_entry.stack_trace,
                 }
-                
+
                 # Log with appropriate level
                 log_level = log_entry.level.lower()
                 if hasattr(mobile_logger, log_level):
                     getattr(mobile_logger, log_level)(
-                        f"[Mobile] {log_entry.message}",
-                        **log_data
+                        f"[Mobile] {log_entry.message}", **log_data
                     )
                 else:
                     mobile_logger.info(
-                        f"[Mobile:{log_entry.level}] {log_entry.message}",
-                        **log_data
+                        f"[Mobile:{log_entry.level}] {log_entry.message}", **log_data
                     )
-                
+
                 # Track business events for specific log types
-                if log_entry.level in ['ERROR', 'CRITICAL'] and log_entry.context.user_id:
+                if (
+                    log_entry.level in ["ERROR", "CRITICAL"]
+                    and log_entry.context.user_id
+                ):
                     business_logger.log_event(
                         "mobile.error",
                         user_id=log_entry.context.user_id,
@@ -220,18 +229,18 @@ async def collect_mobile_logs(
                         error_message=log_entry.message,
                         platform=log_entry.context.platform,
                         app_version=log_entry.context.app_version,
-                        screen=log_entry.context.screen
+                        screen=log_entry.context.screen,
                     )
-                
+
                 processed_count += 1
-                
+
             except Exception as e:
                 logger.error(
                     f"Failed to process mobile log entry {log_entry.id}: {e}",
-                    extra={"log_entry_id": log_entry.id, "error": str(e)}
+                    extra={"log_entry_id": log_entry.id, "error": str(e)},
                 )
                 error_count += 1
-        
+
         # Log processing summary
         logger.info(
             f"Mobile log batch processed: {processed_count} success, {error_count} errors",
@@ -239,52 +248,51 @@ async def collect_mobile_logs(
                 "session_id": log_batch.session_id,
                 "processed_count": processed_count,
                 "error_count": error_count,
-                "total_count": len(log_batch.logs)
-            }
+                "total_count": len(log_batch.logs),
+            },
         )
-        
+
         return {
             "status": "accepted",
             "processed": processed_count,
             "errors": error_count,
-            "total": len(log_batch.logs)
+            "total": len(log_batch.logs),
         }
-        
+
     except Exception as e:
         logger.error(
             f"Failed to process mobile log batch: {e}",
             exc_info=True,
             extra={
-                "session_id": log_batch.session_id if 'log_batch' in locals() else None,
-                "error": str(e)
-            }
+                "session_id": log_batch.session_id if "log_batch" in locals() else None,
+                "error": str(e),
+            },
         )
-        
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process log batch"
+            detail="Failed to process log batch",
         )
 
 
-@router.post("/mobile/events",
-             status_code=status.HTTP_202_ACCEPTED,
-             summary="Collect mobile app events",
-             description="Endpoint for mobile applications to submit event batches")
-async def collect_mobile_events(
-    event_batch: MobileEventBatch,
-    request: Request
-):
+@router.post(
+    "/mobile/events",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Collect mobile app events",
+    description="Endpoint for mobile applications to submit event batches",
+)
+async def collect_mobile_events(event_batch: MobileEventBatch, request: Request):
     """
     Collect and process mobile application events.
-    
+
     This endpoint receives batched events from mobile applications and forwards them
     to the business event logging system.
     """
-    
+
     try:
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
-        
+
         # Log the batch receipt
         logger.info(
             f"Received mobile event batch: {len(event_batch.events)} events from {event_batch.device_info.platform}",
@@ -294,14 +302,14 @@ async def collect_mobile_events(
                 "platform": event_batch.device_info.platform,
                 "app_version": event_batch.device_info.app_version,
                 "device_model": f"{event_batch.device_info.brand} {event_batch.device_info.model}",
-                "client_ip": client_ip
-            }
+                "client_ip": client_ip,
+            },
         )
-        
+
         # Process each event
         processed_count = 0
         error_count = 0
-        
+
         for event in event_batch.events:
             try:
                 # Forward to business event logging
@@ -315,18 +323,18 @@ async def collect_mobile_events(
                     device_info=event.context.device_info.dict(),
                     client_ip=client_ip,
                     original_timestamp=event.timestamp,
-                    **event.properties
+                    **event.properties,
                 )
-                
+
                 processed_count += 1
-                
+
             except Exception as e:
                 logger.error(
                     f"Failed to process mobile event {event.event_type}: {e}",
-                    extra={"event_type": event.event_type, "error": str(e)}
+                    extra={"event_type": event.event_type, "error": str(e)},
                 )
                 error_count += 1
-        
+
         # Log processing summary
         logger.info(
             f"Mobile event batch processed: {processed_count} success, {error_count} errors",
@@ -334,40 +342,44 @@ async def collect_mobile_events(
                 "session_id": event_batch.session_id,
                 "processed_count": processed_count,
                 "error_count": error_count,
-                "total_count": len(event_batch.events)
-            }
+                "total_count": len(event_batch.events),
+            },
         )
-        
+
         return {
             "status": "accepted",
             "processed": processed_count,
             "errors": error_count,
-            "total": len(event_batch.events)
+            "total": len(event_batch.events),
         }
-        
+
     except Exception as e:
         logger.error(
             f"Failed to process mobile event batch: {e}",
             exc_info=True,
             extra={
-                "session_id": event_batch.session_id if 'event_batch' in locals() else None,
-                "error": str(e)
-            }
+                "session_id": event_batch.session_id
+                if "event_batch" in locals()
+                else None,
+                "error": str(e),
+            },
         )
-        
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process event batch"
+            detail="Failed to process event batch",
         )
 
 
-@router.get("/mobile/health",
-            summary="Mobile logging health check",
-            description="Health check endpoint for mobile logging service")
+@router.get(
+    "/mobile/health",
+    summary="Mobile logging health check",
+    description="Health check endpoint for mobile logging service",
+)
 async def mobile_logging_health():
     """
     Health check endpoint for mobile logging service.
-    
+
     Returns the current status of the mobile logging collection service.
     """
     return {
@@ -375,5 +387,5 @@ async def mobile_logging_health():
         "service": "mobile-logging",
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "max_batch_size": 100,
-        "supported_platforms": ["ios", "android"]
+        "supported_platforms": ["ios", "android"],
     }

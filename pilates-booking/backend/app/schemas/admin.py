@@ -1,9 +1,10 @@
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, EmailStr
 
-from .user import UserResponse
 from ..models.user import UserRole
+from .user import UserResponse
 
 
 class UserUpdate(BaseModel):

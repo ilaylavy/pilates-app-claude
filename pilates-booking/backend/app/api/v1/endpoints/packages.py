@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
-from typing import List
 from datetime import datetime, timedelta, timezone
+from typing import List
 
-from ....schemas.package import PackageCreate, PackageUpdate, PackageResponse, UserPackageResponse, PackagePurchase
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from ....models.package import Package, UserPackage
 from ....models.user import User
-from ..deps import get_db, get_current_active_user, get_admin_user
+from ....schemas.package import (PackageCreate, PackagePurchase,
+                                 PackageResponse, PackageUpdate,
+                                 UserPackageResponse)
+from ..deps import get_admin_user, get_current_active_user, get_db
 
 router = APIRouter()
 
@@ -16,13 +19,13 @@ router = APIRouter()
 @router.get("/", response_model=List[PackageResponse])
 async def get_available_packages(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get all available packages."""
     stmt = select(Package).where(Package.is_active == True).order_by(Package.price)
     result = await db.execute(stmt)
     packages = result.scalars().all()
-    
+
     return packages
 
 
@@ -30,36 +33,35 @@ async def get_available_packages(
 async def purchase_package(
     purchase_data: PackagePurchase,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """Initiate package purchase - returns payment intent for client to complete."""
-    
+
     # Get package
     stmt = select(Package).where(
         and_(Package.id == purchase_data.package_id, Package.is_active == True)
     )
     result = await db.execute(stmt)
     package = result.scalar_one_or_none()
-    
+
     if not package:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Package not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
         )
-    
+
     return {
         "message": "Please use the /api/v1/payments/create-payment-intent endpoint to complete the purchase",
         "package_id": package.id,
         "package_name": package.name,
         "price": float(package.price),
-        "currency": "ILS"
+        "currency": "ILS",
     }
 
 
 @router.get("/my-packages", response_model=List[UserPackageResponse])
 async def get_user_packages(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get current user's packages."""
     stmt = (
@@ -70,7 +72,7 @@ async def get_user_packages(
     )
     result = await db.execute(stmt)
     user_packages = result.scalars().all()
-    
+
     return user_packages
 
 
@@ -79,15 +81,15 @@ async def get_user_packages(
 async def create_package(
     package_create: PackageCreate,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user)
+    admin_user: User = Depends(get_admin_user),
 ):
     """Create a new package (admin only)."""
     db_package = Package(**package_create.dict())
-    
+
     db.add(db_package)
     await db.commit()
     await db.refresh(db_package)
-    
+
     return db_package
 
 
@@ -96,39 +98,42 @@ async def update_package(
     package_id: int,
     package_update: PackageUpdate,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user)
+    admin_user: User = Depends(get_admin_user),
 ):
     """Update a package (admin only)."""
     stmt = select(Package).where(Package.id == package_id)
     result = await db.execute(stmt)
     package = result.scalar_one_or_none()
-    
+
     if not package:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Package not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
         )
-    
+
     update_data = package_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(package, field, value)
-    
+
     await db.commit()
     await db.refresh(package)
-    
+
     return package
 
 
 @router.get("/catalog", response_model=List[PackageResponse])
 async def get_package_catalog(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get package catalog with all available packages."""
-    stmt = select(Package).where(Package.is_active == True).order_by(Package.order_index, Package.price)
+    stmt = (
+        select(Package)
+        .where(Package.is_active == True)
+        .order_by(Package.order_index, Package.price)
+    )
     result = await db.execute(stmt)
     packages = result.scalars().all()
-    
+
     return packages
 
 
@@ -136,22 +141,21 @@ async def get_package_catalog(
 async def delete_package(
     package_id: int,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user)
+    admin_user: User = Depends(get_admin_user),
 ):
     """Delete a package (admin only)."""
     stmt = select(Package).where(Package.id == package_id)
     result = await db.execute(stmt)
     package = result.scalar_one_or_none()
-    
+
     if not package:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Package not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
         )
-    
+
     await db.delete(package)
     await db.commit()
-    
+
     return {"message": "Package deleted successfully"}
 
 
@@ -159,30 +163,31 @@ async def delete_package(
 async def toggle_package_status(
     package_id: int,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user)
+    admin_user: User = Depends(get_admin_user),
 ):
     """Toggle package active status (admin only)."""
     stmt = select(Package).where(Package.id == package_id)
     result = await db.execute(stmt)
     package = result.scalar_one_or_none()
-    
+
     if not package:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Package not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
         )
-    
+
     package.is_active = not package.is_active
     await db.commit()
-    
-    return {"message": f"Package {'activated' if package.is_active else 'deactivated'} successfully"}
+
+    return {
+        "message": f"Package {'activated' if package.is_active else 'deactivated'} successfully"
+    }
 
 
 @router.patch("/reorder")
 async def reorder_packages(
     package_order: List[int],
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user)
+    admin_user: User = Depends(get_admin_user),
 ):
     """Reorder packages (admin only)."""
     for index, package_id in enumerate(package_order):
@@ -191,6 +196,6 @@ async def reorder_packages(
         package = result.scalar_one_or_none()
         if package:
             package.order_index = index
-    
+
     await db.commit()
     return {"message": "Package order updated successfully"}

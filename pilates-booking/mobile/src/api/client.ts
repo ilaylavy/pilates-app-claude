@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL, BACKUP_API_URLS, STORAGE_KEYS } from '../utils/config';
+import { Logger } from '../services/LoggingService';
 
 class ApiClient {
   private instance: AxiosInstance;
@@ -51,16 +52,19 @@ class ApiClient {
   }
 
   private setupInterceptors() {
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and logging
     this.instance.interceptors.request.use(
       async (config) => {
+        const startTime = Date.now();
+        config.metadata = { startTime };
+        
         try {
           const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
           }
         } catch (error) {
-          console.warn('Failed to retrieve access token from secure store:', error);
+          Logger.warn('Failed to retrieve access token from secure store', error);
         }
         
         // Handle FormData uploads properly
@@ -68,43 +72,128 @@ class ApiClient {
           delete config.headers['Content-Type']; // Let browser set it
         }
         
-        // Debug logging
+        // Comprehensive request logging
         const fullUrl = new URL(config.url ?? '', config.baseURL).toString();
-        console.log(`API Request: ${config.method?.toUpperCase()} ${fullUrl}`);
+        Logger.debug('API request started', {
+          method: config.method?.toUpperCase(),
+          url: fullUrl,
+          baseURL: config.baseURL,
+          timeout: config.timeout,
+          hasAuth: !!config.headers.Authorization,
+          contentType: config.headers['Content-Type'],
+          requestSize: config.data ? JSON.stringify(config.data).length : 0
+        });
+        
+        // Track API call initiation
+        Logger.trackEvent('api.request_started', {
+          method: config.method?.toUpperCase(),
+          endpoint: config.url,
+          baseURL: config.baseURL,
+          timestamp: new Date().toISOString()
+        });
         
         return config;
       },
       (error) => {
-        console.warn('Request interceptor error:', error);
+        Logger.error('Request interceptor error', error, {
+          errorType: 'request_interceptor_error'
+        });
         return Promise.reject(error);
       }
     );
 
-    // Response interceptor to handle token refresh
+    // Response interceptor to handle token refresh and logging
     this.instance.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        const duration = response.config.metadata ? Date.now() - response.config.metadata.startTime : 0;
+        
+        // Log successful response
+        Logger.debug('API request completed', {
+          method: response.config.method?.toUpperCase(),
+          url: response.config.url,
+          status: response.status,
+          statusText: response.statusText,
+          duration,
+          responseSize: JSON.stringify(response.data).length
+        });
+        
+        // Track successful API call
+        Logger.trackApiCall(
+          response.config.url || 'unknown',
+          response.config.method?.toUpperCase() || 'GET',
+          response.status,
+          duration / 1000 // Convert to seconds
+        );
+        
+        // Log slow requests
+        if (duration > 3000) {
+          Logger.warn('Slow API request detected', {
+            method: response.config.method?.toUpperCase(),
+            url: response.config.url,
+            duration,
+            status: response.status
+          });
+        }
+        
+        return response;
+      },
       async (error) => {
         const originalRequest = error.config;
+        const duration = originalRequest?.metadata ? Date.now() - originalRequest.metadata.startTime : 0;
         
-        // Enhanced error logging for debugging
+        // Comprehensive error logging
+        const errorDetails = {
+          method: originalRequest?.method?.toUpperCase(),
+          url: originalRequest?.url,
+          baseURL: this.currentBaseURL,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          code: error.code,
+          message: error.message,
+          duration,
+          errorType: 'api_request_error'
+        };
+        
         if (error.code === 'ECONNABORTED') {
-          console.warn('API Request timeout:', error.config?.url);
+          Logger.warn('API request timeout', errorDetails);
+          Logger.trackEvent('api.timeout', {
+            url: originalRequest?.url,
+            duration,
+            timeout: originalRequest?.timeout
+          });
         } else if (error.code === 'ERR_NETWORK' || error.code === 'NETWORK_ERROR' || !error.response) {
-          console.warn('Network error:', {
-            url: error.config?.url,
-            baseURL: this.currentBaseURL,
+          Logger.error('Network error', error, errorDetails);
+          Logger.trackEvent('api.network_error', {
+            url: originalRequest?.url,
             code: error.code,
             message: error.message
           });
-          
+        } else {
+          Logger.error('API request failed', error, errorDetails);
         }
+        
+        // Track failed API call
+        Logger.trackApiCall(
+          originalRequest?.url || 'unknown',
+          originalRequest?.method?.toUpperCase() || 'GET',
+          error.response?.status || 0,
+          duration / 1000,
+          error.message
+        );
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
+          
+          Logger.info('Attempting token refresh for 401 error', {
+            url: originalRequest?.url,
+            method: originalRequest?.method
+          });
 
           try {
             const refreshToken = await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
             if (refreshToken) {
+              Logger.debug('Refresh token found, attempting refresh');
+              
               const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
                 refresh_token: refreshToken,
               }, { timeout: 15000 }); // Shorter timeout for refresh
@@ -114,13 +203,31 @@ class ApiClient {
               await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
               await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
 
+              // Log successful token refresh
+              Logger.info('Token refresh successful');
+              Logger.trackEvent('auth.token_refreshed', {
+                url: originalRequest?.url,
+                timestamp: new Date().toISOString()
+              });
+
               originalRequest.headers.Authorization = `Bearer ${access_token}`;
               return this.instance(originalRequest);
+            } else {
+              Logger.warn('No refresh token found for 401 error');
             }
           } catch (refreshError) {
             // Refresh failed, redirect to login
+            Logger.error('Token refresh failed', refreshError, {
+              url: originalRequest?.url,
+              errorType: 'token_refresh_failed'
+            });
+            
+            Logger.trackEvent('auth.token_refresh_failed', {
+              error: refreshError.message,
+              timestamp: new Date().toISOString()
+            });
+            
             await this.clearTokens();
-            console.warn('Token refresh failed:', refreshError);
             return Promise.reject(refreshError);
           }
         }

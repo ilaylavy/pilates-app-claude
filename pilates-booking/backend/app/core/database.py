@@ -1,6 +1,8 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
+from sqlalchemy.ext.declarative import declarative_base
+
 from .config import settings
 
 # Create async engine
@@ -8,14 +10,12 @@ engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=settings.DEBUG,
     future=True,
-    connect_args={"server_settings": {"jit": "off"}}
+    connect_args={"server_settings": {"jit": "off"}},
 )
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 # Create base model with naming convention for constraints
@@ -24,13 +24,11 @@ convention = {
     "uq": "uq_%(table_name)s_%(column_0_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    "pk": "pk_%(table_name)s"
+    "pk": "pk_%(table_name)s",
 }
 
 metadata = MetaData(naming_convention=convention)
 Base = declarative_base(metadata=metadata)
-
-
 
 
 async def init_db():

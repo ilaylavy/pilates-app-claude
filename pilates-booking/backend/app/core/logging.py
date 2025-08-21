@@ -1,61 +1,61 @@
 import logging
 import logging.config
 import sys
-from typing import Dict, Any
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict
 
 from .config import settings
 
 
 class CustomFormatter(logging.Formatter):
     """Custom formatter with colors for different log levels."""
-    
+
     COLORS = {
-        'DEBUG': '\033[36m',      # Cyan
-        'INFO': '\033[32m',       # Green
-        'WARNING': '\033[33m',    # Yellow
-        'ERROR': '\033[31m',      # Red
-        'CRITICAL': '\033[35m',   # Magenta
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
+        "CRITICAL": "\033[35m",  # Magenta
     }
-    RESET = '\033[0m'
-    
+    RESET = "\033[0m"
+
     def format(self, record: logging.LogRecord) -> str:
         # Add color for console output
-        if hasattr(record, 'levelname'):
-            color = self.COLORS.get(record.levelname, '')
+        if hasattr(record, "levelname"):
+            color = self.COLORS.get(record.levelname, "")
             record.levelname = f"{color}{record.levelname}{self.RESET}"
-        
+
         # Add request ID if available
-        if hasattr(record, 'request_id'):
+        if hasattr(record, "request_id"):
             record.msg = f"[{record.request_id}] {record.msg}"
-        
+
         return super().format(record)
 
 
 class RequestContextFilter(logging.Filter):
     """Add request context to log records."""
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         # Add timestamp in a readable format
         record.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Add service name
         record.service = "pilates-api"
-        
+
         return True
 
 
 def setup_logging() -> None:
     """Set up logging configuration."""
-    
+
     # Create logs directory if it doesn't exist
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-    
+
     # Determine log level
     log_level = "DEBUG" if settings.DEBUG else "INFO"
-    
+
     logging_config: Dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -174,10 +174,10 @@ def setup_logging() -> None:
             "handlers": ["console", "file"],
         },
     }
-    
+
     # Apply configuration
     logging.config.dictConfig(logging_config)
-    
+
     # Get the main logger and log startup
     logger = logging.getLogger("app")
     logger.info("Logging system initialized")

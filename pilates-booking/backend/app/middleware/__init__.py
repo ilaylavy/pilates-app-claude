@@ -1,13 +1,9 @@
-from .security import (
-    SecurityMiddleware,
-    RateLimitMiddleware, 
-    InputSanitizationMiddleware,
-    IPWhitelistMiddleware
-)
+from .security import (InputSanitizationMiddleware, IPWhitelistMiddleware,
+                       RateLimitMiddleware, SecurityMiddleware)
 
 __all__ = [
     "SecurityMiddleware",
     "RateLimitMiddleware",
-    "InputSanitizationMiddleware", 
-    "IPWhitelistMiddleware"
+    "InputSanitizationMiddleware",
+    "IPWhitelistMiddleware",
 ]

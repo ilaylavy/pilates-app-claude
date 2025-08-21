@@ -3,42 +3,34 @@ Comprehensive security test suite for the Pilates Booking System.
 Tests authentication, authorization, input validation, and other security measures.
 """
 
-import pytest
 import asyncio
 import time
+from unittest.mock import MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from unittest.mock import patch, MagicMock
 
-from app.main import app
-from app.core.database import get_db, Base
 from app.core.config import settings
-from app.core.security import (
-    generate_refresh_token, 
-    hash_token, 
-    validate_password_strength,
-    create_access_token
-)
-from app.models.user import User, UserRole
+from app.core.database import Base, get_db
+from app.core.security import (create_access_token, generate_refresh_token,
+                               hash_token, validate_password_strength)
+from app.main import app
+from app.models.audit_log import AuditActionType, AuditLog, SecurityLevel
 from app.models.refresh_token import RefreshToken
-from app.models.audit_log import AuditLog, AuditActionType, SecurityLevel
-from app.services.auth_service import AuthService
+from app.models.user import User, UserRole
 from app.services.audit_service import AuditService
-
+from app.services.auth_service import AuthService
 
 # Test database setup
 SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./test_security.db"
 
 engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestingSessionLocal = sessionmaker(
-    autocommit=False, 
-    autoflush=False, 
-    bind=engine, 
-    class_=AsyncSession
+    autocommit=False, autoflush=False, bind=engine, class_=AsyncSession
 )
 
 
@@ -54,10 +46,10 @@ app.dependency_overrides[get_db] = override_get_db
 async def db_session():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     async with TestingSessionLocal() as session:
         yield session
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -71,7 +63,7 @@ def client():
 async def test_user(db_session: AsyncSession):
     """Create a test user for authentication tests."""
     from app.core.security import get_password_hash
-    
+
     user = User(
         email="test@example.com",
         hashed_password=get_password_hash("SecurePassword123!"),
@@ -79,7 +71,7 @@ async def test_user(db_session: AsyncSession):
         last_name="User",
         role=UserRole.STUDENT,
         is_active=True,
-        is_verified=True
+        is_verified=True,
     )
     db_session.add(user)
     await db_session.commit()
@@ -91,7 +83,7 @@ async def test_user(db_session: AsyncSession):
 async def admin_user(db_session: AsyncSession):
     """Create an admin user for authorization tests."""
     from app.core.security import get_password_hash
-    
+
     user = User(
         email="admin@example.com",
         hashed_password=get_password_hash("AdminPassword123!"),
@@ -99,7 +91,7 @@ async def admin_user(db_session: AsyncSession):
         last_name="User",
         role=UserRole.ADMIN,
         is_active=True,
-        is_verified=True
+        is_verified=True,
     )
     db_session.add(user)
     await db_session.commit()
@@ -112,10 +104,10 @@ class TestAuthentication:
 
     def test_login_with_valid_credentials(self, client, test_user):
         """Test successful login with valid credentials."""
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "SecurePassword123!"},
+        )
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -124,17 +116,17 @@ class TestAuthentication:
 
     def test_login_with_invalid_credentials(self, client, test_user):
         """Test login failure with invalid credentials."""
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "wrongpassword"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "wrongpassword"},
+        )
         assert response.status_code == 401
         assert "Incorrect email or password" in response.json()["detail"]
 
     def test_login_with_unverified_user(self, client, db_session):
         """Test login failure with unverified user."""
         from app.core.security import get_password_hash
-        
+
         # Create unverified user
         user = User(
             email="unverified@example.com",
@@ -143,15 +135,15 @@ class TestAuthentication:
             last_name="User",
             role=UserRole.STUDENT,
             is_active=True,
-            is_verified=False
+            is_verified=False,
         )
         db_session.add(user)
         asyncio.run(db_session.commit())
 
-        response = client.post("/api/v1/auth/login", json={
-            "email": "unverified@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "unverified@example.com", "password": "SecurePassword123!"},
+        )
         assert response.status_code == 400
         assert "verify your email" in response.json()["detail"]
 
@@ -159,11 +151,11 @@ class TestAuthentication:
         """Test rate limiting on login attempts."""
         # Make multiple failed login attempts
         for i in range(6):  # Exceed the limit of 5
-            response = client.post("/api/v1/auth/login", json={
-                "email": "test@example.com",
-                "password": "wrongpassword"
-            })
-            
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "test@example.com", "password": "wrongpassword"},
+            )
+
             if i < 5:
                 assert response.status_code == 401
             else:
@@ -194,16 +186,17 @@ class TestTokenSecurity:
     def test_refresh_token_rotation(self, client, test_user):
         """Test refresh token rotation on token refresh."""
         # Login to get initial tokens
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "SecurePassword123!"},
+        )
         initial_tokens = response.json()
 
         # Refresh tokens
-        response = client.post("/api/v1/auth/refresh", json={
-            "refresh_token": initial_tokens["refresh_token"]
-        })
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": initial_tokens["refresh_token"]},
+        )
         assert response.status_code == 200
         new_tokens = response.json()
 
@@ -212,24 +205,24 @@ class TestTokenSecurity:
         assert new_tokens["refresh_token"] != initial_tokens["refresh_token"]
 
         # Old refresh token should be invalid
-        response = client.post("/api/v1/auth/refresh", json={
-            "refresh_token": initial_tokens["refresh_token"]
-        })
+        response = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": initial_tokens["refresh_token"]},
+        )
         assert response.status_code == 401
 
     def test_token_expiration(self, client, test_user):
         """Test access token expiration."""
         # Create an expired token
         from datetime import timedelta
+
         expired_token = create_access_token(
-            subject=test_user.id,
-            expires_delta=timedelta(seconds=-1)  # Already expired
+            subject=test_user.id, expires_delta=timedelta(seconds=-1)  # Already expired
         )
 
         # Try to access protected endpoint with expired token
         response = client.get(
-            "/api/v1/users/me",
-            headers={"Authorization": f"Bearer {expired_token}"}
+            "/api/v1/users/me", headers={"Authorization": f"Bearer {expired_token}"}
         )
         assert response.status_code == 401
 
@@ -244,8 +237,7 @@ class TestTokenSecurity:
 
         for token in invalid_tokens:
             response = client.get(
-                "/api/v1/users/me",
-                headers={"Authorization": f"Bearer {token}"}
+                "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
             )
             assert response.status_code == 401
 
@@ -263,10 +255,9 @@ class TestInputValidation:
         ]
 
         for payload in sql_injection_payloads:
-            response = client.post("/api/v1/auth/login", json={
-                "email": payload,
-                "password": "password"
-            })
+            response = client.post(
+                "/api/v1/auth/login", json={"email": payload, "password": "password"}
+            )
             # Should not cause a server error (would be 500 if SQL injection worked)
             assert response.status_code in [400, 401, 422]
 
@@ -280,12 +271,15 @@ class TestInputValidation:
         ]
 
         for payload in xss_payloads:
-            response = client.post("/api/v1/auth/register", json={
-                "email": "test@example.com",
-                "password": "SecurePassword123!",
-                "first_name": payload,
-                "last_name": "User"
-            })
+            response = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "test@example.com",
+                    "password": "SecurePassword123!",
+                    "first_name": payload,
+                    "last_name": "User",
+                },
+            )
             # Should reject malicious input
             assert response.status_code == 400
 
@@ -293,13 +287,16 @@ class TestInputValidation:
         """Test handling of oversized requests."""
         # Create a very large payload
         large_payload = "A" * (10 * 1024 * 1024)  # 10MB string
-        
-        response = client.post("/api/v1/auth/register", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!",
-            "first_name": large_payload,
-            "last_name": "User"
-        })
+
+        response = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "test@example.com",
+                "password": "SecurePassword123!",
+                "first_name": large_payload,
+                "last_name": "User",
+            },
+        )
         # Should reject oversized requests
         assert response.status_code in [400, 413, 422]
 
@@ -310,30 +307,28 @@ class TestAuthorization:
     def test_admin_only_endpoints(self, client, test_user, admin_user):
         """Test that admin-only endpoints require admin role."""
         # Get regular user token
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "SecurePassword123!"},
+        )
         user_token = response.json()["access_token"]
 
         # Get admin token
-        response = client.post("/api/v1/auth/login", json={
-            "email": "admin@example.com",
-            "password": "AdminPassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "AdminPassword123!"},
+        )
         admin_token = response.json()["access_token"]
 
         # Test admin endpoint with regular user (should fail)
         response = client.get(
-            "/api/v1/admin/users",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/v1/admin/users", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
         # Test admin endpoint with admin user (should succeed)
         response = client.get(
-            "/api/v1/admin/users",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/v1/admin/users", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -341,7 +336,7 @@ class TestAuthorization:
         """Test that users can only access their own data."""
         # Create two users
         from app.core.security import get_password_hash
-        
+
         user1 = User(
             email="user1@example.com",
             hashed_password=get_password_hash("Password123!"),
@@ -349,7 +344,7 @@ class TestAuthorization:
             last_name="One",
             role=UserRole.STUDENT,
             is_active=True,
-            is_verified=True
+            is_verified=True,
         )
         user2 = User(
             email="user2@example.com",
@@ -358,22 +353,22 @@ class TestAuthorization:
             last_name="Two",
             role=UserRole.STUDENT,
             is_active=True,
-            is_verified=True
+            is_verified=True,
         )
         db_session.add_all([user1, user2])
         asyncio.run(db_session.commit())
 
         # Login as user1
-        response = client.post("/api/v1/auth/login", json={
-            "email": "user1@example.com",
-            "password": "Password123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "user1@example.com", "password": "Password123!"},
+        )
         user1_token = response.json()["access_token"]
 
         # Try to access user2's data (should fail)
         response = client.get(
             f"/api/v1/users/{user2.id}",
-            headers={"Authorization": f"Bearer {user1_token}"}
+            headers={"Authorization": f"Bearer {user1_token}"},
         )
         assert response.status_code == 403
 
@@ -394,17 +389,13 @@ class TestAuditLogging:
 
         # Log a successful login
         await audit_service.log_login_attempt(
-            request=mock_request,
-            email="test@example.com",
-            success=True,
-            user=test_user
+            request=mock_request, email="test@example.com", success=True, user=test_user
         )
 
         # Check audit log
         from sqlalchemy import select
-        stmt = select(AuditLog).where(
-            AuditLog.action == AuditActionType.LOGIN_SUCCESS
-        )
+
+        stmt = select(AuditLog).where(AuditLog.action == AuditActionType.LOGIN_SUCCESS)
         result = await db_session.execute(stmt)
         log_entry = result.scalar_one_or_none()
 
@@ -428,14 +419,13 @@ class TestAuditLogging:
             request=mock_request,
             email="nonexistent@example.com",
             success=False,
-            error_message="Invalid credentials"
+            error_message="Invalid credentials",
         )
 
         # Check audit log
         from sqlalchemy import select
-        stmt = select(AuditLog).where(
-            AuditLog.action == AuditActionType.LOGIN_FAILED
-        )
+
+        stmt = select(AuditLog).where(AuditLog.action == AuditActionType.LOGIN_FAILED)
         result = await db_session.execute(stmt)
         log_entry = result.scalar_one_or_none()
 
@@ -449,7 +439,9 @@ class TestAuditLogging:
 class TestDeviceTracking:
     """Test device tracking functionality."""
 
-    async def test_refresh_token_device_tracking(self, db_session: AsyncSession, test_user):
+    async def test_refresh_token_device_tracking(
+        self, db_session: AsyncSession, test_user
+    ):
         """Test that refresh tokens track device information."""
         auth_service = AuthService(db_session)
 
@@ -458,7 +450,7 @@ class TestDeviceTracking:
             "device_name": "Test Device",
             "device_type": "mobile",
             "ip_address": "192.168.1.100",
-            "user_agent": "TestApp/1.0"
+            "user_agent": "TestApp/1.0",
         }
 
         # Create tokens with device tracking
@@ -466,6 +458,7 @@ class TestDeviceTracking:
 
         # Check that refresh token record was created
         from sqlalchemy import select
+
         stmt = select(RefreshToken).where(RefreshToken.user_id == test_user.id)
         result = await db_session.execute(stmt)
         token_record = result.scalar_one_or_none()
@@ -488,7 +481,7 @@ class TestDeviceTracking:
                 "device_name": f"Device {i}",
                 "device_type": "mobile",
                 "ip_address": f"192.168.1.{100 + i}",
-                "user_agent": f"TestApp/{i}.0"
+                "user_agent": f"TestApp/{i}.0",
             }
             await auth_service.create_user_tokens(test_user, device_info)
 
@@ -497,12 +490,10 @@ class TestDeviceTracking:
         assert count == 3
 
         # Check that all tokens are deactivated
-        from sqlalchemy import select, and_
+        from sqlalchemy import and_, select
+
         stmt = select(RefreshToken).where(
-            and_(
-                RefreshToken.user_id == test_user.id,
-                RefreshToken.is_active == True
-            )
+            and_(RefreshToken.user_id == test_user.id, RefreshToken.is_active == True)
         )
         result = await db_session.execute(stmt)
         active_tokens = result.scalars().all()
@@ -515,17 +506,17 @@ class TestSecurityHeaders:
     def test_security_headers_present(self, client):
         """Test that security headers are included in responses."""
         response = client.get("/")
-        
+
         # Check for security headers
         assert "X-Content-Type-Options" in response.headers
         assert response.headers["X-Content-Type-Options"] == "nosniff"
-        
+
         assert "X-Frame-Options" in response.headers
         assert response.headers["X-Frame-Options"] == "DENY"
-        
+
         assert "X-XSS-Protection" in response.headers
         assert response.headers["X-XSS-Protection"] == "1; mode=block"
-        
+
         assert "Strict-Transport-Security" in response.headers
         assert "max-age" in response.headers["Strict-Transport-Security"]
 
@@ -550,34 +541,34 @@ class TestPasswordReset:
     def test_password_reset_token_security(self, client, test_user):
         """Test password reset token generation and validation."""
         # Request password reset
-        response = client.post("/api/v1/auth/forgot-password", json={
-            "email": "test@example.com"
-        })
+        response = client.post(
+            "/api/v1/auth/forgot-password", json={"email": "test@example.com"}
+        )
         assert response.status_code == 200
 
         # Test with invalid token
-        response = client.post("/api/v1/auth/reset-password", json={
-            "token": "invalid_token",
-            "new_password": "NewSecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "invalid_token", "new_password": "NewSecurePassword123!"},
+        )
         assert response.status_code == 400
 
     def test_password_reset_invalidates_sessions(self, client, test_user, db_session):
         """Test that password reset invalidates all user sessions."""
         # Login to create a session
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "SecurePassword123!"},
+        )
         old_tokens = response.json()
 
         # Reset password (would need valid token in real scenario)
         # This is a simplified test - in reality, you'd get the token from the database
-        
+
         # After password reset, old tokens should be invalid
-        response = client.post("/api/v1/auth/refresh", json={
-            "refresh_token": old_tokens["refresh_token"]
-        })
+        response = client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": old_tokens["refresh_token"]}
+        )
         # Should fail because password reset invalidated all sessions
         assert response.status_code == 401
 
@@ -589,43 +580,42 @@ class TestSecurityPerformance:
     def test_rate_limiting_performance(self, client):
         """Test that rate limiting doesn't significantly impact performance."""
         start_time = time.time()
-        
+
         # Make allowed number of requests
         for i in range(5):
-            response = client.post("/api/v1/auth/login", json={
-                "email": "nonexistent@example.com",
-                "password": "password"
-            })
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": "nonexistent@example.com", "password": "password"},
+            )
             assert response.status_code == 401
-        
+
         end_time = time.time()
         total_time = end_time - start_time
-        
+
         # Should complete within reasonable time (adjust as needed)
         assert total_time < 5.0  # 5 seconds for 5 requests
 
     def test_token_validation_performance(self, client, test_user):
         """Test token validation performance."""
         # Login to get token
-        response = client.post("/api/v1/auth/login", json={
-            "email": "test@example.com",
-            "password": "SecurePassword123!"
-        })
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "test@example.com", "password": "SecurePassword123!"},
+        )
         token = response.json()["access_token"]
 
         start_time = time.time()
-        
+
         # Make multiple authenticated requests
         for i in range(10):
             response = client.get(
-                "/api/v1/users/me",
-                headers={"Authorization": f"Bearer {token}"}
+                "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
             )
             assert response.status_code == 200
-        
+
         end_time = time.time()
         total_time = end_time - start_time
-        
+
         # Should complete within reasonable time
         assert total_time < 2.0  # 2 seconds for 10 requests
 

@@ -1,11 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from datetime import datetime, timedelta
 from typing import Optional
 
-from ..core.database import Base
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
+                        Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from ..core.config import settings
+from ..core.database import Base
 
 
 class RefreshToken(Base):
@@ -31,7 +33,9 @@ class RefreshToken(Base):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if not self.expires_at:
-            self.expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+            self.expires_at = datetime.utcnow() + timedelta(
+                days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+            )
 
     @property
     def is_expired(self) -> bool:

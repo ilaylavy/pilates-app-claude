@@ -1,8 +1,9 @@
-from typing import Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Request
+from typing import Any, Dict, Optional
 
-from ..models.audit_log import AuditLog, AuditActionType, SecurityLevel
+from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models.audit_log import AuditActionType, AuditLog, SecurityLevel
 from ..models.user import User
 
 
@@ -22,7 +23,7 @@ class AuditService:
         user_agent: Optional[str] = None,
         request_id: Optional[str] = None,
         success: str = "true",
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> AuditLog:
         """Log a security-related event."""
         audit_log = AuditLog(
@@ -36,9 +37,9 @@ class AuditService:
             user_agent=user_agent,
             request_id=request_id,
             success=success,
-            error_message=error_message
+            error_message=error_message,
         )
-        
+
         self.db.add(audit_log)
         await self.db.commit()
         await self.db.refresh(audit_log)
@@ -54,13 +55,13 @@ class AuditService:
         security_level: SecurityLevel = SecurityLevel.LOW,
         details: Optional[Dict[str, Any]] = None,
         success: str = "true",
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> AuditLog:
         """Log an event from a FastAPI request."""
         ip_address = self._get_client_ip(request)
         user_agent = request.headers.get("User-Agent")
         request_id = getattr(request.state, "request_id", None)
-        
+
         return await self.log_security_event(
             action=action,
             user_id=user.id if user else None,
@@ -72,7 +73,7 @@ class AuditService:
             user_agent=user_agent,
             request_id=request_id,
             success=success,
-            error_message=error_message
+            error_message=error_message,
         )
 
     def _get_client_ip(self, request: Request) -> str:
@@ -80,11 +81,11 @@ class AuditService:
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
             return forwarded_for.split(",")[0].strip()
-        
+
         real_ip = request.headers.get("X-Real-IP")
         if real_ip:
             return real_ip
-        
+
         return request.client.host if request.client else "unknown"
 
     async def log_login_attempt(
@@ -93,17 +94,21 @@ class AuditService:
         email: str,
         success: bool,
         user: Optional[User] = None,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ):
         """Log a login attempt."""
-        action = AuditActionType.LOGIN_SUCCESS if success else AuditActionType.LOGIN_FAILED
+        action = (
+            AuditActionType.LOGIN_SUCCESS if success else AuditActionType.LOGIN_FAILED
+        )
         security_level = SecurityLevel.MEDIUM if success else SecurityLevel.HIGH
-        
+
         details = {
             "email": email,
-            "timestamp": str(request.state.request_id) if hasattr(request.state, "request_id") else None
+            "timestamp": str(request.state.request_id)
+            if hasattr(request.state, "request_id")
+            else None,
         }
-        
+
         await self.log_from_request(
             request=request,
             action=action,
@@ -111,14 +116,11 @@ class AuditService:
             security_level=security_level,
             details=details,
             success="true" if success else "false",
-            error_message=error_message
+            error_message=error_message,
         )
 
     async def log_password_change(
-        self,
-        request: Request,
-        user: User,
-        success: bool = True
+        self, request: Request, user: User, success: bool = True
     ):
         """Log a password change event."""
         await self.log_from_request(
@@ -126,7 +128,7 @@ class AuditService:
             action=AuditActionType.PASSWORD_CHANGE,
             user=user,
             security_level=SecurityLevel.HIGH,
-            success="true" if success else "false"
+            success="true" if success else "false",
         )
 
     async def log_admin_action(
@@ -136,7 +138,7 @@ class AuditService:
         action: str,
         resource_type: str,
         resource_id: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[Dict[str, Any]] = None,
     ):
         """Log an administrative action."""
         await self.log_from_request(
@@ -146,19 +148,15 @@ class AuditService:
             resource_type=resource_type,
             resource_id=resource_id,
             security_level=SecurityLevel.CRITICAL,
-            details={**(details or {}), "admin_action": action}
+            details={**(details or {}), "admin_action": action},
         )
 
-    async def log_rate_limit_exceeded(
-        self,
-        request: Request,
-        endpoint: str
-    ):
+    async def log_rate_limit_exceeded(self, request: Request, endpoint: str):
         """Log when rate limiting is triggered."""
         await self.log_from_request(
             request=request,
             action=AuditActionType.RATE_LIMIT_EXCEEDED,
             security_level=SecurityLevel.MEDIUM,
             details={"endpoint": endpoint},
-            success="false"
+            success="false",
         )

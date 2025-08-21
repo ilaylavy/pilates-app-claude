@@ -1,7 +1,10 @@
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Enum, Text, Boolean
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import enum
+
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer,
+                        Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from ..core.database import Base
 
 
@@ -24,7 +27,9 @@ class Booking(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    class_instance_id = Column(Integer, ForeignKey("class_instances.id"), nullable=False)
+    class_instance_id = Column(
+        Integer, ForeignKey("class_instances.id"), nullable=False
+    )
     user_package_id = Column(Integer, ForeignKey("user_packages.id"), nullable=True)
     status = Column(Enum(BookingStatus), default=BookingStatus.CONFIRMED)
     booking_date = Column(DateTime(timezone=True), server_default=func.now())
@@ -32,7 +37,9 @@ class Booking(Base):
     cancellation_reason = Column(Enum(CancellationReason), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     user = relationship("User", back_populates="bookings")
@@ -43,18 +50,22 @@ class Booking(Base):
         """Check if booking can be cancelled based on business rules."""
         if self.status != BookingStatus.CONFIRMED:
             return False
-        
+
         from datetime import datetime, timedelta, timezone
+
         from ..core.config import settings
-        
+
         # Only access class_instance if it's loaded
-        if not hasattr(self, '_sa_instance_state') or not self._sa_instance_state.expired:
-            if hasattr(self, 'class_instance') and self.class_instance:
+        if (
+            not hasattr(self, "_sa_instance_state")
+            or not self._sa_instance_state.expired
+        ):
+            if hasattr(self, "class_instance") and self.class_instance:
                 cancellation_deadline = self.class_instance.start_datetime - timedelta(
                     hours=settings.CANCELLATION_HOURS_LIMIT
                 )
                 return datetime.now(timezone.utc) < cancellation_deadline
-        
+
         # Fallback - assume cannot cancel if we can't check
         return False
 
@@ -67,14 +78,18 @@ class WaitlistEntry(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    class_instance_id = Column(Integer, ForeignKey("class_instances.id"), nullable=False)
+    class_instance_id = Column(
+        Integer, ForeignKey("class_instances.id"), nullable=False
+    )
     position = Column(Integer, nullable=False)
     joined_date = Column(DateTime(timezone=True), server_default=func.now())
     notified_date = Column(DateTime(timezone=True), nullable=True)
     promoted_date = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     user = relationship("User", back_populates="waitlist_entries")

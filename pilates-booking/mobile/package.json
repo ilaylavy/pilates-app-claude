@@ -13,8 +13,10 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
   },
   "dependencies": {
+    "@expo/metro-runtime": "~5.0.4",
     "@expo/vector-icons": "^14.0.4",
     "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-community/netinfo": "^11.4.1",
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/stack": "^6.4.1",
@@ -31,7 +33,9 @@
     "expo-notifications": "~0.31.4",
     "expo-secure-store": "~14.2.3",
     "expo-status-bar": "~2.2.3",
+    "metro": "0.82.5",
     "react": "19.0.0",
+    "react-dom": "19.0.0",
     "react-hook-form": "^7.48.0",
     "react-native": "0.79.5",
     "react-native-calendars": "^1.1306.0",
@@ -39,9 +43,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-dom": "19.0.0",
-    "react-native-web": "^0.20.0",
-    "@expo/metro-runtime": "~5.0.4"
+    "react-native-web": "^0.20.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

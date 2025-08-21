@@ -13,7 +13,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import DeviceInfo from 'react-native-device-info';
+import * as Device from 'expo-device';
+import * as Application from 'expo-application';
 
 interface LogLevel {
   DEBUG: 'debug';
@@ -108,17 +109,28 @@ class MobileLoggingService {
   private async initializeDeviceInfo(): Promise<void> {
     try {
       this.deviceInfo = {
-        brand: DeviceInfo.getBrand(),
-        model: DeviceInfo.getModel(),
-        systemVersion: DeviceInfo.getSystemVersion(),
-        appVersion: DeviceInfo.getVersion(),
-        buildNumber: DeviceInfo.getBuildNumber(),
-        bundleId: DeviceInfo.getBundleId(),
-        deviceId: await DeviceInfo.getUniqueId(),
-        isEmulator: await DeviceInfo.isEmulator(),
+        brand: Device.brand || 'unknown',
+        model: Device.modelName || 'unknown',
+        systemVersion: Device.osVersion || 'unknown',
+        appVersion: Application.nativeApplicationVersion || '1.0.0',
+        buildNumber: Application.nativeBuildVersion || '1',
+        bundleId: Application.applicationId || 'com.pilates.app',
+        deviceId: Application.androidId || 'unknown',
+        isEmulator: !Device.isDevice,
       };
     } catch (error) {
       console.error('Failed to initialize device info:', error);
+      // Fallback device info
+      this.deviceInfo = {
+        brand: 'unknown',
+        model: 'unknown',
+        systemVersion: 'unknown',
+        appVersion: '1.0.0',
+        buildNumber: '1',
+        bundleId: 'com.pilates.app',
+        deviceId: 'unknown',
+        isEmulator: false,
+      };
     }
   }
 

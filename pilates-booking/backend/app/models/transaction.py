@@ -1,7 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Numeric, Text, Boolean
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 import enum
+
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer,
+                        Numeric, String, Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from ..core.database import Base
 
 
@@ -21,27 +24,37 @@ class Transaction(Base):
     user_package_id = Column(Integer, ForeignKey("user_packages.id"), nullable=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
-    
+
     transaction_type = Column(Enum(TransactionType), nullable=False)
-    credit_amount = Column(Integer, nullable=False)  # Positive for additions, negative for deductions
+    credit_amount = Column(
+        Integer, nullable=False
+    )  # Positive for additions, negative for deductions
     balance_before = Column(Integer, nullable=False)
     balance_after = Column(Integer, nullable=False)
-    
+
     description = Column(Text, nullable=True)
-    reference_id = Column(String, nullable=True)  # External reference (booking ID, etc.)
+    reference_id = Column(
+        String, nullable=True
+    )  # External reference (booking ID, etc.)
     is_reversed = Column(Boolean, default=False, nullable=False)
-    reversed_by_transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
-    
+    reversed_by_transaction_id = Column(
+        Integer, ForeignKey("transactions.id"), nullable=True
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who created this transaction
-    
+    created_by = Column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )  # Who created this transaction
+
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
     user_package = relationship("UserPackage")
     booking = relationship("Booking")
     payment = relationship("Payment")
     created_by_user = relationship("User", foreign_keys=[created_by])
-    reversed_by_transaction = relationship("Transaction", foreign_keys=[reversed_by_transaction_id], remote_side=[id])
+    reversed_by_transaction = relationship(
+        "Transaction", foreign_keys=[reversed_by_transaction_id], remote_side=[id]
+    )
 
     @property
     def is_credit_addition(self) -> bool:

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, computed_field
-from typing import Optional, List
 from datetime import datetime, time
-from ..models.class_schedule import WeekDay, ClassLevel, ClassStatus
+from typing import List, Optional
+
+from pydantic import BaseModel, computed_field
+
+from ..models.class_schedule import ClassLevel, ClassStatus, WeekDay
 
 
 class ClassTemplateBase(BaseModel):
@@ -64,7 +66,7 @@ class InstructorResponse(BaseModel):
     id: int
     first_name: str
     last_name: str
-    
+
     model_config = {"from_attributes": True}
 
 

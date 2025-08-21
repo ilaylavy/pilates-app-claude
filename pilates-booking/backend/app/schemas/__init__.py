@@ -1,15 +1,16 @@
-from .user import UserCreate, UserUpdate, UserResponse, UserLogin, Token, TokenData
-from .class_schedule import (
-    ClassTemplateCreate, ClassTemplateUpdate, ClassTemplateResponse,
-    ClassInstanceCreate, ClassInstanceUpdate, ClassInstanceResponse
-)
-from .package import PackageCreate, PackageUpdate, PackageResponse, UserPackageResponse
 from .booking import BookingCreate, BookingResponse, WaitlistEntryResponse
+from .class_schedule import (ClassInstanceCreate, ClassInstanceResponse,
+                             ClassInstanceUpdate, ClassTemplateCreate,
+                             ClassTemplateResponse, ClassTemplateUpdate)
+from .package import (PackageCreate, PackageResponse, PackageUpdate,
+                      UserPackageResponse)
 from .payment import PaymentCreate, PaymentResponse
+from .user import (Token, TokenData, UserCreate, UserLogin, UserResponse,
+                   UserUpdate)
 
 __all__ = [
     "UserCreate",
-    "UserUpdate", 
+    "UserUpdate",
     "UserResponse",
     "UserLogin",
     "Token",
@@ -18,7 +19,7 @@ __all__ = [
     "ClassTemplateUpdate",
     "ClassTemplateResponse",
     "ClassInstanceCreate",
-    "ClassInstanceUpdate", 
+    "ClassInstanceUpdate",
     "ClassInstanceResponse",
     "PackageCreate",
     "PackageUpdate",

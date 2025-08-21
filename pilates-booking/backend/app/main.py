@@ -1,22 +1,20 @@
-from fastapi import FastAPI, Depends, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 import time
 import uuid
-import redis
+from contextlib import asynccontextmanager
 
-from .core.config import settings
-from .core.database import init_db, engine
-from .core.logging_config import setup_logging, get_logger
-from .core.database_logging import setup_database_logging
+import redis
+from fastapi import Depends, FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+
 from .api.v1.api import api_router
-from .middleware.security import (
-    SecurityMiddleware,
-    RateLimitMiddleware,
-    InputSanitizationMiddleware,
-    IPWhitelistMiddleware
-)
+from .core.config import settings
+from .core.database import engine, init_db
+from .core.database_logging import setup_database_logging
+from .core.logging_config import get_logger, setup_logging
 from .middleware.logging import LoggingMiddleware
+from .middleware.security import (InputSanitizationMiddleware,
+                                  IPWhitelistMiddleware, RateLimitMiddleware,
+                                  SecurityMiddleware)
 from .services.business_logging_service import business_logger
 
 
@@ -25,21 +23,21 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     logger = get_logger("app")
-    
+
     # Setup database logging
     setup_database_logging(engine)
-    
+
     # Log system startup
     logger.info("Starting Pilates Booking System API")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    
+
     # Log startup as business event
     business_logger.log_system_startup(
         environment=settings.ENVIRONMENT,
-        version="1.0.0"  # You might want to get this from a version file
+        version="1.0.0",  # You might want to get this from a version file
     )
-    
+
     # Initialize Redis connection
     try:
         redis_client = redis.from_url(settings.REDIS_URL)
@@ -49,24 +47,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Redis connection failed: {e}. Rate limiting will be disabled.")
         app.state.redis = None
-    
+
     await init_db()
     logger.info("Database initialized")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Pilates Booking System API")
     business_logger.log_event("system.shutdown")
-    
-    if hasattr(app.state, 'redis') and app.state.redis:
+
+    if hasattr(app.state, "redis") and app.state.redis:
         app.state.redis.close()
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
@@ -89,13 +87,23 @@ if settings.CORS_ORIGINS:
     if settings.ENVIRONMENT == "production":
         # Remove wildcard in production
         cors_origins = [origin for origin in cors_origins if origin != "*"]
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[str(origin) for origin in cors_origins],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Specific methods in production
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],  # Specific headers
+        allow_methods=[
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+        ],  # Specific methods in production
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Request-ID",
+        ],  # Specific headers
         expose_headers=["X-Request-ID", "API-Version"],
     )
 
