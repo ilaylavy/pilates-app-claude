@@ -19,11 +19,16 @@ import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
+import { socialApi, Attendee } from '../api/social';
+import AttendeeAvatars from '../components/AttendeeAvatars';
+import BookingConfirmationModal from '../components/BookingConfirmationModal';
 
 type ClassDetailsScreenRouteProp = RouteProp<RootStackParamList, 'ClassDetails'>;
 
 const ClassDetailsScreen: React.FC = () => {
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [completedBooking, setCompletedBooking] = useState(null);
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const queryClient = useQueryClient();
   const route = useRoute<ClassDetailsScreenRouteProp>();
@@ -40,7 +45,7 @@ const ClassDetailsScreen: React.FC = () => {
     queryFn: () => classesApi.getClassById(classId),
   });
 
-  // Fetch participants for this class
+  // Fetch participants for this class (for admin/instructor)
   const {
     data: participants = [],
     isLoading: participantsLoading,
@@ -48,6 +53,25 @@ const ClassDetailsScreen: React.FC = () => {
     queryKey: ['participants', classId],
     queryFn: () => classesApi.getClassParticipants(classId),
     enabled: !!classInstance && (isAdmin || isInstructor),
+  });
+
+  // Fetch attendees for social features (for all users)
+  const {
+    data: attendees = [],
+    isLoading: attendeesLoading,
+  } = useQuery({
+    queryKey: ['attendees', classId],
+    queryFn: () => socialApi.getClassAttendees(classId),
+    enabled: !!classInstance,
+  });
+
+  // Fetch friends in class
+  const {
+    data: friendsInClass = [],
+  } = useQuery({
+    queryKey: ['friends-in-class', classId],
+    queryFn: () => socialApi.getFriendsInClass(classId),
+    enabled: !!classInstance && isStudent,
   });
 
   // Book class mutation
@@ -59,11 +83,12 @@ const ClassDetailsScreen: React.FC = () => {
       }
       return result.booking;
     },
-    onSuccess: () => {
+    onSuccess: (booking) => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      Alert.alert('Success', 'Class booked successfully!');
-      navigation.goBack();
+      queryClient.invalidateQueries({ queryKey: ['attendees', classId] });
+      setCompletedBooking(booking);
+      setShowBookingModal(true);
     },
     onError: (error: any) => {
       Alert.alert('Error', error.message || 'Failed to book class');
@@ -82,6 +107,7 @@ const ClassDetailsScreen: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['attendees', classId] });
       Alert.alert('Success', 'Added to waitlist successfully!');
       navigation.goBack();
     },
@@ -278,6 +304,25 @@ const ClassDetailsScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Attendees */}
+        {attendees.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Who's Going</Text>
+            {friendsInClass.length > 0 && (
+              <Text style={styles.friendsText}>
+                {friendsInClass.length} of your friends {friendsInClass.length === 1 ? 'is' : 'are'} attending
+              </Text>
+            )}
+            <AttendeeAvatars
+              attendees={attendees}
+              onAttendeePress={(attendee) => {
+                // Navigate to public profile
+                console.log('View profile:', attendee);
+              }}
+            />
+          </View>
+        )}
+
         {/* Description */}
         {classInstance.template.description && (
           <View style={styles.section}>
@@ -367,6 +412,25 @@ const ClassDetailsScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Booking Confirmation Modal */}
+      {completedBooking && classInstance && (
+        <BookingConfirmationModal
+          visible={showBookingModal}
+          onClose={() => {
+            setShowBookingModal(false);
+            setCompletedBooking(null);
+          }}
+          booking={completedBooking}
+          classInstance={classInstance}
+          onViewSchedule={() => {
+            setShowBookingModal(false);
+            setCompletedBooking(null);
+            // Navigate to schedule or bookings screen
+            navigation.navigate('Bookings' as any);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -626,6 +690,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
+  },
+  friendsText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginBottom: SPACING.sm,
   },
 });
 

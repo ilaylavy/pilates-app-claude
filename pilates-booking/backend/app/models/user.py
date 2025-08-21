@@ -29,6 +29,7 @@ class User(Base):
     reset_token = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     preferences = Column(JSON, nullable=True)
+    privacy_settings = Column(JSON, nullable=True)
     stripe_customer_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
@@ -54,6 +55,20 @@ class User(Base):
 
     # For instructors
     taught_classes = relationship("ClassInstance", back_populates="instructor")
+
+    # Social features
+    sent_friend_requests = relationship(
+        "Friendship", 
+        foreign_keys="Friendship.user_id", 
+        back_populates="requester",
+        cascade="all, delete-orphan"
+    )
+    received_friend_requests = relationship(
+        "Friendship", 
+        foreign_keys="Friendship.friend_id", 
+        back_populates="friend",
+        cascade="all, delete-orphan"
+    )
 
     @property
     def full_name(self) -> str:

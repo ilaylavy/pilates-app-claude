@@ -9,6 +9,7 @@ export interface User {
   is_verified: boolean;
   avatar_url?: string;
   preferences?: UserPreferences;
+  privacy_settings?: PrivacySettings;
   created_at: string;
   updated_at: string;
 }
@@ -206,6 +207,12 @@ export interface UserPreferences {
   booking_reminders: boolean;
   class_updates: boolean;
   marketing_emails: boolean;
+}
+
+export interface PrivacySettings {
+  show_in_attendees: boolean;
+  allow_profile_viewing: boolean;
+  show_stats: boolean;
 }
 
 export interface UserStats {

@@ -1,6 +1,7 @@
 from .audit_log import AuditLog
 from .booking import Booking, WaitlistEntry
 from .class_schedule import ClassInstance, ClassTemplate
+from .friendship import Friendship, ClassInvitation
 from .package import Package, UserPackage
 from .payment import Payment
 from .refresh_token import RefreshToken
@@ -17,4 +18,6 @@ __all__ = [
     "Payment",
     "RefreshToken",
     "AuditLog",
+    "Friendship",
+    "ClassInvitation",
 ]
