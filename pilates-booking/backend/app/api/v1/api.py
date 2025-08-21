@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import auth, users, classes, bookings, packages, payments, webhooks
+from .endpoints import auth, users, classes, bookings, packages, payments, webhooks, logs
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
@@ -10,3 +10,4 @@ api_router.include_router(bookings.router, prefix="/bookings", tags=["bookings"]
 api_router.include_router(packages.router, prefix="/packages", tags=["packages"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+api_router.include_router(logs.router, prefix="/logs", tags=["logging"])

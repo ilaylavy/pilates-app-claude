@@ -6,8 +6,9 @@ import uuid
 import redis
 
 from .core.config import settings
-from .core.database import init_db
-from .core.logging import setup_logging, get_logger, access_logger
+from .core.database import init_db, engine
+from .core.logging_config import setup_logging, get_logger
+from .core.database_logging import setup_database_logging
 from .api.v1.api import api_router
 from .middleware.security import (
     SecurityMiddleware,
@@ -15,6 +16,8 @@ from .middleware.security import (
     InputSanitizationMiddleware,
     IPWhitelistMiddleware
 )
+from .middleware.logging import LoggingMiddleware
+from .services.business_logging_service import business_logger
 
 
 @asynccontextmanager
@@ -22,8 +25,20 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     logger = get_logger("app")
+    
+    # Setup database logging
+    setup_database_logging(engine)
+    
+    # Log system startup
     logger.info("Starting Pilates Booking System API")
-    logger.info(f"Environment: {'Development' if settings.DEBUG else 'Production'}")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Debug mode: {settings.DEBUG}")
+    
+    # Log startup as business event
+    business_logger.log_system_startup(
+        environment=settings.ENVIRONMENT,
+        version="1.0.0"  # You might want to get this from a version file
+    )
     
     # Initialize Redis connection
     try:
@@ -42,6 +57,8 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Pilates Booking System API")
+    business_logger.log_event("system.shutdown")
+    
     if hasattr(app.state, 'redis') and app.state.redis:
         app.state.redis.close()
 
@@ -53,50 +70,9 @@ app = FastAPI(
 )
 
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log all requests with timing and details."""
-    start_time = time.time()
-    request_id = str(uuid.uuid4())[:8]
-    
-    # Add request ID to request state for use in endpoints
-    request.state.request_id = request_id
-    
-    # Log request
-    access_logger.info(
-        f"REQUEST | {request_id} | {request.method} {request.url} | "
-        f"Client: {request.client.host if request.client else 'unknown'} | "
-        f"User-Agent: {request.headers.get('user-agent', 'unknown')}"
-    )
-    
-    # Process request
-    try:
-        response = await call_next(request)
-        process_time = time.time() - start_time
-        
-        # Log response
-        access_logger.info(
-            f"RESPONSE | {request_id} | {request.method} {request.url} | "
-            f"Status: {response.status_code} | Time: {process_time:.3f}s"
-        )
-        
-        # Add request ID to response headers
-        response.headers["X-Request-ID"] = request_id
-        
-        return response
-    
-    except Exception as e:
-        process_time = time.time() - start_time
-        logger = get_logger("app")
-        logger.error(
-            f"REQUEST ERROR | {request_id} | {request.method} {request.url} | "
-            f"Error: {str(e)} | Time: {process_time:.3f}s",
-            exc_info=True
-        )
-        raise
-
-
-# Add security middleware (order matters - last added = first executed)
+# Add middleware (order matters - last added = first executed)
+# Logging middleware should be first to capture all requests
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(SecurityMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(InputSanitizationMiddleware)
