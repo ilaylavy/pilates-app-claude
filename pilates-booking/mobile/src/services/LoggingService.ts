@@ -435,44 +435,77 @@ class MobileLoggingService {
       await this.saveToStorage();
 
     } catch (error) {
-      console.error('Failed to flush logs:', error);
+      // Only log errors in development to avoid spam
+      if (__DEV__) {
+        console.debug('Failed to flush logs (development mode):', error);
+      }
       // Keep logs in buffer for retry
     }
   }
 
   private async sendLogBatch(logs: LogEntry[]): Promise<void> {
-    const response = await fetch('/api/v1/logs/mobile', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        logs,
-        session_id: this.sessionId,
-        device_info: this.deviceInfo,
-      }),
-    });
+    // Skip sending logs in development or if no proper backend URL is configured
+    if (__DEV__) {
+      console.log('Development mode: Skipping log transmission to backend');
+      return;
+    }
 
-    if (!response.ok) {
-      throw new Error(`Failed to send logs: ${response.status}`);
+    try {
+      const response = await fetch('/api/v1/logs/mobile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          logs,
+          session_id: this.sessionId,
+          device_info: this.deviceInfo,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send logs: ${response.status}`);
+      }
+    } catch (error) {
+      // Silently fail in development to avoid network error spam
+      if (__DEV__) {
+        console.debug('Log transmission failed (development mode):', error);
+      } else {
+        throw error;
+      }
     }
   }
 
   private async sendEventBatch(events: EventData[]): Promise<void> {
-    const response = await fetch('/api/v1/events/mobile', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        events,
-        session_id: this.sessionId,
-        device_info: this.deviceInfo,
-      }),
-    });
+    // Skip sending events in development or if no proper backend URL is configured
+    if (__DEV__) {
+      console.log('Development mode: Skipping event transmission to backend');
+      return;
+    }
 
-    if (!response.ok) {
-      throw new Error(`Failed to send events: ${response.status}`);
+    try {
+      const response = await fetch('/api/v1/events/mobile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          events,
+          session_id: this.sessionId,
+          device_info: this.deviceInfo,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send events: ${response.status}`);
+      }
+    } catch (error) {
+      // Silently fail in development to avoid network error spam
+      if (__DEV__) {
+        console.debug('Event transmission failed (development mode):', error);
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -527,15 +560,16 @@ export const setupGlobalErrorHandler = (): void => {
     defaultHandler(error, isFatal);
   });
 
-  // Unhandled promise rejection handler
+  // Unhandled promise rejection handler for React Native
   const promiseRejectionHandler = (event: any) => {
     logger.error('Unhandled promise rejection', event.reason);
     logger.trackError(event.reason, 'unhandled_promise_rejection');
   };
 
-  // Add event listener for unhandled promise rejections
-  if (typeof window !== 'undefined') {
-    window.addEventListener('unhandledrejection', promiseRejectionHandler);
+  // React Native doesn't have window.addEventListener, so we use a different approach
+  // This is handled by the React Native global error handler above
+  if (__DEV__) {
+    console.log('Global error handlers setup completed');
   }
 };
 

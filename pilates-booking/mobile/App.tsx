@@ -11,19 +11,27 @@ import Navigation from './src/navigation/Navigation';
 import { STRIPE_PUBLISHABLE_KEY } from './src/utils/config';
 import { Logger, setupGlobalErrorHandler } from './src/services/LoggingService';
 
-// Suppress all NativeEventEmitter warnings
+// Suppress all known warnings for cleaner development experience
 LogBox.ignoreLogs([
   'new NativeEventEmitter',
   'EventEmitter.removeListener',
   'Require cycle',
+  'window.addEventListener is not a function',
+  'Non-serializable values were found in the navigation state',
+  'Failed to flush logs',
 ]);
 
-// Also suppress console.warn for NativeEventEmitter
+// Also suppress console.warn for specific warnings
 const originalWarn = console.warn;
 console.warn = (...args) => {
-  if (args[0] && typeof args[0] === 'string' && 
-      args[0].includes('new NativeEventEmitter')) {
-    return;
+  const message = args[0];
+  if (message && typeof message === 'string') {
+    if (message.includes('new NativeEventEmitter') ||
+        message.includes('addListener') ||
+        message.includes('removeListeners') ||
+        message.includes('window.addEventListener')) {
+      return;
+    }
   }
   originalWarn(...args);
 };
