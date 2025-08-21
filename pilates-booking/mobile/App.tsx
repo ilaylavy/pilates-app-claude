@@ -68,7 +68,7 @@ export default function App() {
     Logger.debug('Device information logged', {
       platform: Platform.OS,
       version: Platform.Version,
-      isTablet: Platform.isPad,
+      isTablet: Platform.OS === 'ios' && Platform.isPad,
       constants: Platform.constants
     });
     

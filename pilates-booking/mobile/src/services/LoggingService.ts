@@ -115,7 +115,7 @@ class MobileLoggingService {
         appVersion: Application.nativeApplicationVersion || '1.0.0',
         buildNumber: Application.nativeBuildVersion || '1',
         bundleId: Application.applicationId || 'com.pilates.app',
-        deviceId: Application.androidId || 'unknown',
+        deviceId: await Application.getAndroidId() || 'unknown',
         isEmulator: !Device.isDevice,
       };
     } catch (error) {

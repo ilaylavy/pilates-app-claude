@@ -1,11 +1,19 @@
+import enum
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer,
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer,
                         Numeric, String, Text)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from ..core.database import Base
+
+
+class UserPackageStatus(str, enum.Enum):
+    ACTIVE = "active"
+    RESERVED = "reserved"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
 
 
 class Package(Base):
@@ -49,6 +57,8 @@ class UserPackage(Base):
     purchase_date = Column(DateTime(timezone=True), server_default=func.now())
     expiry_date = Column(DateTime(timezone=True), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    status = Column(Enum(UserPackageStatus), default=UserPackageStatus.ACTIVE, nullable=False)
+    reservation_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -63,11 +73,28 @@ class UserPackage(Base):
         return datetime.now(timezone.utc) > self.expiry_date
 
     @property
+    def is_reservation_expired(self) -> bool:
+        return (
+            self.status == UserPackageStatus.RESERVED
+            and self.reservation_expires_at
+            and datetime.now(timezone.utc) > self.reservation_expires_at
+        )
+
+    @property
     def is_valid(self) -> bool:
         return (
             self.is_active
             and not self.is_expired
+            and not self.is_reservation_expired
+            and self.status == UserPackageStatus.ACTIVE
             and (self.credits_remaining > 0 or self.package.is_unlimited)
+        )
+
+    @property
+    def is_reserved(self) -> bool:
+        return (
+            self.status == UserPackageStatus.RESERVED
+            and not self.is_reservation_expired
         )
 
     @property
@@ -92,6 +119,26 @@ class UserPackage(Base):
         """Refund one credit to this package. Returns True if successful."""
         if not self.package.is_unlimited:
             self.credits_remaining += 1
+        return True
+
+    def activate_from_reservation(self) -> bool:
+        """Activate a reserved package after cash payment. Returns True if successful."""
+        if self.status != UserPackageStatus.RESERVED:
+            return False
+        
+        if self.is_reservation_expired:
+            return False
+            
+        self.status = UserPackageStatus.ACTIVE
+        self.reservation_expires_at = None
+        return True
+
+    def cancel_reservation(self) -> bool:
+        """Cancel a reserved package. Returns True if successful."""
+        if self.status != UserPackageStatus.RESERVED:
+            return False
+            
+        self.status = UserPackageStatus.CANCELLED
         return True
 
     def __repr__(self):

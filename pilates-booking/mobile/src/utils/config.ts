@@ -121,6 +121,8 @@ export const COLORS = {
   disabled: '#9CA3AF',
   white: '#FFFFFF',
   lightGray: '#F3F4F6',
+  card: '#FFFFFF',
+  accent: '#6366F1',
 } as const;
 
 export const FONTS = {

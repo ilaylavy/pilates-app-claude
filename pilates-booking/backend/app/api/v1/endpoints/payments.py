@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ....core.config import settings
-from ....models.package import Package, UserPackage
-from ....models.payment import Payment, PaymentStatus, PaymentType
+from ....models.package import Package, UserPackage, UserPackageStatus
+from ....models.payment import Payment, PaymentMethod, PaymentStatus, PaymentType
 from ....models.user import User
 from ....schemas.payment import (ConfirmPaymentRequest,
                                  CreatePaymentIntentRequest, InvoiceResponse,
@@ -190,6 +190,168 @@ async def confirm_payment(
         )
 
 
+@router.post("/reserve-cash")
+async def create_cash_reservation(
+    request: CreatePaymentIntentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Create a cash payment reservation for package purchase."""
+    try:
+        # Get package details
+        stmt = select(Package).where(
+            and_(Package.id == request.package_id, Package.is_active == True)
+        )
+        result = await db.execute(stmt)
+        package = result.scalar_one_or_none()
+
+        if not package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
+            )
+
+        # Check if user already has an active reservation for this package
+        existing_stmt = select(UserPackage).where(
+            and_(
+                UserPackage.user_id == current_user.id,
+                UserPackage.package_id == package.id,
+                UserPackage.status == UserPackageStatus.RESERVED,
+            )
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing_reservation = existing_result.scalar_one_or_none()
+
+        if existing_reservation and not existing_reservation.is_reservation_expired:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You already have an active reservation for this package",
+            )
+
+        # Set reservation expiry (48 hours from now)
+        from datetime import timedelta
+        reservation_expires_at = datetime.now(timezone.utc) + timedelta(hours=48)
+
+        # Create reserved user package
+        user_package = UserPackage(
+            user_id=current_user.id,
+            package_id=package.id,
+            credits_remaining=package.credits,
+            expiry_date=datetime.now(timezone.utc) + timedelta(days=package.validity_days),
+            status=UserPackageStatus.RESERVED,
+            reservation_expires_at=reservation_expires_at,
+        )
+
+        db.add(user_package)
+        await db.commit()
+        await db.refresh(user_package)
+
+        # Create payment record
+        payment = Payment(
+            user_id=current_user.id,
+            package_id=package.id,
+            user_package_id=user_package.id,
+            amount=package.price,
+            currency="ILS",
+            payment_type=PaymentType.PACKAGE_PURCHASE,
+            payment_method=PaymentMethod.CASH,
+            status=PaymentStatus.PENDING,
+            description=f"Cash reservation: {package.name}",
+            extra_data=json.dumps({
+                "reservation_expires_at": reservation_expires_at.isoformat(),
+                "package_credits": package.credits,
+                "validity_days": package.validity_days,
+            }),
+        )
+
+        db.add(payment)
+        await db.commit()
+        await db.refresh(payment)
+
+        return {
+            "message": "Package reserved successfully",
+            "reservation_id": str(user_package.id),
+            "expires_at": reservation_expires_at.isoformat(),
+            "payment_id": payment.id,
+            "instructions": "Please pay at reception within 48 hours to activate your credits",
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to create cash reservation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create reservation",
+        )
+
+
+@router.post("/confirm-cash-payment/{reservation_id}")
+async def confirm_cash_payment(
+    reservation_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Confirm cash payment and activate package (admin only)."""
+    try:
+        # Get user package reservation
+        stmt = select(UserPackage).where(
+            and_(
+                UserPackage.id == reservation_id,
+                UserPackage.status == UserPackageStatus.RESERVED,
+            )
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Reservation not found or already processed",
+            )
+
+        if user_package.is_reservation_expired:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reservation has expired",
+            )
+
+        # Activate the package
+        if not user_package.activate_from_reservation():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to activate reservation",
+            )
+
+        # Update payment status
+        payment_stmt = select(Payment).where(
+            and_(
+                Payment.user_package_id == user_package.id,
+                Payment.payment_method == PaymentMethod.CASH,
+                Payment.status == PaymentStatus.PENDING,
+            )
+        )
+        payment_result = await db.execute(payment_stmt)
+        payment = payment_result.scalar_one_or_none()
+
+        if payment:
+            payment.status = PaymentStatus.COMPLETED
+            payment.payment_date = datetime.now(timezone.utc)
+
+        await db.commit()
+
+        return {
+            "message": "Cash payment confirmed successfully",
+            "user_package_id": user_package.id,
+            "credits_available": user_package.credits_remaining,
+            "expires_at": user_package.expiry_date.isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to confirm cash payment: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to confirm cash payment",
+        )
+
+
 @router.get("/methods", response_model=List[PaymentMethodResponse])
 async def get_payment_methods(
     db: AsyncSession = Depends(get_db),
@@ -277,6 +439,39 @@ async def request_refund(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process refund",
+        )
+
+
+@router.delete("/methods/{method_id}")
+async def remove_payment_method(
+    method_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Remove a saved payment method."""
+    try:
+        if not current_user.stripe_customer_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No payment methods found"
+            )
+
+        # Detach payment method from customer in Stripe
+        success = await StripeService.detach_payment_method(method_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to remove payment method"
+            )
+
+        return {"message": "Payment method removed successfully"}
+
+    except Exception as e:
+        logger.error(f"Failed to remove payment method: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove payment method",
         )
 
 

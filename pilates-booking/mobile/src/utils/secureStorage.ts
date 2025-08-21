@@ -22,8 +22,6 @@ export class SecureStorage {
       // Use keychain on iOS and encrypted shared preferences on Android
       if (Platform.OS === 'ios') {
         options.keychainService = 'PilatesBookingKeychain';
-      } else if (SecureStore.ENCRYPTION_CIPHER?.AES_GCM) {
-        options.encryptionCipher = SecureStore.ENCRYPTION_CIPHER.AES_GCM;
       }
 
       await SecureStore.setItemAsync(key, value, options);

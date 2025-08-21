@@ -90,9 +90,23 @@ export const paymentsApi = {
     return response.data;
   },
 
+  // Create cash reservation
+  createCashReservation: async (packageId: number) => {
+    const response = await apiClient.post('/payments/reserve-cash', {
+      package_id: packageId
+    });
+    return response.data;
+  },
+
   // Get saved payment methods
   getPaymentMethods: async (): Promise<PaymentMethod[]> => {
     const response = await apiClient.get<PaymentMethod[]>('/payments/methods');
+    return response.data;
+  },
+
+  // Remove saved payment method
+  removePaymentMethod: async (methodId: string) => {
+    const response = await apiClient.delete(`/payments/methods/${methodId}`);
     return response.data;
   },
 
