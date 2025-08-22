@@ -2,7 +2,7 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AttendeeAvatars from '../AttendeeAvatars';
-import BookingCard from '../BookingCard';
+import ClassCard from '../ClassCard';
 
 // Mock dependencies
 jest.mock('expo-image', () => ({
@@ -172,7 +172,7 @@ describe('AttendeeAvatars', () => {
   });
 });
 
-describe('BookingCard', () => {
+describe('ClassCard - Booking Variant', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
@@ -182,7 +182,11 @@ describe('BookingCard', () => {
   it('renders booking information correctly', () => {
     const { getByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard booking={mockBooking} />
+        <ClassCard 
+          classInstance={mockBooking.class_instance} 
+          booking={mockBooking} 
+          variant="booking" 
+        />
       </QueryClientProvider>
     );
 
@@ -195,7 +199,12 @@ describe('BookingCard', () => {
     const mockOnPress = jest.fn();
     const { getByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard booking={mockBooking} onPress={mockOnPress} />
+        <ClassCard 
+          classInstance={mockBooking.class_instance} 
+          booking={mockBooking} 
+          variant="booking" 
+          onPress={mockOnPress} 
+        />
       </QueryClientProvider>
     );
 
@@ -207,8 +216,10 @@ describe('BookingCard', () => {
     const mockOnReschedule = jest.fn();
     const { getByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard 
+        <ClassCard 
+          classInstance={mockBooking.class_instance} 
           booking={mockBooking} 
+          variant="booking" 
           onReschedule={mockOnReschedule}
         />
       </QueryClientProvider>
@@ -220,21 +231,6 @@ describe('BookingCard', () => {
     expect(mockOnReschedule).toHaveBeenCalled();
   });
 
-  it('renders attendee avatars when provided', () => {
-    const { getByText } = render(
-      <QueryClientProvider client={queryClient}>
-        <BookingCard 
-          booking={mockBooking} 
-          attendees={mockAttendees.slice(0, 2)}
-        />
-      </QueryClientProvider>
-    );
-
-    // Should render the AttendeeAvatars component
-    // The exact test depends on how AttendeeAvatars renders
-    expect(getByText('J')).toBeTruthy();
-  });
-
   it('displays correct status colors', () => {
     const cancelledBooking = {
       ...mockBooking,
@@ -243,7 +239,11 @@ describe('BookingCard', () => {
 
     const { getByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard booking={cancelledBooking} />
+        <ClassCard 
+          classInstance={cancelledBooking.class_instance} 
+          booking={cancelledBooking} 
+          variant="booking" 
+        />
       </QueryClientProvider>
     );
 
@@ -261,30 +261,31 @@ describe('Social Features Integration', () => {
   it('integrates attendee avatars with booking card', () => {
     const { getByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard 
+        <ClassCard 
+          classInstance={mockBooking.class_instance}
           booking={mockBooking}
-          attendees={mockAttendees}
+          variant="booking"
         />
       </QueryClientProvider>
     );
 
-    // Should show both booking info and attendee avatars
+    // Should show booking info (attendee avatars would be handled separately now)
     expect(getByText('Pilates Fundamentals')).toBeTruthy();
-    expect(getByText('J')).toBeTruthy(); // Avatar initial
   });
 
   it('handles empty attendee lists gracefully', () => {
     const { getByText, queryByText } = render(
       <QueryClientProvider client={queryClient}>
-        <BookingCard 
+        <ClassCard 
+          classInstance={mockBooking.class_instance}
           booking={mockBooking}
-          attendees={[]}
+          variant="booking"
         />
       </QueryClientProvider>
     );
 
     expect(getByText('Pilates Fundamentals')).toBeTruthy();
-    // Should not show attendee avatars section for empty list
+    // ClassCard doesn't directly handle attendees in booking variant
     expect(queryByText('No attendees yet')).toBeNull();
   });
 });

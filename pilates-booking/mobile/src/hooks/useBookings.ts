@@ -49,18 +49,15 @@ export const useBookClass = () => {
   return useMutation({
     mutationFn: bookingsApi.bookClass,
     onMutate: async (classId: number) => {
-      // Cancel any outgoing refetches for booking status
+      // ❌ REMOVED OPTIMISTIC UPDATES - They were causing false "booked" feedback
+      // Users were seeing themselves as booked before API confirmation
+      // Now we wait for actual API success before showing any changes
+      
+      // Cancel any outgoing refetches for booking status  
       await queryClient.cancelQueries({ queryKey: bookingKeys.status(classId) });
 
-      // Snapshot the previous value
+      // Snapshot the previous value for error rollback
       const previousStatus = queryClient.getQueryData<BookingStatus>(bookingKeys.status(classId));
-
-      // Optimistically update booking status
-      queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), (old) => ({
-        ...old,
-        has_booking: true,
-        on_waitlist: false,
-      } as BookingStatus));
 
       return { previousStatus, classId };
     },
@@ -82,6 +79,7 @@ export const useBookClass = () => {
         // Invalidate and refetch related queries
         queryClient.invalidateQueries({ queryKey: bookingKeys.lists() });
         queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
+        queryClient.invalidateQueries({ queryKey: ['userPackages'] });
       }
     },
   });
@@ -94,21 +92,15 @@ export const useCancelBooking = () => {
     mutationFn: ({ bookingId, reason }: { bookingId: number; reason?: string }) =>
       bookingsApi.cancelBooking(bookingId, reason),
     onMutate: async ({ bookingId }: { bookingId: number }) => {
-      // Find and optimistically update the booking
+      // ❌ REMOVED OPTIMISTIC UPDATES for booking cancellation
+      // Users were seeing bookings as cancelled before API confirmation
+      // Now we wait for actual API success before showing cancellation
+      
       await queryClient.cancelQueries({ queryKey: bookingKeys.lists() });
 
-      // Get current bookings and update the cancelled one
+      // Just snapshot for potential error rollback
       const bookingsQuery = bookingKeys.list('future-only');
       const previousBookings = queryClient.getQueryData<Booking[]>(bookingsQuery);
-
-      if (previousBookings) {
-        const updatedBookings = previousBookings.map(booking =>
-          booking.id === bookingId
-            ? { ...booking, status: 'cancelled' as const, can_cancel: false }
-            : booking
-        );
-        queryClient.setQueryData(bookingsQuery, updatedBookings);
-      }
 
       return { previousBookings, bookingId };
     },
@@ -123,6 +115,7 @@ export const useCancelBooking = () => {
       // Invalidate and refetch all related queries
       queryClient.invalidateQueries({ queryKey: bookingKeys.all });
       queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
 
       // Update booking status if we know the class ID
       if (data.booking?.class_instance_id) {
@@ -140,19 +133,13 @@ export const useJoinWaitlist = () => {
   return useMutation({
     mutationFn: bookingsApi.joinWaitlist,
     onMutate: async (classId: number) => {
-      // Cancel any outgoing refetches for booking status
+      // ❌ REMOVED OPTIMISTIC UPDATES for waitlist joining  
+      // Users were seeing themselves on waitlist before API confirmation
+      
       await queryClient.cancelQueries({ queryKey: bookingKeys.status(classId) });
 
-      // Snapshot the previous value
+      // Snapshot the previous value for error rollback
       const previousStatus = queryClient.getQueryData<BookingStatus>(bookingKeys.status(classId));
-
-      // Optimistically update booking status
-      queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), (old) => ({
-        ...old,
-        has_booking: false,
-        on_waitlist: true,
-        waitlist_position: 1, // Optimistic guess
-      } as BookingStatus));
 
       return { previousStatus, classId };
     },
@@ -184,20 +171,13 @@ export const useLeaveWaitlist = () => {
   return useMutation({
     mutationFn: bookingsApi.leaveWaitlist,
     onMutate: async (classId: number) => {
-      // Cancel any outgoing refetches for booking status
+      // ❌ REMOVED OPTIMISTIC UPDATES for waitlist leaving
+      // Users were seeing themselves removed from waitlist before API confirmation
+      
       await queryClient.cancelQueries({ queryKey: bookingKeys.status(classId) });
 
-      // Snapshot the previous value
+      // Snapshot the previous value for error rollback
       const previousStatus = queryClient.getQueryData<BookingStatus>(bookingKeys.status(classId));
-
-      // Optimistically update booking status
-      queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), (old) => ({
-        ...old,
-        has_booking: false,
-        on_waitlist: false,
-        waitlist_entry: undefined,
-        waitlist_position: undefined,
-      } as BookingStatus));
 
       return { previousStatus, classId };
     },

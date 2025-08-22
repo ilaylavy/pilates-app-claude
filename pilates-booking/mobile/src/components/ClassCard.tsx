@@ -9,24 +9,38 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
-import { ClassInstance } from '../types';
+import { ClassInstance, Booking } from '../types';
+
+export type ClassCardVariant = 'list' | 'booking';
 
 interface ClassCardProps {
   classInstance: ClassInstance;
+  booking?: Booking;
+  variant?: ClassCardVariant;
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onCancel?: () => void;
+  onShare?: () => void;
+  onReschedule?: () => void;
   showActions?: boolean;
+  isBooked?: boolean;
+  availableSpots?: number;
 }
 
 const ClassCard: React.FC<ClassCardProps> = ({
   classInstance,
+  booking,
+  variant = 'list',
   onPress,
   onEdit,
   onDelete,
   onCancel,
+  onShare,
+  onReschedule,
   showActions = true,
+  isBooked = false,
+  availableSpots,
 }) => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
 
@@ -60,134 +74,176 @@ const ClassCard: React.FC<ClassCardProps> = ({
   };
 
   const getCapacityColor = () => {
-    const ratio = classInstance.available_spots / classInstance.template.capacity;
+    const spots = availableSpots ?? classInstance.available_spots;
+    const ratio = spots / classInstance.template.capacity;
     if (ratio > 0.5) return COLORS.success;
     if (ratio > 0.2) return COLORS.warning;
     return COLORS.error;
   };
 
-  return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.className}>{classInstance.template.name}</Text>
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(classInstance.status) }
-          ]}>
-            <Text style={styles.statusText}>
-              {classInstance.status.toUpperCase()}
+  // Get styles based on variant
+  const getCardStyle = () => {
+    switch (variant) {
+      case 'booking':
+        return [styles.card, styles.bookingCard];
+      default:
+        return styles.card;
+    }
+  };
+
+  // Show different content based on variant
+  const renderContent = () => {
+    switch (variant) {
+      case 'booking':
+        return renderBookingContent();
+      default:
+        return renderListContent();
+    }
+  };
+
+  const renderListContent = () => (
+    <>
+      <View style={styles.listHeader}>
+        <View style={styles.classInfo}>
+          <Text style={styles.className}>{classInstance.template?.name || 'Unknown Class'}</Text>
+          <Text style={styles.instructor}>
+            {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
+          </Text>
+          <View style={styles.listTimeInfo}>
+            <Ionicons name="time" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.listTimeText}>
+              {formatTime(classInstance.start_datetime)} - {formatTime(classInstance.end_datetime)}
             </Text>
           </View>
         </View>
-        <Text style={styles.instructor}>
-          {classInstance.instructor.first_name} {classInstance.instructor.last_name}
-        </Text>
+        <View style={styles.listRightInfo}>
+          {isBooked ? (
+            <View style={styles.bookedBadge}>
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+              <Text style={styles.bookedText}>Booked</Text>
+            </View>
+          ) : (
+            <View style={styles.capacityInfo}>
+              <Ionicons name="people" size={16} color={getCapacityColor()} />
+              <Text style={[styles.capacityText, { color: getCapacityColor() }]}>
+                {classInstance.participant_count}/{classInstance.template.capacity}
+              </Text>
+              {classInstance.is_full && (
+                <Text style={styles.fullText}>FULL</Text>
+              )}
+            </View>
+          )}
+          
+          {/* Admin/Instructor actions only */}
+          {(isAdmin || isInstructor) && (
+            <View style={styles.adminActions}>
+              {onEdit && (
+                <TouchableOpacity style={styles.editIconButton} onPress={onEdit}>
+                  <Ionicons name="pencil" size={18} color={COLORS.primary} />
+                </TouchableOpacity>
+              )}
+              {isAdmin && onDelete && (
+                <TouchableOpacity style={styles.deleteIconButton} onPress={onDelete}>
+                  <Ionicons name="trash" size={18} color={COLORS.error} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </>
+  );
+
+  const renderBookingContent = () => (
+    <>
+      <View style={styles.bookingHeader}>
+        <View style={styles.classInfo}>
+          <Text style={styles.className} numberOfLines={1}>
+            {classInstance.template?.name || 'Unknown Class'}
+          </Text>
+          <Text style={styles.instructor}>
+            with {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
+          </Text>
+        </View>
+        {booking && (
+          <View style={[styles.statusBadge, { backgroundColor: getBookingStatusColor(booking.status) }]}>
+            <Text style={styles.statusText}>{getBookingStatusText(booking.status)}</Text>
+          </View>
+        )}
       </View>
 
-      <View style={styles.details}>
-        <View style={styles.timeInfo}>
-          <Ionicons name="calendar" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>
-            {formatDate(classInstance.start_datetime)}
-          </Text>
+      <View style={styles.bookingDetails}>
+        <View style={styles.dateTimeContainer}>
+          <View style={styles.dateTime}>
+            <Ionicons name="calendar" size={16} color={COLORS.textSecondary} />
+            <Text style={styles.dateText}>{formatDate(classInstance.start_datetime)}</Text>
+          </View>
+          <View style={styles.dateTime}>
+            <Ionicons name="time" size={16} color={COLORS.textSecondary} />
+            <Text style={styles.timeText}>{formatTime(classInstance.start_datetime)}</Text>
+          </View>
         </View>
-        <View style={styles.timeInfo}>
-          <Ionicons name="time" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.detailText}>
-            {formatTime(classInstance.start_datetime)} - {formatTime(classInstance.end_datetime)}
-          </Text>
-        </View>
-        <View style={styles.capacityInfo}>
-          <Ionicons name="people" size={16} color={getCapacityColor()} />
-          <Text style={[styles.detailText, { color: getCapacityColor() }]}>
-            {classInstance.participant_count}/{classInstance.template.capacity} spots
-          </Text>
-          {classInstance.is_full && (
-            <Text style={styles.fullText}>FULL</Text>
-          )}
-          {classInstance.waitlist_count > 0 && (
-            <Text style={styles.waitlistText}>
-              {classInstance.waitlist_count} waiting
+
+        {booking && (
+          <View style={styles.bookingFooter}>
+            <Text style={styles.bookingDate}>
+              Booked: {new Date(booking.booking_date).toLocaleDateString()}
             </Text>
-          )}
-        </View>
+            
+            {booking.status === 'confirmed' && (
+              <View style={styles.quickActions}>
+                {onReschedule && (
+                  <TouchableOpacity style={styles.quickAction} onPress={onReschedule}>
+                    <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
+                    <Text style={styles.quickActionText}>Reschedule</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </View>
+    </>
+  );
 
-      {classInstance.template.description && (
-        <Text style={styles.description} numberOfLines={2}>
-          {classInstance.template.description}
-        </Text>
-      )}
 
-      {showActions && (
-        <View style={styles.actions}>
-          {/* Student actions */}
-          {isStudent && classInstance.status === 'scheduled' && (
-            <>
-              {!classInstance.is_full ? (
-                <TouchableOpacity style={styles.bookButton} onPress={onPress}>
-                  <Ionicons name="add" size={16} color={COLORS.white} />
-                  <Text style={styles.bookButtonText}>Book</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.waitlistButton} onPress={onPress}>
-                  <Ionicons name="hourglass" size={16} color={COLORS.warning} />
-                  <Text style={styles.waitlistButtonText}>Join Waitlist</Text>
-                </TouchableOpacity>
-              )}
-              {onCancel && (
-                <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                  <Ionicons name="close" size={16} color={COLORS.error} />
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
+  const getBookingStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed':
+        return COLORS.success;
+      case 'cancelled':
+        return COLORS.error;
+      case 'completed':
+        return COLORS.primary;
+      case 'no_show':
+        return COLORS.warning;
+      default:
+        return COLORS.textSecondary;
+    }
+  };
 
-          {/* Instructor actions */}
-          {isInstructor && (
-            <>
-              <TouchableOpacity style={styles.viewButton} onPress={onPress}>
-                <Ionicons name="eye" size={16} color={COLORS.primary} />
-                <Text style={styles.viewButtonText}>View Students</Text>
-              </TouchableOpacity>
-              {onEdit && (
-                <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-                  <Ionicons name="pencil" size={16} color={COLORS.primary} />
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
+  const getBookingStatusText = (status: string) => {
+    switch (status) {
+      case 'confirmed':
+        return 'Confirmed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'completed':
+        return 'Completed';
+      case 'no_show':
+        return 'No Show';
+      default:
+        return status;
+    }
+  };
 
-          {/* Admin actions */}
-          {isAdmin && (
-            <>
-              <TouchableOpacity style={styles.manageButton} onPress={onPress}>
-                <Ionicons name="settings" size={16} color={COLORS.primary} />
-                <Text style={styles.manageButtonText}>Manage</Text>
-              </TouchableOpacity>
-              {onEdit && (
-                <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-                  <Ionicons name="pencil" size={16} color={COLORS.primary} />
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-              {onDelete && (
-                <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-                  <Ionicons name="trash" size={16} color={COLORS.error} />
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-      )}
+  return (
+    <TouchableOpacity
+      style={getCardStyle()}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {renderContent()}
     </TouchableOpacity>
   );
 };
@@ -196,13 +252,17 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 12,
-    padding: SPACING.lg,
+    padding: SPACING.md,
     marginBottom: SPACING.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  bookingCard: {
+    marginHorizontal: SPACING.lg,
+    marginVertical: SPACING.sm,
   },
   header: {
     marginBottom: SPACING.md,
@@ -380,6 +440,110 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: 12,
     fontWeight: '600',
+  },
+  // List variant styles (used for both home and schedule)
+  listHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  listTimeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: SPACING.xs,
+  },
+  listTimeText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  listRightInfo: {
+    alignItems: 'flex-end',
+    gap: SPACING.sm,
+  },
+  bookedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bookedText: {
+    fontSize: 12,
+    color: COLORS.success,
+    fontWeight: '600',
+  },
+  // Booking variant styles
+  bookingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.md,
+  },
+  bookingDetails: {
+    gap: SPACING.md,
+  },
+  dateTimeContainer: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+  },
+  dateTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  timeText: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  bookingFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bookingDate: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  quickAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  quickActionText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  // Shared class info styles
+  classInfo: {
+    flex: 1,
+  },
+  capacityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  adminActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  editIconButton: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: COLORS.lightGray,
+  },
+  deleteIconButton: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: '#ffebee',
   },
 });
 

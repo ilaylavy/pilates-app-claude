@@ -31,7 +31,7 @@ interface UserStats {
 }
 
 const ProfileScreen: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const navigation = useNavigation();
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
@@ -44,6 +44,7 @@ const ProfileScreen: React.FC = () => {
       const response = await apiClient.get('/api/v1/users/me/stats');
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   const { data: upcomingClasses } = useQuery({
@@ -52,6 +53,7 @@ const ProfileScreen: React.FC = () => {
       const response = await apiClient.get('/api/v1/bookings/my-bookings?status=confirmed&upcoming=true&limit=3');
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   const handleLogout = async () => {

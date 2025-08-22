@@ -80,6 +80,8 @@ export interface UserPackage {
   is_expired: boolean;
   is_valid: boolean;
   days_until_expiry: number;
+  status: 'active' | 'reserved' | 'expired' | 'cancelled';
+  reservation_expires_at?: string;
   created_at: string;
   updated_at: string;
 }

@@ -21,8 +21,9 @@ import { COLORS, SPACING } from '../utils/config';
 import { bookingsApi } from '../api/bookings';
 import { useApiErrorHandler } from '../utils/errorMessages';
 import { socialApi } from '../api/social';
+import { useAuth } from '../hooks/useAuth';
 import { Booking, ClassInstance } from '../types';
-import BookingCard from '../components/BookingCard';
+import ClassCard from '../components/ClassCard';
 import ClassDetailsModal from '../components/ClassDetailsModal';
 
 type TabType = 'upcoming' | 'past' | 'cancelled';
@@ -45,6 +46,7 @@ const BookingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const { handleError } = useApiErrorHandler();
+  const { isAuthenticated } = useAuth();
 
   // Fetch user bookings
   const {
@@ -55,6 +57,7 @@ const BookingsScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['user-bookings'],
     queryFn: () => bookingsApi.getUserBookings(),
+    enabled: isAuthenticated,
   });
 
   // Cancel booking mutation
@@ -62,7 +65,9 @@ const BookingsScreen: React.FC = () => {
     mutationFn: (bookingId: number) => bookingsApi.cancelBooking(bookingId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
       Alert.alert('Success', 'Booking cancelled successfully');
     },
     onError: (error: any) => {
@@ -136,7 +141,30 @@ const BookingsScreen: React.FC = () => {
   };
 
   const handleCancelBooking = (bookingId: number) => {
-    cancelBookingMutation.mutate(bookingId);
+    // Prevent double cancellation
+    if (cancelBookingMutation.isPending) {
+      return;
+    }
+    
+    // Find the booking to check if it can still be cancelled
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking || booking.status !== 'confirmed') {
+      Alert.alert('Error', 'This booking cannot be cancelled');
+      return;
+    }
+    
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes', 
+          style: 'destructive',
+          onPress: () => cancelBookingMutation.mutate(bookingId)
+        }
+      ]
+    );
   };
 
   const handleShareBooking = async (booking: Booking) => {
@@ -186,13 +214,15 @@ const BookingsScreen: React.FC = () => {
   );
 
   const renderBookingItem = ({ item }: { item: Booking }) => (
-    <BookingCard
+    <ClassCard
+      classInstance={item.class_instance}
       booking={item}
+      variant="booking"
       onPress={() => handleBookingPress(item)}
-      onCancel={() => handleCancelBooking(item.id)}
+      onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
       onShare={() => handleShareBooking(item)}
       onReschedule={() => handleRescheduleBooking(item)}
-      showSwipeActions={activeTab === 'upcoming'}
+      showActions={false}
     />
   );
 

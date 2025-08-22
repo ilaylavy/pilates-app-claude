@@ -6,6 +6,7 @@ import { Logger } from '../services/LoggingService';
 class ApiClient {
   private instance: AxiosInstance;
   private currentBaseURL: string = API_BASE_URL;
+  private refreshPromise: Promise<string> | null = null;
 
   private buildUrl(url: string): string {
     return url.startsWith('/') ? url : `/${url}`;
@@ -206,32 +207,22 @@ class ApiClient {
           });
 
           try {
-            const refreshToken = await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
-            if (refreshToken) {
-              Logger.debug('Refresh token found, attempting refresh');
-              
-              const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, {
-                refresh_token: refreshToken,
-              }, { timeout: 15000 }); // Shorter timeout for refresh
-
-              const { access_token, refresh_token: newRefreshToken } = response.data;
-              
-              await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
-              await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
-
-              // Log successful token refresh
-              Logger.info('Token refresh successful');
-              Logger.trackEvent('auth.token_refreshed', {
-                url: originalRequest?.url,
-                timestamp: new Date().toISOString()
-              });
-
-              originalRequest.headers.Authorization = `Bearer ${access_token}`;
-              return this.instance(originalRequest);
-            } else {
-              Logger.warn('No refresh token found for 401 error');
+            // Use existing refresh promise or create new one to prevent race conditions
+            if (!this.refreshPromise) {
+              this.refreshPromise = this.performTokenRefresh();
             }
+            
+            const accessToken = await this.refreshPromise;
+            
+            // Clear the refresh promise after completion
+            this.refreshPromise = null;
+            
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            return this.instance(originalRequest);
           } catch (refreshError) {
+            // Clear the refresh promise on error
+            this.refreshPromise = null;
+            
             // Refresh failed, redirect to login
             Logger.error('Token refresh failed', refreshError as Error, {
               url: originalRequest?.url,
@@ -254,6 +245,33 @@ class ApiClient {
         return Promise.reject(error);
       }
     );
+  }
+
+  private async performTokenRefresh(): Promise<string> {
+    const refreshToken = await SecureStore.getItemAsync(STORAGE_KEYS.REFRESH_TOKEN);
+    if (!refreshToken) {
+      throw new Error('No refresh token found');
+    }
+
+    Logger.debug('Refresh token found, attempting refresh');
+    
+    // Use the current working base URL instead of hardcoded API_BASE_URL
+    const response = await axios.post(`${this.currentBaseURL}/api/v1/auth/refresh`, {
+      refresh_token: refreshToken,
+    }, { timeout: 15000 }); // Shorter timeout for refresh
+
+    const { access_token, refresh_token: newRefreshToken } = response.data;
+    
+    await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
+    await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+
+    // Log successful token refresh
+    Logger.info('Token refresh successful');
+    Logger.trackEvent('auth.token_refreshed', {
+      timestamp: new Date().toISOString()
+    });
+
+    return access_token;
   }
 
   async clearTokens() {

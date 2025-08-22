@@ -7,6 +7,7 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -25,10 +26,11 @@ import ClassCard from '../components/ClassCard';
 import ClassDetailsModal from '../components/ClassDetailsModal';
 
 const HomeScreen: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const previousReservedPackageIdsRef = React.useRef<number[]>([]);
 
   const {
     data: upcomingClasses,
@@ -36,7 +38,8 @@ const HomeScreen: React.FC = () => {
     refetch: refetchClasses,
   } = useQuery({
     queryKey: ['upcomingClasses'],
-    queryFn: () => classesApi.getUpcomingClasses(3), // Next 3 days
+    queryFn: () => classesApi.getUpcomingClasses(7), // Next 7 days to get more classes
+    enabled: isAuthenticated,
   });
 
   const {
@@ -45,7 +48,8 @@ const HomeScreen: React.FC = () => {
     refetch: refetchBookings,
   } = useQuery({
     queryKey: ['userBookings'],
-    queryFn: () => bookingsApi.getUserBookings(),
+    queryFn: () => bookingsApi.getUserBookings(true), // Include past bookings for accurate count
+    enabled: isAuthenticated,
   });
 
   // Create a set of booked class IDs for quick lookup
@@ -61,6 +65,8 @@ const HomeScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['userPackages'],
     queryFn: () => packagesApi.getUserPackages(),
+    staleTime: 30000, // Cache for 30 seconds only for packages due to cash payment updates
+    enabled: isAuthenticated,
   });
 
   const isLoading = classesLoading || bookingsLoading || packagesLoading;
@@ -74,7 +80,61 @@ const HomeScreen: React.FC = () => {
   };
 
   const activePackage = userPackages?.find(pkg => pkg.is_valid);
-  const nextBooking = userBookings?.[0];
+  const reservedPackages = userPackages?.filter(pkg => pkg.status === 'reserved');
+  
+  // Detect when reserved packages become active and show notification
+  React.useEffect(() => {
+    if (userPackages) {
+      const currentReservedIds = reservedPackages?.map(pkg => pkg.id) || [];
+      const previousReservedIds = previousReservedPackageIdsRef.current;
+      
+      // Check if any previously reserved packages are now active
+      if (previousReservedIds.length > 0) {
+        const nowActivePackages = userPackages.filter(pkg => 
+          previousReservedIds.includes(pkg.id) && 
+          pkg.status === 'active' && 
+          pkg.is_valid
+        );
+        
+        if (nowActivePackages.length > 0) {
+          const totalCredits = nowActivePackages.reduce((sum, pkg) => sum + pkg.credits_remaining, 0);
+          Alert.alert(
+            'Package Activated! 🎉',
+            `Your cash payment has been confirmed. ${totalCredits} credits are now available for booking classes.`,
+            [{ text: 'Great!', style: 'default' }]
+          );
+        }
+      }
+      
+      // Update ref with current reserved IDs
+      previousReservedPackageIdsRef.current = currentReservedIds;
+    }
+  }, [userPackages, reservedPackages]);
+
+  // Poll for package updates when there are reserved packages
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (reservedPackages && reservedPackages.length > 0) {
+      // Poll every 10 seconds when there are reserved packages
+      interval = setInterval(() => {
+        refetchPackages();
+      }, 10000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [reservedPackages?.length, refetchPackages]);
+  
+  // Get next confirmed upcoming booking
+  const upcomingBookings = userBookings?.filter(booking => 
+    booking.status === 'confirmed' && 
+    new Date(booking.class_instance.start_datetime) > new Date()
+  ).sort((a, b) => 
+    new Date(a.class_instance.start_datetime).getTime() - new Date(b.class_instance.start_datetime).getTime()
+  );
+  const nextBooking = upcomingBookings?.[0];
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -105,12 +165,18 @@ const HomeScreen: React.FC = () => {
               {activePackage?.credits_remaining || 0}
             </Text>
             <Text style={styles.statLabel}>Credits Left</Text>
+            {reservedPackages && reservedPackages.length > 0 && (
+              <View style={styles.pendingIndicator}>
+                <Ionicons name="time" size={12} color={COLORS.warning} />
+                <Text style={styles.pendingText}>{reservedPackages.length} pending</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.statCard}>
             <Ionicons name="calendar" size={24} color={COLORS.secondary} />
             <Text style={styles.statNumber}>
-              {userBookings?.length || 0}
+              {upcomingBookings?.length || 0}
             </Text>
             <Text style={styles.statLabel}>Upcoming Classes</Text>
           </View>
@@ -167,49 +233,18 @@ const HomeScreen: React.FC = () => {
           </View>
 
           {upcomingClasses?.slice(0, 3).map((classInstance: ClassInstance) => (
-            <TouchableOpacity
+            <ClassCard
               key={classInstance.id}
-              style={styles.classCard}
+              classInstance={classInstance}
+              variant="list"
+              isBooked={bookedClassIds.has(classInstance.id)}
+              availableSpots={classInstance.available_spots}
+              showActions={false}
               onPress={() => {
                 setSelectedClass(classInstance);
                 setDetailsModalVisible(true);
               }}
-            >
-              <View style={styles.classCardContent}>
-                <View style={styles.classInfo}>
-                  <Text style={styles.className}>{classInstance.template?.name || 'Unknown Class'}</Text>
-                  <Text style={styles.classInstructor}>
-                    {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
-                  </Text>
-                  <View style={styles.classDetails}>
-                    <View style={styles.classDetailItem}>
-                      <Ionicons name="time" size={14} color={COLORS.textSecondary} />
-                      <Text style={styles.classDetailText}>
-                        {formatDateTime(classInstance.start_datetime).time}
-                      </Text>
-                    </View>
-                    <View style={styles.classDetailItem}>
-                      <Ionicons name="people" size={14} color={COLORS.textSecondary} />
-                      <Text style={styles.classDetailText}>
-                        {classInstance.available_spots || 0} spots left
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.classActions}>
-                  {bookedClassIds.has(classInstance.id) ? (
-                    <View style={styles.bookedBadge}>
-                      <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                      <Text style={styles.bookedText}>Booked</Text>
-                    </View>
-                  ) : classInstance.is_full ? (
-                    <Text style={styles.fullText}>Full</Text>
-                  ) : (
-                    <Ionicons name="add-circle" size={24} color={COLORS.primary} />
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
+            />
           ))}
         </View>
 
@@ -293,6 +328,21 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     textAlign: 'center',
   },
+  pendingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+    backgroundColor: COLORS.warning + '15',
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  pendingText: {
+    fontSize: 10,
+    color: COLORS.warning,
+    marginLeft: 2,
+    fontWeight: '500',
+  },
   section: {
     marginBottom: SPACING.lg,
   },
@@ -342,62 +392,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     marginLeft: SPACING.xs,
-  },
-  classCard: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
-    borderRadius: 12,
-    marginBottom: SPACING.sm,
-  },
-  classCardContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  classInfo: {
-    flex: 1,
-  },
-  className: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  classInstructor: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  classDetails: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-  },
-  classDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  classDetailText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
-  },
-  classActions: {
-    alignItems: 'center',
-  },
-  fullText: {
-    fontSize: 12,
-    color: COLORS.error,
-    fontWeight: '600',
-  },
-  bookedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  bookedText: {
-    fontSize: 12,
-    color: COLORS.success,
-    fontWeight: '600',
   },
   packageCard: {
     backgroundColor: COLORS.surface,

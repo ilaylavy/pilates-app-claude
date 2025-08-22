@@ -87,7 +87,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     mutationFn: () => paymentsApi.createCashReservation(packageId),
     onSuccess: (data) => {
       // Invalidate queries to refresh package data
-      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       
       Vibration.vibrate(100);
@@ -115,7 +115,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     mutationFn: (paymentIntentId: string) => paymentsApi.confirmPayment(paymentIntentId),
     onSuccess: (data) => {
       // Invalidate queries to refresh package data
-      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       
       Vibration.vibrate([100, 100, 100]);

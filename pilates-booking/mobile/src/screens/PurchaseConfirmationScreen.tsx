@@ -64,7 +64,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
   // Invalidate cache when screen is focused to ensure data is up to date
   useFocusEffect(
     React.useCallback(() => {
-      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
       queryClient.invalidateQueries({ queryKey: ['packages'] });
     }, [queryClient])
   );

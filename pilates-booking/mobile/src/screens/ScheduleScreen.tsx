@@ -21,7 +21,9 @@ import ClassDetailsModal from '../components/ClassDetailsModal';
 import FloatingActionButton from '../components/FloatingActionButton';
 import { ClassCardSkeleton } from '../components/SkeletonLoader';
 import { useUserRole } from '../hooks/useUserRole';
+import { useAuth } from '../hooks/useAuth';
 import { classesApi } from '../api/classes';
+import { bookingsApi } from '../api/bookings';
 import { ClassInstance } from '../types';
 
 const ScheduleScreen: React.FC = () => {
@@ -39,6 +41,7 @@ const ScheduleScreen: React.FC = () => {
   const [filterInstructor, setFilterInstructor] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const { isAdmin } = useUserRole();
+  const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const slideAnimation = useRef(new Animated.Value(0)).current;
 
@@ -69,7 +72,21 @@ const ScheduleScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['classes', 'week', weekStart.toISOString().split('T')[0]],
     queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0]),
+    enabled: isAuthenticated,
   });
+
+  // Fetch user bookings to show booking status
+  const { data: userBookings = [] } = useQuery({
+    queryKey: ['userBookings'],
+    queryFn: () => bookingsApi.getUserBookings(),
+    enabled: isAuthenticated,
+  });
+
+  // Create a set of booked class IDs for quick lookup
+  const bookedClassIds = new Set(
+    userBookings?.filter(booking => booking.status === 'confirmed')
+      .map(booking => booking.class_instance_id) || []
+  );
 
   const handlePreviousWeek = () => {
     Animated.timing(slideAnimation, {
@@ -399,6 +416,8 @@ const ScheduleScreen: React.FC = () => {
                           <ClassCard
                             key={classInstance.id}
                             classInstance={classInstance}
+                            variant="list"
+                            isBooked={bookedClassIds.has(classInstance.id)}
                             onPress={() => handleClassPress(classInstance)}
                             onEdit={() => handleEditClass(classInstance)}
                             onDelete={() => handleDeleteClass(classInstance)}

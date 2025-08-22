@@ -15,7 +15,9 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import { COLORS, SPACING } from '../utils/config';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { packagesApi } from '../api/packages';
 import { useUserRole } from '../hooks/useUserRole';
+import { useAuth } from '../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import PackageCard from '../components/PackageCard';
 import PackageEditModal from '../components/PackageEditModal';
@@ -39,6 +41,7 @@ type PackagesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const PackagesScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
+  const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const navigation = useNavigation<PackagesScreenNavigationProp>();
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -56,14 +59,13 @@ const PackagesScreen: React.FC = () => {
       const response = await apiClient.get(endpoint);
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   const { data: userPackages, isLoading: userPackagesLoading } = useQuery<UserPackage[]>({
-    queryKey: ['user-packages'],
-    queryFn: async () => {
-      const response = await apiClient.get('/api/v1/packages/my-packages');
-      return response.data;
-    },
+    queryKey: ['userPackages'],
+    queryFn: () => packagesApi.getUserPackages(),
+    enabled: isAuthenticated,
   });
 
   // Get current active package with credits
@@ -93,7 +95,7 @@ const PackagesScreen: React.FC = () => {
   const onRefresh = async () => {
     setRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ['packages'] });
-    await queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+    await queryClient.invalidateQueries({ queryKey: ['userPackages'] });
     setRefreshing(false);
   };
 
@@ -329,7 +331,7 @@ const PackagesScreen: React.FC = () => {
           onPurchase={() => {
             setShowPurchaseModal(false);
             setPackageToPurchase(null);
-            queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+            queryClient.invalidateQueries({ queryKey: ['userPackages'] });
           }}
           onNavigateToPayment={handleNavigateToPayment}
         />

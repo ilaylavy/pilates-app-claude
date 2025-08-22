@@ -86,35 +86,26 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
       return;
     }
 
-    // Handle non-card payments (legacy flow)
+    // ❌ REMOVED FAKE PURCHASE - This was showing false success!
+    // The old code was calling /api/v1/packages/purchase which doesn't actually purchase anything
+    // It just returns package info and tells client to use payment endpoints
+    
     Alert.alert(
-      'Confirm Purchase',
-      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)} via cash payment?`,
+      'Purchase Method Required',
+      `To purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)}, please choose a payment method.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Purchase',
-          onPress: async () => {
-            setIsLoading(true);
-            try {
-              // For now, we'll simulate payment processing
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              
-              await apiClient.post('/api/v1/packages/purchase', { package_id: pkg.id });
-              
-              Alert.alert(
-                'Purchase Successful!',
-                `You have successfully purchased \"${pkg.name}\". Your credits are now available for booking classes.`,
-                [{ text: 'Great!', onPress: onPurchase }]
-              );
-            } catch (error: any) {
-              Alert.alert(
-                'Purchase Failed',
-                error.response?.data?.detail || 'Unable to complete purchase. Please try again.'
-              );
-            } finally {
-              setIsLoading(false);
-            }
+          text: 'Continue to Payment',
+          onPress: () => {
+            // Navigate to proper payment flow instead of fake purchase
+            onNavigateToPayment({
+              packageId: pkg.id,
+              packageName: pkg.name,
+              price: pkg.price,
+              currency: 'ils'
+            });
+            onClose();
           },
         },
       ]

@@ -16,6 +16,7 @@ import { useUserRole } from '../hooks/useUserRole';
 import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
+import { packagesApi } from '../api/packages';
 import { socialApi, Attendee } from '../api/social';
 import { useCancelBooking } from '../hooks/useBookings';
 import { ClassInstance } from '../types';
@@ -51,10 +52,23 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     queryFn: () => bookingsApi.getUserBookings(),
   });
 
+  // Get user packages to check credit availability
+  const {
+    data: userPackages = [],
+  } = useQuery({
+    queryKey: ['userPackages'],
+    queryFn: () => packagesApi.getUserPackages(),
+    enabled: isStudent,
+  });
+
   // Find user's booking for this class
   const userBooking = userBookings.find(
     booking => booking.class_instance_id === classInstance?.id && booking.status === 'confirmed'
   );
+
+  // Check if user has available credits
+  const activePackage = userPackages.find(pkg => pkg.is_valid);
+  const hasAvailableCredits = activePackage && activePackage.credits_remaining > 0;
 
   // Cancel booking mutation
   const cancelBookingMutation = useCancelBooking();
@@ -177,6 +191,23 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   });
 
   const handleBookClass = () => {
+    // Check if user has available credits first
+    if (isStudent && !hasAvailableCredits) {
+      Alert.alert(
+        'No Credits Available',
+        'You need to purchase a package or top up your credits to book this class.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Buy Package', onPress: () => {
+            // Navigate to packages screen
+            onClose();
+            console.log('Navigate to packages');
+          }}
+        ]
+      );
+      return;
+    }
+
     if (classInstance.is_full) {
       Alert.alert(
         'Join Waitlist',
@@ -441,21 +472,26 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
               ) : (
                 // Show book/waitlist option if user doesn't have a booking
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.primaryButton]}
+                  style={[
+                    styles.actionButton, 
+                    !hasAvailableCredits ? styles.disabledButton : styles.primaryButton
+                  ]}
                   onPress={handleBookClass}
-                  disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending}
+                  disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending || (isStudent && !hasAvailableCredits)}
                 >
                   <Ionicons 
-                    name={classInstance.is_full ? "hourglass" : "add"} 
+                    name={!hasAvailableCredits ? "card" : classInstance.is_full ? "hourglass" : "add"} 
                     size={20} 
                     color={COLORS.white} 
                   />
                   <Text style={styles.actionButtonText}>
                     {bookClassMutation.isPending || joinWaitlistMutation.isPending
                       ? 'Processing...'
-                      : classInstance.is_full 
-                        ? 'Join Waitlist' 
-                        : 'Book Class'
+                      : !hasAvailableCredits
+                        ? 'No Credits'
+                        : classInstance.is_full 
+                          ? 'Join Waitlist' 
+                          : 'Book Class'
                     }
                   </Text>
                 </TouchableOpacity>
@@ -719,6 +755,9 @@ const styles = StyleSheet.create({
   },
   dangerButton: {
     backgroundColor: COLORS.error,
+  },
+  disabledButton: {
+    backgroundColor: COLORS.textSecondary,
   },
   actionButtonText: {
     fontSize: 16,
