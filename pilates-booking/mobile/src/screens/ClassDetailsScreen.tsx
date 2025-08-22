@@ -20,8 +20,10 @@ import { useUserRole } from '../hooks/useUserRole';
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
 import { socialApi, Attendee } from '../api/social';
+import { useCancelBooking } from '../hooks/useBookings';
 import AttendeeAvatars from '../components/AttendeeAvatars';
 import BookingConfirmationModal from '../components/BookingConfirmationModal';
+import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 
 type ClassDetailsScreenRouteProp = RouteProp<RootStackParamList, 'ClassDetails'>;
 
@@ -34,6 +36,22 @@ const ClassDetailsScreen: React.FC = () => {
   const route = useRoute<ClassDetailsScreenRouteProp>();
   const navigation = useNavigation();
   const { classId } = route.params;
+
+  // Get user's bookings to check if they have a booking for this class
+  const {
+    data: userBookings = [],
+  } = useQuery({
+    queryKey: ['userBookings'],
+    queryFn: () => bookingsApi.getUserBookings(),
+  });
+
+  // Find user's booking for this class
+  const userBooking = userBookings.find(
+    booking => booking.class_instance_id === classId && booking.status === 'confirmed'
+  );
+
+  // Cancel booking mutation
+  const cancelBookingMutation = useCancelBooking();
 
   // Fetch class details
   const {
@@ -81,17 +99,30 @@ const ClassDetailsScreen: React.FC = () => {
       if (!result.success) {
         throw new Error(result.message);
       }
-      return result.booking;
+      return result;
     },
-    onSuccess: (booking) => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       queryClient.invalidateQueries({ queryKey: ['attendees', classId] });
-      setCompletedBooking(booking);
-      setShowBookingModal(true);
+      
+      if (result.booking) {
+        setCompletedBooking(result.booking);
+        setShowBookingModal(true);
+      }
+      
+      // Show appropriate message based on whether it's a new or existing booking
+      if (result.message) {
+        const isExistingBooking = result.booking?.is_new_booking === false;
+        const alertTitle = isExistingBooking ? 'Already Booked' : 'Success';
+        Alert.alert(alertTitle, result.message);
+      }
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to book class');
+      const errorMessage = error.message || 'Failed to book class';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
     },
   });
 
@@ -112,7 +143,10 @@ const ClassDetailsScreen: React.FC = () => {
       navigation.goBack();
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to join waitlist');
+      const errorMessage = error.message || 'Failed to join waitlist';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
     },
   });
 
@@ -146,15 +180,31 @@ const ClassDetailsScreen: React.FC = () => {
         ]
       );
     } else {
-      Alert.alert(
-        'Book Class',
-        'Are you sure you want to book this class?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Book', onPress: () => bookClassMutation.mutate() }
-        ]
-      );
+      // Book directly without confirmation
+      bookClassMutation.mutate();
     }
+  };
+
+  const handleCancelBooking = () => {
+    if (!userBooking) return;
+    
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel your booking for this class?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            cancelBookingMutation.mutate({
+              bookingId: userBooking.id,
+              reason: 'User cancelled'
+            });
+          }
+        }
+      ]
+    );
   };
 
   const handleSendNotification = () => {
@@ -380,25 +430,51 @@ const ClassDetailsScreen: React.FC = () => {
       <View style={styles.actions}>
         {/* Student Actions */}
         {isStudent && classInstance.status === 'scheduled' && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton]}
-            onPress={handleBookClass}
-            disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending}
-          >
-            <Ionicons 
-              name={classInstance.is_full ? "hourglass" : "add"} 
-              size={20} 
-              color={COLORS.white} 
-            />
-            <Text style={styles.actionButtonText}>
-              {bookClassMutation.isPending || joinWaitlistMutation.isPending
-                ? 'Processing...'
-                : classInstance.is_full 
-                  ? 'Join Waitlist' 
-                  : 'Book Class'
-              }
-            </Text>
-          </TouchableOpacity>
+          <>
+            {userBooking ? (
+              // Show cancel option if user has a booking
+              <TouchableOpacity
+                style={[styles.actionButton, styles.dangerButton]}
+                onPress={handleCancelBooking}
+                disabled={cancelBookingMutation.isPending || !userBooking.can_cancel}
+              >
+                <Ionicons 
+                  name="close-circle" 
+                  size={20} 
+                  color={COLORS.white} 
+                />
+                <Text style={styles.actionButtonText}>
+                  {cancelBookingMutation.isPending
+                    ? 'Cancelling...'
+                    : !userBooking.can_cancel
+                      ? 'Cannot Cancel'
+                      : 'Cancel Booking'
+                  }
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              // Show book/waitlist option if user doesn't have a booking
+              <TouchableOpacity
+                style={[styles.actionButton, styles.primaryButton]}
+                onPress={handleBookClass}
+                disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending}
+              >
+                <Ionicons 
+                  name={classInstance.is_full ? "hourglass" : "add"} 
+                  size={20} 
+                  color={COLORS.white} 
+                />
+                <Text style={styles.actionButtonText}>
+                  {bookClassMutation.isPending || joinWaitlistMutation.isPending
+                    ? 'Processing...'
+                    : classInstance.is_full 
+                      ? 'Join Waitlist' 
+                      : 'Book Class'
+                  }
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
         )}
 
         {/* Admin Actions */}
@@ -680,6 +756,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray,
     borderWidth: 1,
     borderColor: COLORS.primary,
+  },
+  dangerButton: {
+    backgroundColor: COLORS.error,
   },
   actionButtonText: {
     fontSize: 16,

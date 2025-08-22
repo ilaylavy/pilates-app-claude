@@ -222,10 +222,20 @@ async def create_cash_reservation(
         existing_reservation = existing_result.scalar_one_or_none()
 
         if existing_reservation and not existing_reservation.is_reservation_expired:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You already have an active reservation for this package",
+            logger.info(
+                "User already has active reservation - returning existing reservation",
+                user_id=str(current_user.id),
+                package_id=package_id,
+                existing_reservation_id=str(existing_reservation.id),
             )
+            
+            # Return existing reservation instead of error
+            return {
+                "message": "You already have an active reservation for this package",
+                "reservation_id": existing_reservation.id,
+                "expires_at": existing_reservation.expires_at,
+                "is_existing": True
+            }
 
         # Set reservation expiry (48 hours from now)
         from datetime import timedelta

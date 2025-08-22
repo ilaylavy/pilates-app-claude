@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import { COLORS, SPACING } from '../utils/config';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -20,33 +21,26 @@ import PackageCard from '../components/PackageCard';
 import PackageEditModal from '../components/PackageEditModal';
 import Button from '../components/common/Button';
 import PurchaseModal from '../components/PurchaseModal';
+import type { Package, UserPackage } from '../types';
 
-interface Package {
-  id: number;
-  name: string;
-  description: string;
-  credits: number;
-  price: number;
-  validity_days: number;
-  is_active: boolean;
-  is_unlimited: boolean;
-  is_featured: boolean;
-  order_index: number;
-}
 
-interface UserPackage {
-  id: number;
-  credits_remaining: number;
-  expiry_date: string;
-  is_active: boolean;
-  package: Package;
-  purchase_date: string;
-}
+type RootStackParamList = {
+  Payment: {
+    packageId: number;
+    packageName: string;
+    price: number;
+    currency: string;
+  };
+  Profile: undefined;
+  BookClass: undefined;
+};
+
+type PackagesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const PackagesScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
-  const navigation = useNavigation();
+  const navigation = useNavigation<PackagesScreenNavigationProp>();
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);

@@ -30,7 +30,7 @@ class ApiClient {
       const response = await axios.get(`${this.currentBaseURL}/health`, { timeout: 3000 });
       console.log(`✅ Connected to API at: ${this.currentBaseURL}`, response.data);
     } catch (error) {
-      console.warn(`❌ Failed to connect to primary URL: ${this.currentBaseURL}`, error.message);
+      console.warn(`❌ Failed to connect to primary URL: ${this.currentBaseURL}`, (error as Error).message);
       await this.tryBackupUrls();
     }
   }
@@ -45,7 +45,7 @@ class ApiClient {
         this.instance.defaults.baseURL = backupUrl;
         return;
       } catch (error) {
-        console.warn(`❌ Backup URL failed: ${backupUrl} - ${error.message}`);
+        console.warn(`❌ Backup URL failed: ${backupUrl} - ${(error as Error).message}`);
       }
     }
     console.error('❌ No working API URLs found. Check your network connection and backend status.');
@@ -56,7 +56,7 @@ class ApiClient {
     this.instance.interceptors.request.use(
       async (config) => {
         const startTime = Date.now();
-        config.metadata = { startTime };
+        (config as any).metadata = { startTime };
         
         try {
           const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
@@ -64,7 +64,7 @@ class ApiClient {
             config.headers.Authorization = `Bearer ${token}`;
           }
         } catch (error) {
-          Logger.warn('Failed to retrieve access token from secure store', error);
+          Logger.warn('Failed to retrieve access token from secure store', error as Record<string, any>);
         }
         
         // Handle FormData uploads properly
@@ -105,7 +105,7 @@ class ApiClient {
     // Response interceptor to handle token refresh and logging
     this.instance.interceptors.response.use(
       (response) => {
-        const duration = response.config.metadata ? Date.now() - response.config.metadata.startTime : 0;
+        const duration = (response.config as any).metadata ? Date.now() - (response.config as any).metadata.startTime : 0;
         
         // Log successful response
         Logger.debug('API request completed', {
@@ -233,18 +233,21 @@ class ApiClient {
             }
           } catch (refreshError) {
             // Refresh failed, redirect to login
-            Logger.error('Token refresh failed', refreshError, {
+            Logger.error('Token refresh failed', refreshError as Error, {
               url: originalRequest?.url,
               errorType: 'token_refresh_failed'
             });
             
             Logger.trackEvent('auth.token_refresh_failed', {
-              error: refreshError.message,
+              error: (refreshError as Error).message,
               timestamp: new Date().toISOString()
             });
             
+            // Clear tokens and force login
             await this.clearTokens();
-            return Promise.reject(refreshError);
+            
+            // Return 401 error to trigger app-wide logout
+            return Promise.reject(new Error('Authentication failed - please log in again'));
           }
         }
 

@@ -71,21 +71,17 @@ export const useBookClass = () => {
       }
     },
     onSuccess: (data: BookingResult, classId) => {
-      // Update booking status with real data
-      queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), {
-        has_booking: data.status === 'confirmed',
-        booking: data.booking,
-        on_waitlist: data.status === 'waitlisted',
-        waitlist_entry: data.waitlist_entry,
-        waitlist_position: data.waitlist_position,
-      });
+      if (data.success && data.booking) {
+        // Update booking status with real data
+        queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), {
+          has_booking: data.booking.status === 'confirmed',
+          booking: data.booking,
+          on_waitlist: false,
+        });
 
-      // Invalidate and refetch related queries
-      queryClient.invalidateQueries({ queryKey: bookingKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
-      
-      if (data.status === 'waitlisted') {
-        queryClient.invalidateQueries({ queryKey: bookingKeys.waitlist() });
+        // Invalidate and refetch related queries
+        queryClient.invalidateQueries({ queryKey: bookingKeys.lists() });
+        queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
       }
     },
   });

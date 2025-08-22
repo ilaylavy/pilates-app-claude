@@ -90,6 +90,14 @@ class UserStats(BaseModel):
     member_since: datetime
 
 
+class TokenRefresh(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
 class UserPreferences(BaseModel):
     email_notifications: bool = True
     sms_notifications: bool = False

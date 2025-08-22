@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
@@ -33,21 +33,21 @@ class RefreshToken(Base):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if not self.expires_at:
-            self.expires_at = datetime.utcnow() + timedelta(
+            self.expires_at = datetime.now(timezone.utc) + timedelta(
                 days=settings.REFRESH_TOKEN_EXPIRE_DAYS
             )
 
     @property
     def is_expired(self) -> bool:
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def is_valid(self) -> bool:
         return self.is_active and not self.is_expired
 
     def update_last_used(self):
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = datetime.now(timezone.utc)
 
     def deactivate(self):
         self.is_active = False
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)

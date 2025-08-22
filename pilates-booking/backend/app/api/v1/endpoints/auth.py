@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ....core.logging_config import get_logger
 from ....models.audit_log import AuditActionType, SecurityLevel
 from ....models.user import User
-from ....schemas.user import Token, UserCreate, UserLogin, UserResponse
+from ....schemas.user import LogoutRequest, Token, TokenRefresh, UserCreate, UserLogin, UserResponse
 from ....services.audit_service import AuditService
 from ....services.auth_service import AuthService
 from ....services.business_logging_service import business_logger
@@ -326,7 +326,7 @@ async def login(
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    request: Request, refresh_token: str, db: AsyncSession = Depends(get_db)
+    request: Request, token_refresh: TokenRefresh, db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token with rotation."""
     auth_service = AuthService(db)
@@ -334,7 +334,7 @@ async def refresh_token(
 
     try:
         device_info = _get_device_info(request)
-        tokens = await auth_service.refresh_access_token(refresh_token, device_info)
+        tokens = await auth_service.refresh_access_token(token_refresh.refresh_token, device_info)
 
         # Log successful token refresh
         await audit_service.log_from_request(
@@ -360,13 +360,13 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    request: Request, refresh_token: str, db: AsyncSession = Depends(get_db)
+    request: Request, logout_request: LogoutRequest, db: AsyncSession = Depends(get_db)
 ):
     """Logout user by invalidating refresh token."""
     auth_service = AuthService(db)
     audit_service = AuditService(db)
 
-    success = await auth_service.logout_user(refresh_token)
+    success = await auth_service.logout_user(logout_request.refresh_token)
 
     # Log logout attempt
     await audit_service.log_from_request(

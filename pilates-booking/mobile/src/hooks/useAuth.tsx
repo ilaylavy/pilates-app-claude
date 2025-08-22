@@ -64,11 +64,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
-        // Optionally validate token with server
-        await fetchCurrentUser();
+        // Validate token with server - if it fails, clear all auth data
+        try {
+          await fetchCurrentUser();
+        } catch (error) {
+          console.log('Stored token is invalid, clearing auth data');
+          await clearAuthData();
+        }
       }
     } catch (error) {
       console.error('Error checking stored auth:', error);
+      // If there's any error with stored auth, clear it to force fresh login
+      await clearAuthData();
     } finally {
       setIsLoading(false);
     }

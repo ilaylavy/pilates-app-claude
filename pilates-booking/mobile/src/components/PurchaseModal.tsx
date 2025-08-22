@@ -291,15 +291,10 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
         <View style={styles.footer}>
           <Button
-            title={
-              isLoading ? (
-                <ActivityIndicator color={COLORS.background} size="small" />
-              ) : (
-                `Purchase for ${formatCurrency(pkg.price)}`
-              )
-            }
+            title={isLoading ? "Processing..." : `Purchase for ${formatCurrency(pkg.price)}`}
             onPress={handlePurchase}
             disabled={isLoading}
+            loading={isLoading}
             style={styles.purchaseButton}
           />
         </View>

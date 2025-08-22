@@ -94,7 +94,7 @@ export const PasswordStrengthIndicator: React.FC<PasswordStrengthIndicatorProps>
             style={[
               styles.strengthBarFill,
               {
-                width: getStrengthWidth(),
+                width: getStrengthWidth() as any,
                 backgroundColor: getStrengthColor(),
               },
             ]}

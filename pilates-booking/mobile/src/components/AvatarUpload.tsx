@@ -17,7 +17,7 @@ import { COLORS, SPACING } from '../utils/config';
 import { apiClient } from '../api/client';
 import Button from './common/Button';
 
-const { width } = Dimensions.get('window');
+// const { width } = Dimensions.get('window'); // Removed unused variable
 
 interface AvatarUploadProps {
   visible: boolean;
@@ -98,7 +98,7 @@ const AvatarUpload: React.FC<AvatarUploadProps> = ({ visible, onClose, onUpload 
       );
 
       setSelectedImage(manipulatedImage.uri);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to process image');
     }
   };

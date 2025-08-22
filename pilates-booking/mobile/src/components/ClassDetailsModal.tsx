@@ -7,16 +7,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Image,
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
+import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
 import { ClassInstance } from '../types';
+import BookingConfirmationModal from './BookingConfirmationModal';
 
 interface ClassDetailsModalProps {
   visible: boolean;
@@ -34,6 +35,8 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   onDelete,
 }) => {
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [completedBooking, setCompletedBooking] = useState<any>(null);
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const queryClient = useQueryClient();
 
@@ -55,16 +58,29 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
       if (!result.success) {
         throw new Error(result.message);
       }
-      return result.booking;
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      Alert.alert('Success', 'Class booked successfully!');
-      onClose();
+      
+      if (result.booking) {
+        setCompletedBooking(result.booking);
+        setShowBookingModal(true);
+      }
+      
+      // Show appropriate message based on whether it's a new or existing booking
+      if (result.message) {
+        const isExistingBooking = result.booking?.is_new_booking === false;
+        const alertTitle = isExistingBooking ? 'Already Booked' : 'Success';
+        Alert.alert(alertTitle, result.message);
+      }
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to book class');
+      const errorMessage = error.message || 'Failed to book class';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
     },
   });
 
@@ -85,7 +101,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
       onClose();
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to join waitlist');
+      const errorMessage = error.message || 'Failed to join waitlist';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
     },
   });
 
@@ -128,14 +147,8 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
         ]
       );
     } else {
-      Alert.alert(
-        'Book Class',
-        'Are you sure you want to book this class?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Book', onPress: () => bookClassMutation.mutate() }
-        ]
-      );
+      // Book directly without confirmation
+      bookClassMutation.mutate();
     }
   };
 
@@ -354,6 +367,25 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Booking Confirmation Modal */}
+        {completedBooking && classInstance && (
+          <BookingConfirmationModal
+            visible={showBookingModal}
+            onClose={() => {
+              setShowBookingModal(false);
+              setCompletedBooking(null);
+              onClose();
+            }}
+            booking={completedBooking}
+            classInstance={classInstance}
+            onViewSchedule={() => {
+              setShowBookingModal(false);
+              setCompletedBooking(null);
+              onClose();
+            }}
+          />
+        )}
       </View>
     </Modal>
   );

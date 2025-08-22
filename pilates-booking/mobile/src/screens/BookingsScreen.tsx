@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 
 import { COLORS, SPACING } from '../utils/config';
 import { bookingsApi } from '../api/bookings';
+import { useApiErrorHandler } from '../utils/errorMessages';
 import { socialApi } from '../api/social';
 import { Booking } from '../types';
 import BookingCard from '../components/BookingCard';
@@ -40,6 +41,7 @@ const BookingsScreen: React.FC = () => {
   
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const { handleError } = useApiErrorHandler();
 
   // Fetch user bookings
   const {
@@ -61,7 +63,8 @@ const BookingsScreen: React.FC = () => {
       Alert.alert('Success', 'Booking cancelled successfully');
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to cancel booking');
+      const { title, message } = handleError(error, 'Failed to cancel booking');
+      Alert.alert(title, message);
     },
   });
 

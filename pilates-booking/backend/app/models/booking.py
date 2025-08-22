@@ -46,8 +46,16 @@ class Booking(Base):
     class_instance = relationship("ClassInstance", back_populates="bookings")
     user_package = relationship("UserPackage")
 
+    @property  
     def can_cancel(self) -> bool:
-        """Check if booking can be cancelled based on business rules."""
+        """Property that safely checks if booking can be cancelled."""
+        try:
+            return self._can_cancel_internal()
+        except Exception:
+            return False
+    
+    def _can_cancel_internal(self) -> bool:
+        """Internal method for cancellation logic."""
         if self.status != BookingStatus.CONFIRMED:
             return False
 
@@ -70,7 +78,28 @@ class Booking(Base):
         return False
 
     def __repr__(self):
-        return f"<Booking(id={self.id}, user_id={self.user_id}, class_id={self.class_instance_id}, status='{self.status}')>"
+        # Use try-except for everything to prevent DetachedInstanceError
+        try:
+            booking_id = self.id
+        except Exception:
+            booking_id = "unknown"
+            
+        try:
+            user_id = self.user_id
+        except Exception:
+            user_id = "unknown"
+            
+        try:
+            class_id = self.class_instance_id
+        except Exception:
+            class_id = "unknown"
+            
+        try:
+            status = self.status
+        except Exception:
+            status = "unknown"
+            
+        return f"<Booking(id={booking_id}, user_id={user_id}, class_id={class_id}, status='{status}')>"
 
 
 class WaitlistEntry(Base):
@@ -96,4 +125,25 @@ class WaitlistEntry(Base):
     class_instance = relationship("ClassInstance", back_populates="waitlist_entries")
 
     def __repr__(self):
-        return f"<WaitlistEntry(id={self.id}, user_id={self.user_id}, class_id={self.class_instance_id}, position={self.position})>"
+        # Use try-except for everything to prevent DetachedInstanceError
+        try:
+            entry_id = self.id
+        except Exception:
+            entry_id = "unknown"
+            
+        try:
+            user_id = self.user_id
+        except Exception:
+            user_id = "unknown"
+            
+        try:
+            class_id = self.class_instance_id
+        except Exception:
+            class_id = "unknown"
+            
+        try:
+            position = self.position
+        except Exception:
+            position = "unknown"
+            
+        return f"<WaitlistEntry(id={entry_id}, user_id={user_id}, class_id={class_id}, position={position})>"

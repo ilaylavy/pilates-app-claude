@@ -78,7 +78,7 @@ const BookingCard: React.FC<BookingCardProps> = ({
     }
   };
 
-  const { date, time } = formatDateTime(booking.class_instance.start_datetime);
+  const { date, time } = formatDateTime(booking.class_instance?.start_datetime || new Date().toISOString());
 
   const renderLeftActions = () => {
     if (!onCancel || booking.status !== 'confirmed' || !booking.can_cancel) {
@@ -127,10 +127,10 @@ const BookingCard: React.FC<BookingCardProps> = ({
       <View style={styles.cardHeader}>
         <View style={styles.classInfo}>
           <Text style={styles.className} numberOfLines={1}>
-            {booking.class_instance.template.name}
+            {booking.class_instance?.template?.name || 'Unknown Class'}
           </Text>
           <Text style={styles.instructor}>
-            with {booking.class_instance.instructor.first_name} {booking.class_instance.instructor.last_name}
+            with {booking.class_instance?.instructor?.first_name || 'Unknown'} {booking.class_instance?.instructor?.last_name || 'Instructor'}
           </Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) }]}>

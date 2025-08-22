@@ -21,10 +21,14 @@ import { bookingsApi } from '../api/bookings';
 import { packagesApi } from '../api/packages';
 import { COLORS, SPACING } from '../utils/config';
 import { ClassInstance, Booking, UserPackage } from '../types';
+import ClassCard from '../components/ClassCard';
+import ClassDetailsModal from '../components/ClassDetailsModal';
 
 const HomeScreen: React.FC = () => {
   const { user } = useAuth();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
 
   const {
     data: upcomingClasses,
@@ -43,6 +47,12 @@ const HomeScreen: React.FC = () => {
     queryKey: ['userBookings'],
     queryFn: () => bookingsApi.getUserBookings(),
   });
+
+  // Create a set of booked class IDs for quick lookup
+  const bookedClassIds = new Set(
+    userBookings?.filter(booking => booking.status === 'confirmed')
+      .map(booking => booking.class_instance_id) || []
+  );
 
   const {
     data: userPackages,
@@ -129,17 +139,17 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.nextClassInfo}>
                 <Text style={styles.nextClassName}>
-                  {nextBooking.class_instance.template.name}
+                  {nextBooking.class_instance?.template?.name || 'Unknown Class'}
                 </Text>
                 <Text style={styles.nextClassInstructor}>
-                  with {nextBooking.class_instance.instructor.first_name}{' '}
-                  {nextBooking.class_instance.instructor.last_name}
+                  with {nextBooking.class_instance?.instructor?.first_name || 'Unknown'}{' '}
+                  {nextBooking.class_instance?.instructor?.last_name || 'Instructor'}
                 </Text>
                 <View style={styles.nextClassTime}>
                   <Ionicons name="time" size={16} color={COLORS.textSecondary} />
                   <Text style={styles.nextClassTimeText}>
-                    {formatDateTime(nextBooking.class_instance.start_datetime).date}{' '}
-                    at {formatDateTime(nextBooking.class_instance.start_datetime).time}
+                    {formatDateTime(nextBooking.class_instance?.start_datetime || new Date().toISOString()).date}{' '}
+                    at {formatDateTime(nextBooking.class_instance?.start_datetime || new Date().toISOString()).time}
                   </Text>
                 </View>
               </View>
@@ -169,9 +179,9 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.classCardContent}>
                 <View style={styles.classInfo}>
-                  <Text style={styles.className}>{classInstance.template.name}</Text>
+                  <Text style={styles.className}>{classInstance.template?.name || 'Unknown Class'}</Text>
                   <Text style={styles.classInstructor}>
-                    {classInstance.instructor.first_name} {classInstance.instructor.last_name}
+                    {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
                   </Text>
                   <View style={styles.classDetails}>
                     <View style={styles.classDetailItem}>
@@ -183,13 +193,18 @@ const HomeScreen: React.FC = () => {
                     <View style={styles.classDetailItem}>
                       <Ionicons name="people" size={14} color={COLORS.textSecondary} />
                       <Text style={styles.classDetailText}>
-                        {classInstance.available_spots} spots left
+                        {classInstance.available_spots || 0} spots left
                       </Text>
                     </View>
                   </View>
                 </View>
                 <View style={styles.classActions}>
-                  {classInstance.is_full ? (
+                  {bookedClassIds.has(classInstance.id) ? (
+                    <View style={styles.bookedBadge}>
+                      <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+                      <Text style={styles.bookedText}>Booked</Text>
+                    </View>
+                  ) : classInstance.is_full ? (
                     <Text style={styles.fullText}>Full</Text>
                   ) : (
                     <Ionicons name="add-circle" size={24} color={COLORS.primary} />
@@ -365,6 +380,16 @@ const styles = StyleSheet.create({
   fullText: {
     fontSize: 12,
     color: COLORS.error,
+    fontWeight: '600',
+  },
+  bookedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bookedText: {
+    fontSize: 12,
+    color: COLORS.success,
     fontWeight: '600',
   },
   packageCard: {

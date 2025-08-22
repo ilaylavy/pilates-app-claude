@@ -3,7 +3,6 @@
 // - Android emulator: 10.0.2.2:8000
 // - iOS simulator: localhost:8000  
 // - Physical device: your actual IP (check with ipconfig/ifconfig)
-import { Platform } from 'react-native';
 
 const getDevApiUrl = () => {
   // For physical device, use actual IP
@@ -15,6 +14,7 @@ const getDevApiUrl = () => {
 export const BACKUP_API_URLS = [
   'http://10.100.102.24:8000',  // WSL/Docker host IP
   'http://127.0.0.1:8000',     // localhost
+  'http://10.0.0.19:8000',      // Another local IP
   'http://10.0.2.2:8000',      // Android emulator host
   'http://localhost:8000',     // standard localhost
   'http://192.168.1.107:8000', // Common router IP range

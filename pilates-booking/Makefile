@@ -23,6 +23,8 @@ down: ## Stop all services
 logs: ## Show logs from all services
 	docker-compose logs -f
 
+start: down up logs  ## reset the backend and logs
+
 backend-logs: ## Show backend logs
 	docker-compose logs -f backend
 

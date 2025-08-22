@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
+from ..core.safe_queries import safe_get_user_bookings, safe_get_booking_with_relationships
 from ..models.booking import (Booking, BookingStatus, CancellationReason,
                               WaitlistEntry)
 from ..models.class_schedule import ClassInstance
@@ -39,7 +40,10 @@ class BookingService:
 
             stmt = (
                 select(ClassInstance)
-                .options(selectinload(ClassInstance.bookings))
+                .options(
+                    selectinload(ClassInstance.bookings),
+                    selectinload(ClassInstance.template)
+                )
                 .where(ClassInstance.id == class_instance_id)
             )
             result = await self.db.execute(stmt)
@@ -80,16 +84,32 @@ class BookingService:
             existing_booking = result.scalar_one_or_none()
 
             if existing_booking:
-                self.logger.warning(
-                    "Booking failed - user already has booking",
+                self.logger.info(
+                    "User already has booking for this class - returning existing booking",
                     class_id=class_instance_id,
                     user_id=str(user.id),
                     existing_booking_id=str(existing_booking.id),
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="You already have a booking for this class",
+                
+                # Reload existing booking with all relationships to avoid DetachedInstanceError
+                from sqlalchemy.orm import selectinload
+                
+                stmt = (
+                    select(Booking)
+                    .options(
+                        selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+                        selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+                        selectinload(Booking.user),
+                        selectinload(Booking.user_package)
+                    )
+                    .where(Booking.id == existing_booking.id)
                 )
+                result = await self.db.execute(stmt)
+                existing_booking = result.scalar_one()
+                
+                # Set flag to indicate this is an existing booking
+                existing_booking.is_new_booking = False
+                return existing_booking
 
             # Check weekly booking limit
             await self._check_weekly_booking_limit(
@@ -135,6 +155,25 @@ class BookingService:
                 self.db.add(booking)
                 await self.db.commit()
                 await self.db.refresh(booking)
+
+                # Reload booking with all relationships to avoid DetachedInstanceError
+                from sqlalchemy.orm import selectinload
+                
+                stmt = (
+                    select(Booking)
+                    .options(
+                        selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+                        selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+                        selectinload(Booking.user),
+                        selectinload(Booking.user_package)
+                    )
+                    .where(Booking.id == booking.id)
+                )
+                result = await self.db.execute(stmt)
+                booking = result.scalar_one()
+                
+                # Set flag to indicate this is a newly created booking
+                booking.is_new_booking = True
 
                 # Log successful booking creation
                 credits_used = 1 if user_package_id else 0
@@ -211,7 +250,7 @@ class BookingService:
             )
 
         # Check if booking can be cancelled
-        if not booking.can_cancel():
+        if not booking.can_cancel:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Booking cannot be cancelled within the cancellation window",
@@ -229,6 +268,20 @@ class BookingService:
 
         await self.db.commit()
 
+        # Reload booking with relationships to avoid DetachedInstanceError
+        stmt = (
+            select(Booking)
+            .options(
+                selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+                selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+                selectinload(Booking.user),
+                selectinload(Booking.user_package)
+            )
+            .where(Booking.id == booking.id)
+        )
+        result = await self.db.execute(stmt)
+        booking = result.scalar_one()
+
         # Promote from waitlist if auto-promotion is enabled
         if settings.WAITLIST_AUTO_PROMOTION:
             await self._promote_from_waitlist(booking.class_instance_id)
@@ -238,35 +291,8 @@ class BookingService:
     async def get_user_bookings(
         self, user_id: int, include_past: bool = False
     ) -> List[Booking]:
-        """Get all bookings for a user."""
-
-        conditions = [Booking.user_id == user_id]
-
-        if not include_past:
-            # Only future bookings
-            stmt = (
-                select(Booking)
-                .join(ClassInstance)
-                .where(
-                    and_(
-                        *conditions,
-                        ClassInstance.start_datetime > datetime.now(timezone.utc),
-                    )
-                )
-                .order_by(ClassInstance.start_datetime)
-            )
-        else:
-            stmt = (
-                select(Booking)
-                .join(ClassInstance)
-                .where(and_(*conditions))
-                .order_by(ClassInstance.start_datetime.desc())
-            )
-
-        result = await self.db.execute(stmt)
-        bookings = result.scalars().all()
-
-        return bookings
+        """Get all bookings for a user using safe query patterns."""
+        return await safe_get_user_bookings(self.db, user_id, include_past)
 
     async def get_user_bookings_filtered(
         self,
@@ -276,6 +302,8 @@ class BookingService:
         limit: Optional[int] = None,
     ) -> List[Booking]:
         """Get filtered bookings for a user."""
+
+        from sqlalchemy.orm import selectinload
 
         conditions = [Booking.user_id == user_id]
 
@@ -294,6 +322,12 @@ class BookingService:
 
         stmt = (
             select(Booking)
+            .options(
+                selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+                selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+                selectinload(Booking.user),
+                selectinload(Booking.user_package)
+            )
             .join(ClassInstance)
             .where(and_(*conditions))
             .order_by(ClassInstance.start_datetime)
@@ -405,10 +439,16 @@ class BookingService:
         existing_entry = result.scalar_one_or_none()
 
         if existing_entry:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You are already on the waitlist for this class",
+            self.logger.info(
+                "User already on waitlist for this class - returning existing entry",
+                class_id=class_instance_id,
+                user_id=user_id,
+                existing_entry_id=str(existing_entry.id),
             )
+            
+            # Set flag to indicate this is an existing waitlist entry
+            existing_entry.is_new_entry = False
+            return existing_entry
 
         # Get next position
         stmt = select(func.max(WaitlistEntry.position)).where(
@@ -429,6 +469,9 @@ class BookingService:
         self.db.add(waitlist_entry)
         await self.db.commit()
         await self.db.refresh(waitlist_entry)
+        
+        # Set flag to indicate this is a newly created waitlist entry
+        waitlist_entry.is_new_entry = True
 
         return waitlist_entry
 

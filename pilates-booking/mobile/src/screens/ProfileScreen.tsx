@@ -185,16 +185,19 @@ const ProfileScreen: React.FC = () => {
             {upcomingClasses.slice(0, 3).map((booking: any) => (
               <View key={booking.id} style={styles.classItem}>
                 <View style={styles.classInfo}>
-                  <Text style={styles.className}>{booking.class_instance.class_template.name}</Text>
+                  <Text style={styles.className}>
+                    {booking?.class_instance?.class_template?.name || 'Class Name'}
+                  </Text>
                   <Text style={styles.classDate}>
-                    {new Date(booking.class_instance.start_time).toLocaleDateString()} at{' '}
-                    {new Date(booking.class_instance.start_time).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
+                    {booking?.class_instance?.start_time ? (
+                      `${new Date(booking.class_instance.start_time).toLocaleDateString()} at ${new Date(booking.class_instance.start_time).toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })}`
+                    ) : 'Date TBD'}
                   </Text>
                   <Text style={styles.classInstructor}>
-                    with {booking.class_instance.instructor.full_name}
+                    with {booking?.class_instance?.instructor?.full_name || 'Instructor TBD'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />

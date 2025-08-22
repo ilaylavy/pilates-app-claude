@@ -97,6 +97,7 @@ export interface Booking {
   user: User;
   class_instance: ClassInstance;
   can_cancel: boolean;
+  is_new_booking?: boolean;
   created_at: string;
   updated_at: string;
 }

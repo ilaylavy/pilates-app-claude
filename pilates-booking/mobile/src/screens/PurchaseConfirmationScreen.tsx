@@ -221,14 +221,14 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
       <Button
         title="Book Your First Class"
         onPress={() => navigation.navigate('BookClass')}
-        style={[styles.actionButton, styles.primaryButton]}
+        style={[styles.actionButton, styles.primaryButton] as any}
         disabled={isCashReservation}
       />
 
       <Button
         title="View My Packages"
         onPress={() => navigation.navigate('Profile')}
-        style={[styles.actionButton, styles.secondaryButton]}
+        style={[styles.actionButton, styles.secondaryButton] as any}
         variant="outline"
       />
 

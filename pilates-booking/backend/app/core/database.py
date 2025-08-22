@@ -38,7 +38,44 @@ convention = {
 }
 
 metadata = MetaData(naming_convention=convention)
-Base = declarative_base(metadata=metadata)
+
+
+class SafeReprMixin:
+    """Mixin that provides a safe __repr__ method that handles detached instances."""
+    
+    def __repr__(self):
+        """Safe repr that handles DetachedInstanceError."""
+        class_name = self.__class__.__name__
+        
+        # Try to get the primary key
+        try:
+            pk_value = getattr(self, 'id', 'unknown')
+        except Exception:
+            pk_value = "detached"
+            
+        # Try to get a few safe attributes
+        attrs = []
+        for attr_name in ['id', 'name', 'email', 'status']:
+            if hasattr(self.__class__, attr_name):
+                try:
+                    value = getattr(self, attr_name)
+                    if value is not None:
+                        attrs.append(f"{attr_name}={value!r}")
+                except Exception:
+                    continue
+                    
+        if not attrs:
+            attrs.append(f"id={pk_value}")
+            
+        return f"<{class_name}({', '.join(attrs)})>"
+
+
+class SafeBase(SafeReprMixin):
+    """Base class with safe __repr__ method."""
+    pass
+
+
+Base = declarative_base(metadata=metadata, cls=SafeBase)
 
 
 async def get_db():

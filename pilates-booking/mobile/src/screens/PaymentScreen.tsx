@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { COLORS, SPACING } from '../utils/config';
 import { paymentsApi } from '../api/payments';
+import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { packagesApi } from '../api/packages';
 import Button from '../components/common/Button';
 import PaymentMethodSelector, { PaymentMethodType } from '../components/PaymentMethodSelector';
@@ -73,7 +74,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     mutationFn: () => paymentsApi.createPaymentIntent(packageId, currency),
     onError: (error: any) => {
       console.error('Failed to create payment intent:', error);
-      Alert.alert('Payment Error', 'Failed to create payment. Please check your connection and try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create payment';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   });
@@ -98,7 +102,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     },
     onError: (error: any) => {
       console.error('Failed to create cash reservation:', error);
-      Alert.alert('Reservation Error', 'Failed to reserve package. Please try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to reserve package';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   });
@@ -168,7 +175,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       if (error) {
         let errorMessage = 'Payment failed. Please try again.';
         
-        switch (error.code) {
+        const errorCode = error.code as string;
+        switch (errorCode) {
           case 'card_declined':
             errorMessage = 'Your card was declined. Please try a different payment method.';
             break;
@@ -203,7 +211,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (error: any) {
       console.error('Payment error:', error);
-      Alert.alert('Payment Error', 'An unexpected error occurred. Please try again or contact support.');
+      const errorMessage = error.response?.data?.detail || error.message || 'An unexpected error occurred';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   };
@@ -322,7 +333,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           onPress={handleCashPayment}
           disabled={loading}
           loading={loading}
-          style={[styles.payButton, styles.cashPayButton]}
+          style={[styles.payButton, styles.cashPayButton] as any}
         />
       );
     }
