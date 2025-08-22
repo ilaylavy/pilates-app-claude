@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import AvatarUpload from '../components/AvatarUpload';
+import EditProfileModal from '../components/EditProfileModal';
 import { useUserRole } from '../hooks/useUserRole';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -35,6 +36,7 @@ const ProfileScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
 
   const { data: userStats } = useQuery<UserStats>({
     queryKey: ['user-stats'],
@@ -68,7 +70,11 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleNavigation = (screen: string) => {
-    navigation.navigate(screen as never);
+    if (screen === 'EditProfile') {
+      setShowEditProfileModal(true);
+    } else {
+      navigation.navigate(screen as never);
+    }
   };
 
   const getInitials = (firstName?: string, lastName?: string) => {
@@ -227,6 +233,11 @@ const ProfileScreen: React.FC = () => {
           }}
         />
       )}
+
+      <EditProfileModal
+        visible={showEditProfileModal}
+        onClose={() => setShowEditProfileModal(false)}
+      />
     </SafeAreaView>
   );
 };

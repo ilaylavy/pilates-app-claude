@@ -16,7 +16,10 @@ import { useUserRole } from '../hooks/useUserRole';
 import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
+import { socialApi, Attendee } from '../api/social';
+import { useCancelBooking } from '../hooks/useBookings';
 import { ClassInstance } from '../types';
+import AttendeeAvatars from './AttendeeAvatars';
 import BookingConfirmationModal from './BookingConfirmationModal';
 
 interface ClassDetailsModalProps {
@@ -40,6 +43,22 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const queryClient = useQueryClient();
 
+  // Get user's bookings to check if they have a booking for this class
+  const {
+    data: userBookings = [],
+  } = useQuery({
+    queryKey: ['userBookings'],
+    queryFn: () => bookingsApi.getUserBookings(),
+  });
+
+  // Find user's booking for this class
+  const userBooking = userBookings.find(
+    booking => booking.class_instance_id === classInstance?.id && booking.status === 'confirmed'
+  );
+
+  // Cancel booking mutation
+  const cancelBookingMutation = useCancelBooking();
+
   // Fetch participants for this class
   const {
     data: participants = [],
@@ -48,6 +67,25 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     queryKey: ['participants', classInstance?.id],
     queryFn: () => classInstance ? classesApi.getClassParticipants(classInstance.id) : Promise.resolve([]),
     enabled: !!classInstance && (isAdmin || isInstructor),
+  });
+
+  // Fetch attendees for social features (for all users)
+  const {
+    data: attendees = [],
+    isLoading: attendeesLoading,
+  } = useQuery({
+    queryKey: ['attendees', classInstance?.id],
+    queryFn: () => classInstance ? socialApi.getClassAttendees(classInstance.id) : Promise.resolve([]),
+    enabled: !!classInstance,
+  });
+
+  // Fetch friends in class
+  const {
+    data: friendsInClass = [],
+  } = useQuery({
+    queryKey: ['friends-in-class', classInstance?.id],
+    queryFn: () => classInstance ? socialApi.getFriendsInClass(classInstance.id) : Promise.resolve([]),
+    enabled: !!classInstance && isStudent,
   });
 
   // Book class mutation
@@ -63,6 +101,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
       
       if (result.booking) {
         setCompletedBooking(result.booking);
@@ -97,6 +136,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
       Alert.alert('Success', 'Added to waitlist successfully!');
       onClose();
     },
@@ -150,6 +190,28 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
       // Book directly without confirmation
       bookClassMutation.mutate();
     }
+  };
+
+  const handleCancelBooking = () => {
+    if (!userBooking) return;
+    
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel your booking for this class?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            cancelBookingMutation.mutate({
+              bookingId: userBooking.id,
+              reason: 'User cancelled'
+            });
+          }
+        }
+      ]
+    );
   };
 
   const handleSendNotification = () => {
@@ -278,6 +340,25 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
             </View>
           </View>
 
+          {/* Attendees */}
+          {attendees.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Who's Going</Text>
+              {friendsInClass.length > 0 && (
+                <Text style={styles.friendsText}>
+                  {friendsInClass.length} of your friends {friendsInClass.length === 1 ? 'is' : 'are'} attending
+                </Text>
+              )}
+              <AttendeeAvatars
+                attendees={attendees}
+                onAttendeePress={(attendee) => {
+                  // Navigate to public profile
+                  console.log('View profile:', attendee);
+                }}
+              />
+            </View>
+          )}
+
           {/* Description */}
           {classInstance.template.description && (
             <View style={styles.section}>
@@ -335,25 +416,51 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
         <View style={styles.actions}>
           {/* Student Actions */}
           {isStudent && classInstance.status === 'scheduled' && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.primaryButton]}
-              onPress={handleBookClass}
-              disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending}
-            >
-              <Ionicons 
-                name={classInstance.is_full ? "hourglass" : "add"} 
-                size={20} 
-                color={COLORS.white} 
-              />
-              <Text style={styles.actionButtonText}>
-                {bookClassMutation.isPending || joinWaitlistMutation.isPending
-                  ? 'Processing...'
-                  : classInstance.is_full 
-                    ? 'Join Waitlist' 
-                    : 'Book Class'
-                }
-              </Text>
-            </TouchableOpacity>
+            <>
+              {userBooking ? (
+                // Show cancel option if user has a booking
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.dangerButton]}
+                  onPress={handleCancelBooking}
+                  disabled={cancelBookingMutation.isPending || !userBooking.can_cancel}
+                >
+                  <Ionicons 
+                    name="close-circle" 
+                    size={20} 
+                    color={COLORS.white} 
+                  />
+                  <Text style={styles.actionButtonText}>
+                    {cancelBookingMutation.isPending
+                      ? 'Cancelling...'
+                      : !userBooking.can_cancel
+                        ? 'Cannot Cancel'
+                        : 'Cancel Booking'
+                    }
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                // Show book/waitlist option if user doesn't have a booking
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.primaryButton]}
+                  onPress={handleBookClass}
+                  disabled={bookClassMutation.isPending || joinWaitlistMutation.isPending}
+                >
+                  <Ionicons 
+                    name={classInstance.is_full ? "hourglass" : "add"} 
+                    size={20} 
+                    color={COLORS.white} 
+                  />
+                  <Text style={styles.actionButtonText}>
+                    {bookClassMutation.isPending || joinWaitlistMutation.isPending
+                      ? 'Processing...'
+                      : classInstance.is_full 
+                        ? 'Join Waitlist' 
+                        : 'Book Class'
+                    }
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
 
           {/* Admin Actions */}
@@ -610,6 +717,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
+  dangerButton: {
+    backgroundColor: COLORS.error,
+  },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '600',
@@ -619,6 +729,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
+  },
+  friendsText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginBottom: SPACING.sm,
   },
 });
 

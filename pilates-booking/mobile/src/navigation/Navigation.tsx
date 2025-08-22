@@ -17,10 +17,8 @@ import HomeScreen from '../screens/HomeScreen';
 import ScheduleScreen from '../screens/ScheduleScreen';
 import BookingsScreen from '../screens/BookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import ClassDetailsScreen from '../screens/ClassDetailsScreen';
 import PackagesScreen from '../screens/PackagesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import EditProfileScreen from '../screens/EditProfileScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
 
@@ -33,7 +31,6 @@ import SystemSettingsScreen from '../screens/SystemSettingsScreen';
 export type RootStackParamList = {
   Auth: undefined;
   Main: undefined;
-  ClassDetails: { classId: number };
   Packages: undefined;
   Settings: undefined;
   BookingHistory: undefined;
@@ -42,7 +39,6 @@ export type RootStackParamList = {
   PackageManagement: undefined;
   Reports: undefined;
   SystemSettings: undefined;
-  EditProfile: undefined;
   Payment: { 
     packageId: number; 
     packageName: string; 
@@ -167,11 +163,6 @@ const Navigation = () => {
         <>
           <RootStack.Screen name="Main" component={MainNavigator} />
           <RootStack.Screen 
-            name="ClassDetails" 
-            component={ClassDetailsScreen}
-            options={{ headerShown: true, title: 'Class Details' }}
-          />
-          <RootStack.Screen 
             name="Packages" 
             component={PackagesScreen}
             options={{ headerShown: true, title: 'Packages' }}
@@ -210,11 +201,6 @@ const Navigation = () => {
             name="AdminPackages" 
             component={PackageManagementScreen}
             options={{ headerShown: true, title: 'Manage Packages' }}
-          />
-          <RootStack.Screen 
-            name="EditProfile" 
-            component={EditProfileScreen}
-            options={{ headerShown: false }}
           />
           <RootStack.Screen 
             name="Payment" 

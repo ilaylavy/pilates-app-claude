@@ -21,8 +21,9 @@ import { COLORS, SPACING } from '../utils/config';
 import { bookingsApi } from '../api/bookings';
 import { useApiErrorHandler } from '../utils/errorMessages';
 import { socialApi } from '../api/social';
-import { Booking } from '../types';
+import { Booking, ClassInstance } from '../types';
 import BookingCard from '../components/BookingCard';
+import ClassDetailsModal from '../components/ClassDetailsModal';
 
 type TabType = 'upcoming' | 'past' | 'cancelled';
 
@@ -38,6 +39,8 @@ const BookingsScreen: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<FilterOptions>({ withFriendsOnly: false });
+  const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   
   const navigation = useNavigation();
   const queryClient = useQueryClient();
@@ -128,7 +131,8 @@ const BookingsScreen: React.FC = () => {
   }, [bookings, activeTab, searchQuery, filters]);
 
   const handleBookingPress = (booking: Booking) => {
-    navigation.navigate('ClassDetails' as any, { classId: booking.class_instance.id });
+    setSelectedClass(booking.class_instance);
+    setDetailsModalVisible(true);
   };
 
   const handleCancelBooking = (bookingId: number) => {
@@ -329,6 +333,15 @@ const BookingsScreen: React.FC = () => {
       />
 
       <FilterModal />
+
+      <ClassDetailsModal
+        visible={detailsModalVisible}
+        classInstance={selectedClass}
+        onClose={() => {
+          setDetailsModalVisible(false);
+          setSelectedClass(null);
+        }}
+      />
     </SafeAreaView>
   );
 };

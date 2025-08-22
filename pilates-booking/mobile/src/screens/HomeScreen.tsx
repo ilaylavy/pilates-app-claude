@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import {
   View,
@@ -131,11 +131,10 @@ const HomeScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Next Class</Text>
             <TouchableOpacity
               style={styles.nextClassCard}
-              onPress={() =>
-                navigation.navigate('ClassDetails', {
-                  classId: nextBooking.class_instance.id,
-                })
-              }
+              onPress={() => {
+                setSelectedClass(nextBooking.class_instance);
+                setDetailsModalVisible(true);
+              }}
             >
               <View style={styles.nextClassInfo}>
                 <Text style={styles.nextClassName}>
@@ -171,11 +170,10 @@ const HomeScreen: React.FC = () => {
             <TouchableOpacity
               key={classInstance.id}
               style={styles.classCard}
-              onPress={() =>
-                navigation.navigate('ClassDetails', {
-                  classId: classInstance.id,
-                })
-              }
+              onPress={() => {
+                setSelectedClass(classInstance);
+                setDetailsModalVisible(true);
+              }}
             >
               <View style={styles.classCardContent}>
                 <View style={styles.classInfo}>
@@ -236,6 +234,15 @@ const HomeScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      <ClassDetailsModal
+        visible={detailsModalVisible}
+        classInstance={selectedClass}
+        onClose={() => {
+          setDetailsModalVisible(false);
+          setSelectedClass(null);
+        }}
+      />
     </SafeAreaView>
   );
 };
