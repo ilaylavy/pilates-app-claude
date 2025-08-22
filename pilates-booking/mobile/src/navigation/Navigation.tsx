@@ -28,6 +28,7 @@ import UserManagementScreen from '../screens/UserManagementScreen';
 import PackageManagementScreen from '../screens/PackageManagementScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SystemSettingsScreen from '../screens/SystemSettingsScreen';
+import AdminApprovalScreen from '../screens/AdminApprovalScreen';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -40,6 +41,7 @@ export type RootStackParamList = {
   PackageManagement: undefined;
   Reports: undefined;
   SystemSettings: undefined;
+  AdminApproval: undefined;
   Payment: { 
     packageId: number; 
     packageName: string; 
@@ -73,6 +75,7 @@ export type MainTabParamList = {
   Users?: undefined; // Only for admin/instructor
   Packages?: undefined; // Only for admin
   Reports?: undefined; // Only for admin
+  Approvals?: undefined; // Only for admin
 };
 
 const RootStack = createStackNavigator<RootStackParamList>();
@@ -105,6 +108,7 @@ const MainNavigator = () => {
       'Users': ['people', 'people-outline'],
       'Packages': ['cube', 'cube-outline'],
       'Reports': ['analytics', 'analytics-outline'],
+      'Approvals': ['checkmark-circle', 'checkmark-circle-outline'],
     };
 
     const [focusedIcon, unfocusedIcon] = iconMap[routeName] || ['help-outline', 'help-outline'];
@@ -146,6 +150,7 @@ const MainNavigator = () => {
           <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'Classes' }} />
           <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Users' }} />
           <MainTab.Screen name="Packages" component={PackageManagementScreen} />
+          <MainTab.Screen name="Approvals" component={AdminApprovalScreen} options={{ title: 'Approvals' }} />
           <MainTab.Screen name="Reports" component={ReportsScreen} />
         </>
       )}
@@ -197,6 +202,11 @@ const Navigation = () => {
             name="SystemSettings" 
             component={SystemSettingsScreen}
             options={{ headerShown: true, title: 'System Settings' }}
+          />
+          <RootStack.Screen 
+            name="AdminApproval" 
+            component={AdminApprovalScreen}
+            options={{ headerShown: true, title: 'Cash Payment Approvals' }}
           />
           <RootStack.Screen 
             name="Settings" 

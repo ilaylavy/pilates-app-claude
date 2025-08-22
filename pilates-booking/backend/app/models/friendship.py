@@ -31,8 +31,8 @@ class Friendship(Base):
     )
 
     # Relationships
-    requester = relationship("User", foreign_keys=[user_id], back_populates="sent_friend_requests")
-    friend = relationship("User", foreign_keys=[friend_id], back_populates="received_friend_requests")
+    requester = relationship("User", foreign_keys="Friendship.user_id", back_populates="sent_friend_requests")
+    friend = relationship("User", foreign_keys="Friendship.friend_id", back_populates="received_friend_requests")
 
     def __repr__(self):
         return f"<Friendship(id={self.id}, user_id={self.user_id}, friend_id={self.friend_id}, status='{self.status}')>"
@@ -54,8 +54,8 @@ class ClassInvitation(Base):
     )
 
     # Relationships
-    sender = relationship("User", foreign_keys=[sender_id])
-    recipient = relationship("User", foreign_keys=[recipient_id])
+    sender = relationship("User", foreign_keys="ClassInvitation.sender_id")
+    recipient = relationship("User", foreign_keys="ClassInvitation.recipient_id")
     class_instance = relationship("ClassInstance")
     booking = relationship("Booking")
 

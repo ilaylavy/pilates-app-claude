@@ -21,7 +21,6 @@ import { socialApi, Attendee } from '../api/social';
 import { useCancelBooking } from '../hooks/useBookings';
 import { ClassInstance } from '../types';
 import AttendeeAvatars from './AttendeeAvatars';
-import BookingConfirmationModal from './BookingConfirmationModal';
 
 interface ClassDetailsModalProps {
   visible: boolean;
@@ -29,6 +28,7 @@ interface ClassDetailsModalProps {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onBookingSuccess?: (booking: any, classInstance: ClassInstance) => void;
 }
 
 const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
@@ -37,10 +37,9 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   onClose,
   onEdit,
   onDelete,
+  onBookingSuccess,
 }) => {
   const [showParticipants, setShowParticipants] = useState(false);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [completedBooking, setCompletedBooking] = useState<any>(null);
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const queryClient = useQueryClient();
 
@@ -70,8 +69,46 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const activePackage = userPackages.find(pkg => pkg.is_valid);
   const hasAvailableCredits = activePackage && activePackage.credits_remaining > 0;
 
-  // Cancel booking mutation
-  const cancelBookingMutation = useCancelBooking();
+  // Cancel booking mutation with immediate updates
+  const cancelBookingMutation = useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: number; reason?: string }) =>
+      bookingsApi.cancelBooking(bookingId, reason),
+    onSuccess: (result, { bookingId }) => {
+      // Immediately remove cancelled booking from cache after server confirms
+      queryClient.setQueryData(['userBookings'], (oldBookings: any[]) => {
+        if (!oldBookings) return [];
+        return oldBookings.filter(booking => booking.id !== bookingId);
+      });
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
+        queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      // Close modal after successful cancellation
+      onClose();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.message || 'Failed to cancel booking';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
 
   // Fetch participants for this class
   const {
@@ -106,27 +143,48 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const bookClassMutation = useMutation({
     mutationFn: async () => {
       if (!classInstance) throw new Error('No class selected');
-      const result = await bookingsApi.bookClass(classInstance.id);
+      const result = await bookingsApi.bookClass(classInstance.id, activePackage?.id);
       if (!result.success) {
         throw new Error(result.message);
       }
       return result;
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] });
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
-      
-      if (result.booking) {
-        setCompletedBooking(result.booking);
-        setShowBookingModal(true);
+      // Immediately update cache with real booking data from server
+      if (result.success && result.booking && classInstance) {
+        queryClient.setQueryData(['userBookings'], (oldBookings: any[]) => {
+          if (!oldBookings) return [result.booking];
+          // Make sure we don't duplicate bookings
+          const filtered = oldBookings.filter(booking => 
+            booking.class_instance_id !== classInstance.id
+          );
+          return [...filtered, result.booking];
+        });
       }
       
-      // Show appropriate message based on whether it's a new or existing booking
-      if (result.message) {
-        const isExistingBooking = result.booking?.is_new_booking === false;
-        const alertTitle = isExistingBooking ? 'Already Booked' : 'Success';
-        Alert.alert(alertTitle, result.message);
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
+        queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      if (result.booking && classInstance) {
+        // Call parent callback to show booking confirmation modal
+        onBookingSuccess?.(result.booking, classInstance);
+        onClose(); // Close the class details modal
       }
     },
     onError: (error: any) => {
@@ -511,24 +569,6 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           )}
         </View>
 
-        {/* Booking Confirmation Modal */}
-        {completedBooking && classInstance && (
-          <BookingConfirmationModal
-            visible={showBookingModal}
-            onClose={() => {
-              setShowBookingModal(false);
-              setCompletedBooking(null);
-              onClose();
-            }}
-            booking={completedBooking}
-            classInstance={classInstance}
-            onViewSchedule={() => {
-              setShowBookingModal(false);
-              setCompletedBooking(null);
-              onClose();
-            }}
-          />
-        )}
       </View>
     </Modal>
   );

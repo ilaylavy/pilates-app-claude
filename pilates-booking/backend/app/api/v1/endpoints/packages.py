@@ -6,11 +6,11 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ....models.package import Package, UserPackage
+from ....models.package import Package, UserPackage, UserPackageStatus, PaymentStatus, PaymentMethod as ModelPaymentMethod
 from ....models.user import User
 from ....schemas.package import (PackageCreate, PackagePurchase,
                                  PackageResponse, PackageUpdate,
-                                 UserPackageResponse)
+                                 UserPackageResponse, PaymentMethod)
 from ..deps import get_admin_user, get_current_active_user, get_db
 
 router = APIRouter()
@@ -35,7 +35,7 @@ async def purchase_package(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Initiate package purchase - returns payment intent for client to complete."""
+    """Initiate package purchase - handles both credit card and cash payments."""
 
     # Get package
     stmt = select(Package).where(
@@ -49,12 +49,73 @@ async def purchase_package(
             status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
         )
 
+    # Handle cash payment differently
+    if purchase_data.payment_method == PaymentMethod.CASH:
+        return await handle_cash_purchase(package, purchase_data, current_user, db)
+    else:
+        # Credit card or other electronic payments
+        return {
+            "message": "Please use the /api/v1/payments/create-payment-intent endpoint to complete the purchase",
+            "package_id": package.id,
+            "package_name": package.name,
+            "price": float(package.price),
+            "currency": "ILS",
+            "payment_method": purchase_data.payment_method.value,
+        }
+
+
+async def handle_cash_purchase(
+    package: Package,
+    purchase_data: PackagePurchase,
+    current_user: User,
+    db: AsyncSession,
+):
+    """Handle cash package purchase by creating a pending approval package."""
+    
+    # Create UserPackage with RESERVED status for cash payments
+    # This will require admin approval before credits become available
+    expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
+    reservation_expires_at = datetime.now(timezone.utc) + timedelta(hours=48)  # 48 hour window to pay cash
+    
+    user_package = UserPackage(
+        user_id=current_user.id,
+        package_id=package.id,
+        credits_remaining=package.credits,
+        expiry_date=expiry_date,
+        status=UserPackageStatus.RESERVED,  # Pending approval
+        reservation_expires_at=reservation_expires_at,
+        is_active=True,
+        payment_status=PaymentStatus.PENDING_APPROVAL,
+        payment_method=ModelPaymentMethod.CASH,
+        payment_reference=purchase_data.payment_reference,
+    )
+    
+    db.add(user_package)
+    await db.commit()
+    await db.refresh(user_package)
+    
+    # Generate a unique reference code for the cash payment
+    reference_code = f"CASH-{user_package.id}-{current_user.id}"
+    
     return {
-        "message": "Please use the /api/v1/payments/create-payment-intent endpoint to complete the purchase",
+        "message": "Cash payment package created. Please pay at reception and show this reference.",
+        "status": "pending_approval",
         "package_id": package.id,
         "package_name": package.name,
+        "user_package_id": user_package.id,
         "price": float(package.price),
         "currency": "ILS",
+        "payment_method": "cash",
+        "reference_code": reference_code,
+        "payment_instructions": [
+            "Please pay cash at the reception desk",
+            "Show this reference code to the staff: " + reference_code,
+            "Your package will be activated after admin confirms payment",
+            "You will receive a notification when approved",
+            f"Payment must be completed within 48 hours (expires: {reservation_expires_at.isoformat()})"
+        ],
+        "reservation_expires_at": reservation_expires_at.isoformat(),
+        "estimated_approval_time": "Usually approved within 2 hours during business hours"
     }
 
 
@@ -63,7 +124,7 @@ async def get_user_packages(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Get current user's packages."""
+    """Get current user's packages with payment status information."""
     stmt = (
         select(UserPackage)
         .options(selectinload(UserPackage.package))

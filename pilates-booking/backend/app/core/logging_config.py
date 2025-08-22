@@ -470,6 +470,11 @@ def setup_logging() -> None:
                 "handlers": ["database_file"],
                 "propagate": False,
             },
+            "app.performance": {
+                "level": "WARNING",  # Only show slow queries and errors
+                "handlers": ["database_file"],
+                "propagate": False,
+            },
             "app.booking": {
                 "level": log_level,
                 "handlers": ["console", "app_file", "error_file"],

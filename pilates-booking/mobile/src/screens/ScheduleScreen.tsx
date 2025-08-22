@@ -13,17 +13,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { COLORS, SPACING } from '../utils/config';
 import ClassCard from '../components/ClassCard';
 import CalendarView from '../components/CalendarView';
 import ClassDetailsModal from '../components/ClassDetailsModal';
+import BookingConfirmationModal from '../components/BookingConfirmationModal';
 import FloatingActionButton from '../components/FloatingActionButton';
 import { ClassCardSkeleton } from '../components/SkeletonLoader';
 import { useUserRole } from '../hooks/useUserRole';
 import { useAuth } from '../hooks/useAuth';
+import { useCancelBooking } from '../hooks/useBookings';
 import { classesApi } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
+import { packagesApi } from '../api/packages';
+import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { ClassInstance } from '../types';
 
 const ScheduleScreen: React.FC = () => {
@@ -40,7 +44,11 @@ const ScheduleScreen: React.FC = () => {
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
   const [filterInstructor, setFilterInstructor] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const { isAdmin } = useUserRole();
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [completedBooking, setCompletedBooking] = useState<any>(null);
+  const [bookedClassInstance, setBookedClassInstance] = useState<ClassInstance | null>(null);
+  const [bookingInProgressId, setBookingInProgressId] = useState<number | null>(null);
+  const { isAdmin, isStudent } = useUserRole();
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const slideAnimation = useRef(new Animated.Value(0)).current;
@@ -82,11 +90,178 @@ const ScheduleScreen: React.FC = () => {
     enabled: isAuthenticated,
   });
 
+  // Fetch user packages to check credit availability
+  const { data: userPackages = [] } = useQuery({
+    queryKey: ['userPackages'],
+    queryFn: () => packagesApi.getUserPackages(),
+    enabled: isAuthenticated && isStudent,
+  });
+
   // Create a set of booked class IDs for quick lookup
   const bookedClassIds = new Set(
     userBookings?.filter(booking => booking.status === 'confirmed')
       .map(booking => booking.class_instance_id) || []
   );
+
+  const activePackage = userPackages?.find(pkg => pkg.is_valid);
+
+  // Cancel booking mutation with immediate updates after server confirmation
+  const cancelBookingMutation = useMutation({
+    mutationFn: ({ bookingId, reason }: { bookingId: number; reason?: string }) =>
+      bookingsApi.cancelBooking(bookingId, reason),
+    onMutate: async ({ bookingId }: { bookingId: number }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['userBookings'] });
+      
+      // Snapshot the previous value for error rollback
+      const previousBookings = queryClient.getQueryData(['userBookings']);
+      
+      return { previousBookings, bookingId };
+    },
+    onSuccess: (result, { bookingId }) => {
+      // Immediately remove cancelled booking from cache after server confirms
+      queryClient.setQueryData(['userBookings'], (oldBookings: any[]) => {
+        if (!oldBookings) return [];
+        return oldBookings.filter(booking => booking.id !== bookingId);
+      });
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+    },
+    onError: (error: any, variables, context) => {
+      // Revert optimistic update
+      if (context?.previousBookings) {
+        queryClient.setQueryData(['userBookings'], context.previousBookings);
+      }
+      
+      const errorMessage = error.message || 'Failed to cancel booking';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
+
+  // Book class mutation
+  const bookClassMutation = useMutation({
+    mutationFn: async (classInstanceId: number) => {
+      const result = await bookingsApi.bookClass(classInstanceId, activePackage?.id);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result;
+    },
+    onMutate: async (classInstanceId) => {
+      setBookingInProgressId(classInstanceId);
+      
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['userBookings'] });
+      
+      // Snapshot the previous value
+      const previousBookings = queryClient.getQueryData(['userBookings']);
+      
+      return { previousBookings, classInstanceId };
+    },
+    onSuccess: (result, classInstanceId) => {
+      setBookingInProgressId(null);
+      
+      // Only update if booking was successful and we have real booking data
+      if (result.success && result.booking) {
+        // Immediately update cache with real booking data from server
+        queryClient.setQueryData(['userBookings'], (oldBookings: any[]) => {
+          if (!oldBookings) return [result.booking];
+          // Make sure we don't duplicate bookings
+          const filtered = oldBookings.filter(booking => 
+            booking.class_instance_id !== classInstanceId
+          );
+          return [...filtered, result.booking];
+        });
+      }
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      // Show booking confirmation modal for successful bookings
+      if (result.booking && result.success) {
+        // Find the class instance to show in the modal
+        const classInstance = weekClasses?.find(cls => cls.id === classInstanceId);
+        if (classInstance) {
+          setCompletedBooking(result.booking);
+          setBookedClassInstance(classInstance);
+          setShowBookingModal(true);
+        }
+      }
+    },
+    onError: (error: any, classInstanceId, context) => {
+      setBookingInProgressId(null);
+      
+      // Revert optimistic update if any
+      if (context?.previousBookings) {
+        queryClient.setQueryData(['userBookings'], context.previousBookings);
+      }
+      
+      const errorMessage = error.message || 'Failed to book class';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
+
+  // Join waitlist mutation
+  const joinWaitlistMutation = useMutation({
+    mutationFn: async (classInstanceId: number) => {
+      const result = await bookingsApi.joinWaitlist(classInstanceId);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result.waitlist_entry;
+    },
+    onMutate: (classInstanceId) => {
+      setBookingInProgressId(classInstanceId);
+    },
+    onSuccess: (result, classInstanceId) => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+      setBookingInProgressId(null);
+      Alert.alert('Success', 'Added to waitlist successfully!');
+    },
+    onError: (error: any, classInstanceId) => {
+      setBookingInProgressId(null);
+      const errorMessage = error.message || 'Failed to join waitlist';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
 
   const handlePreviousWeek = () => {
     Animated.timing(slideAnimation, {
@@ -141,6 +316,57 @@ const ScheduleScreen: React.FC = () => {
       notes: classInstance.notes || '',
     });
     setEditModalVisible(true);
+  };
+
+  // Booking action handlers
+  const handleBookClass = (classInstance: ClassInstance) => {
+    // Check if user has available credits first
+    if (isStudent && !activePackage?.credits_remaining) {
+      Alert.alert(
+        'No Credits Available',
+        'You need to purchase a package or top up your credits to book this class.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Buy Package', onPress: () => {
+            // Navigate to packages screen - you might need to adjust navigation
+            console.log('Navigate to packages');
+          }}
+        ]
+      );
+      return;
+    }
+
+    bookClassMutation.mutate(classInstance.id);
+  };
+
+  const handleJoinWaitlist = (classInstance: ClassInstance) => {
+    joinWaitlistMutation.mutate(classInstance.id);
+  };
+
+  const handleCancelBooking = (classInstance: ClassInstance) => {
+    const userBooking = userBookings?.find(
+      booking => booking.class_instance_id === classInstance.id && booking.status === 'confirmed'
+    );
+    
+    if (!userBooking) return;
+    
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel your booking for this class?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            cancelBookingMutation.mutate({
+              bookingId: userBooking.id,
+              reason: 'User cancelled'
+            });
+          }
+        }
+      ]
+    );
   };
 
   const handleSaveEdit = async () => {
@@ -418,9 +644,15 @@ const ScheduleScreen: React.FC = () => {
                             classInstance={classInstance}
                             variant="list"
                             isBooked={bookedClassIds.has(classInstance.id)}
+                            showActions={isStudent}
+                            hasAvailableCredits={!!activePackage?.credits_remaining}
+                            isBookingInProgress={bookingInProgressId === classInstance.id}
                             onPress={() => handleClassPress(classInstance)}
                             onEdit={() => handleEditClass(classInstance)}
                             onDelete={() => handleDeleteClass(classInstance)}
+                            onBook={() => handleBookClass(classInstance)}
+                            onJoinWaitlist={() => handleJoinWaitlist(classInstance)}
+                            onCancel={() => handleCancelBooking(classInstance)}
                           />
                         ))
                       }
@@ -451,6 +683,11 @@ const ScheduleScreen: React.FC = () => {
           if (selectedClass) {
             handleDeleteClass(selectedClass);
           }
+        }}
+        onBookingSuccess={(booking, classInstance) => {
+          setCompletedBooking(booking);
+          setBookedClassInstance(classInstance);
+          setShowBookingModal(true);
         }}
       />
 
@@ -528,6 +765,25 @@ const ScheduleScreen: React.FC = () => {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Booking Confirmation Modal */}
+      {completedBooking && bookedClassInstance && (
+        <BookingConfirmationModal
+          visible={showBookingModal}
+          onClose={() => {
+            setShowBookingModal(false);
+            setCompletedBooking(null);
+            setBookedClassInstance(null);
+          }}
+          booking={completedBooking}
+          classInstance={bookedClassInstance}
+          onViewSchedule={() => {
+            setShowBookingModal(false);
+            setCompletedBooking(null);
+            setBookedClassInstance(null);
+          }}
+        />
+      )}
 
       {/* Floating Action Button (Admin Only) */}
       {isAdmin && !showCalendarView && (

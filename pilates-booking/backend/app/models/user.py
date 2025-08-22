@@ -44,7 +44,8 @@ class User(Base):
         "WaitlistEntry", back_populates="user", cascade="all, delete-orphan"
     )
     user_packages = relationship(
-        "UserPackage", back_populates="user", cascade="all, delete-orphan"
+        "UserPackage", back_populates="user", cascade="all, delete-orphan",
+        foreign_keys="UserPackage.user_id"
     )
     payments = relationship(
         "Payment", back_populates="user", cascade="all, delete-orphan"

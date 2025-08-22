@@ -23,6 +23,8 @@ import PackageCard from '../components/PackageCard';
 import PackageEditModal from '../components/PackageEditModal';
 import Button from '../components/common/Button';
 import PurchaseModal from '../components/PurchaseModal';
+import PaymentStatusBadge from '../components/PaymentStatusBadge';
+import PendingApprovalCard from '../components/PendingApprovalCard';
 import type { Package, UserPackage } from '../types';
 
 
@@ -72,6 +74,11 @@ const PackagesScreen: React.FC = () => {
   const activePackage = userPackages?.find(
     (up) => up.is_active && up.credits_remaining > 0 && new Date(up.expiry_date) > new Date()
   );
+
+  // Get pending approval packages
+  const pendingPackages = userPackages?.filter(
+    (up) => up.is_pending_approval || up.payment_status === 'pending_approval'
+  ) || [];
 
   // Mutations
   const togglePackageMutation = useMutation({
@@ -187,9 +194,39 @@ const PackagesScreen: React.FC = () => {
     );
   };
 
+  const renderPendingPackages = () => {
+    if (pendingPackages.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Pending Payments</Text>
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={() => navigation.navigate('PendingApprovals' as any)}
+          >
+            <Text style={styles.viewAllText}>View All</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+        
+        {pendingPackages.slice(0, 2).map((userPackage) => (
+          <PendingApprovalCard
+            key={userPackage.id}
+            userPackage={userPackage}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+            }}
+          />
+        ))}
+      </View>
+    );
+  };
+
   const renderPackageHistory = () => {
     const expiredPackages = userPackages?.filter(
-      (up) => !up.is_active || up.credits_remaining === 0 || new Date(up.expiry_date) <= new Date()
+      (up) => (!up.is_active || up.credits_remaining === 0 || new Date(up.expiry_date) <= new Date()) 
+            && !up.is_pending_approval && up.payment_status !== 'pending_approval'
     );
 
     if (!expiredPackages || expiredPackages.length === 0) return null;
@@ -209,9 +246,17 @@ const PackagesScreen: React.FC = () => {
                 Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
               </Text>
             </View>
-            <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
-              {userPackage.credits_remaining === 0 ? 'Used' : 'Expired'}
-            </Text>
+            <View style={styles.historyStatusContainer}>
+              {userPackage.payment_status && (
+                <PaymentStatusBadge 
+                  status={userPackage.payment_status}
+                  size="small"
+                />
+              )}
+              <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
+                {userPackage.credits_remaining === 0 ? 'Used' : 'Expired'}
+              </Text>
+            </View>
           </View>
         ))}
       </View>
@@ -244,6 +289,9 @@ const PackagesScreen: React.FC = () => {
           <>
             {/* Current Balance Card */}
             {renderCurrentBalance()}
+
+            {/* Pending Packages */}
+            {renderPendingPackages()}
 
             {/* Available Packages */}
             <View style={styles.section}>
@@ -486,6 +534,20 @@ const styles = StyleSheet.create({
   },
   historyStatus: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  historyStatusContainer: {
+    alignItems: 'flex-end',
+    gap: SPACING.xs,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: COLORS.primary,
     fontWeight: '600',
   },
   adminSection: {

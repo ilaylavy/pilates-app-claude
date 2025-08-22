@@ -23,9 +23,13 @@ interface ClassCardProps {
   onCancel?: () => void;
   onShare?: () => void;
   onReschedule?: () => void;
+  onBook?: () => void;
+  onJoinWaitlist?: () => void;
   showActions?: boolean;
   isBooked?: boolean;
   availableSpots?: number;
+  hasAvailableCredits?: boolean;
+  isBookingInProgress?: boolean;
 }
 
 const ClassCard: React.FC<ClassCardProps> = ({
@@ -36,11 +40,15 @@ const ClassCard: React.FC<ClassCardProps> = ({
   onEdit,
   onDelete,
   onCancel,
-  onShare,
+  onShare: _onShare,
   onReschedule,
+  onBook,
+  onJoinWaitlist,
   showActions = true,
   isBooked = false,
   availableSpots,
+  hasAvailableCredits = true,
+  isBookingInProgress = false,
 }) => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
 
@@ -60,7 +68,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
     });
   };
 
-  const getStatusColor = (status: string) => {
+  const _getStatusColor = (status: string) => {
     switch (status) {
       case 'scheduled':
         return COLORS.success;
@@ -110,6 +118,10 @@ const ClassCard: React.FC<ClassCardProps> = ({
             {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
           </Text>
           <View style={styles.listTimeInfo}>
+            <Ionicons name="calendar" size={14} color={COLORS.textSecondary} />
+            <Text style={styles.listTimeText}>
+              {formatDate(classInstance.start_datetime)}
+            </Text>
             <Ionicons name="time" size={14} color={COLORS.textSecondary} />
             <Text style={styles.listTimeText}>
               {formatTime(classInstance.start_datetime)} - {formatTime(classInstance.end_datetime)}
@@ -117,24 +129,76 @@ const ClassCard: React.FC<ClassCardProps> = ({
           </View>
         </View>
         <View style={styles.listRightInfo}>
-          {isBooked ? (
-            <View style={styles.bookedBadge}>
-              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-              <Text style={styles.bookedText}>Booked</Text>
-            </View>
-          ) : (
-            <View style={styles.capacityInfo}>
-              <Ionicons name="people" size={16} color={getCapacityColor()} />
-              <Text style={[styles.capacityText, { color: getCapacityColor() }]}>
-                {classInstance.participant_count}/{classInstance.template.capacity}
-              </Text>
-              {classInstance.is_full && (
-                <Text style={styles.fullText}>FULL</Text>
+          {/* Student booking actions */}
+          {isStudent && showActions && classInstance.status === 'scheduled' && (
+            <View style={styles.studentActions}>
+              {isBooked ? (
+                // Show booked status when booked
+                <View style={styles.bookedBadge}>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+                  <Text style={styles.bookedText}>Booked</Text>
+                </View>
+              ) : (
+                // Show book/waitlist button when not booked
+                <>
+                  {classInstance.is_full ? (
+                    onJoinWaitlist && (
+                      <TouchableOpacity 
+                        style={[styles.actionButton, styles.waitlistButton]}
+                        onPress={onJoinWaitlist}
+                        disabled={isBookingInProgress || !hasAvailableCredits}
+                      >
+                        <Ionicons name="hourglass" size={16} color={COLORS.warning} />
+                        <Text style={styles.waitlistButtonText}>
+                          {isBookingInProgress ? 'Joining...' : 'Join Waitlist'}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  ) : (
+                    onBook && (
+                      <TouchableOpacity 
+                        style={[
+                          styles.actionButton, 
+                          styles.bookButton,
+                          !hasAvailableCredits && styles.disabledActionButton
+                        ]}
+                        onPress={onBook}
+                        disabled={isBookingInProgress || !hasAvailableCredits}
+                      >
+                        <Ionicons name="add" size={16} color={COLORS.white} />
+                        <Text style={styles.bookButtonText}>
+                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : 'Book Class'}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </>
               )}
             </View>
           )}
+
+          {/* Capacity info for non-students or when no actions */}
+          {(!isStudent || !showActions) && (
+            <View style={styles.capacityInfo}>
+              {isBooked && (
+                <View style={styles.bookedBadge}>
+                  <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+                  <Text style={styles.bookedText}>Booked</Text>
+                </View>
+              )}
+              <View style={styles.capacityDisplay}>
+                <Ionicons name="people" size={16} color={getCapacityColor()} />
+                <Text style={[styles.capacityText, { color: getCapacityColor() }]}>
+                  {classInstance.participant_count}/{classInstance.template.capacity}
+                </Text>
+                {classInstance.is_full && (
+                  <Text style={styles.fullText}>FULL</Text>
+                )}
+              </View>
+            </View>
+          )}
           
-          {/* Admin/Instructor actions only */}
+          {/* Admin/Instructor actions */}
           {(isAdmin || isInstructor) && (
             <View style={styles.adminActions}>
               {onEdit && (
@@ -544,6 +608,57 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 6,
     backgroundColor: '#ffebee',
+  },
+  // New student action styles
+  studentActions: {
+    alignItems: 'flex-end',
+    marginBottom: SPACING.sm,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 20,
+    gap: 4,
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  bookButton: {
+    backgroundColor: COLORS.primary,
+  },
+  waitlistButton: {
+    backgroundColor: '#fff3cd',
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  cancelButton: {
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  disabledActionButton: {
+    backgroundColor: COLORS.textSecondary,
+  },
+  bookButtonText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  waitlistButtonText: {
+    color: COLORS.warning,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cancelButtonText: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  capacityDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
   },
 });
 

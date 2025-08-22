@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ....models.booking import Booking, BookingStatus, WaitlistEntry
+from ....schemas.booking import WaitlistEntryResponse
 from ....models.class_schedule import ClassInstance, ClassStatus, ClassTemplate
 from ....models.user import User, UserRole
 from ....schemas.class_schedule import (ClassInstanceCreate,
@@ -434,3 +435,50 @@ async def delete_class(
         # Safe to delete if no bookings
         await db.delete(class_instance)
         await db.commit()
+
+
+@router.post("/{class_id}/waitlist", response_model=WaitlistEntryResponse)
+async def join_waitlist(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Join waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        waitlist_entry = await booking_service.add_to_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
+        )
+        return waitlist_entry
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/{class_id}/waitlist", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_waitlist(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Leave waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        await booking_service.remove_from_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

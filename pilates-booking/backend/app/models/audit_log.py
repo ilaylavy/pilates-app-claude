@@ -52,6 +52,10 @@ class AuditActionType(str, enum.Enum):
     # Booking operations
     BOOKING_CREATE = "BOOKING_CREATE"
     BOOKING_CANCEL = "BOOKING_CANCEL"
+    
+    # Payment operations
+    APPROVE_PACKAGE_PAYMENT = "APPROVE_PACKAGE_PAYMENT"
+    REJECT_PACKAGE_PAYMENT = "REJECT_PACKAGE_PAYMENT"
 
 
 class SecurityLevel(str, enum.Enum):

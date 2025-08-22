@@ -82,6 +82,17 @@ export interface UserPackage {
   days_until_expiry: number;
   status: 'active' | 'reserved' | 'expired' | 'cancelled';
   reservation_expires_at?: string;
+  // Payment approval fields
+  payment_status?: 'pending_approval' | 'approved' | 'rejected';
+  payment_method?: 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
+  approved_by?: number;
+  approved_at?: string;
+  rejection_reason?: string;
+  payment_reference?: string;
+  admin_notes?: string;
+  is_pending_approval?: boolean;
+  is_approved?: boolean;
+  is_rejected?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -302,4 +313,57 @@ export interface Invoice {
   created: number;
   invoice_pdf?: string;
   hosted_invoice_url?: string;
+}
+
+// Payment Approval Types
+export type PaymentMethodType = 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
+export type PaymentStatusType = 'pending_approval' | 'approved' | 'rejected';
+
+export interface PendingApproval {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  package_id: number;
+  package_name: string;
+  package_credits: number;
+  package_price: number;
+  payment_method: PaymentMethodType;
+  payment_reference?: string;
+  purchase_date: string;
+  hours_waiting: number;
+}
+
+export interface PaymentApprovalRequest {
+  payment_reference?: string;
+  admin_notes?: string;
+}
+
+export interface PaymentRejectionRequest {
+  rejection_reason: string;
+  admin_notes?: string;
+}
+
+export interface ApprovalStats {
+  total_pending: number;
+  pending_today: number;
+  pending_over_24h: number;
+  avg_approval_time_hours: number;
+  total_approved_today: number;
+  total_rejected_today: number;
+}
+
+export interface CashPaymentInstructions {
+  message: string;
+  status: string;
+  package_id: number;
+  package_name: string;
+  user_package_id: number;
+  price: number;
+  currency: string;
+  payment_method: string;
+  reference_code: string;
+  payment_instructions: string[];
+  reservation_expires_at: string;
+  estimated_approval_time: string;
 }

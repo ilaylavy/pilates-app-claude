@@ -6,7 +6,7 @@
 
 const getDevApiUrl = () => {
   // For physical device, use actual IP
-  const LOCAL_IP = '10.100.102.24'; // Updated to current IP
+  const LOCAL_IP = '192.168.235.110'; // Updated to current IP from error logs
   return `http://${LOCAL_IP}:8000`;
 };
 

@@ -9,7 +9,6 @@ import {
   TextInput,
   ScrollView,
   RefreshControl,
-  Share,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -167,24 +166,6 @@ const BookingsScreen: React.FC = () => {
     );
   };
 
-  const handleShareBooking = async (booking: Booking) => {
-    try {
-      const classUrl = `pilates://class/${booking.class_instance.id}`;
-      const { date, time } = formatDateTime(booking.class_instance.start_datetime);
-      
-      await Share.share({
-        message: `Join me for ${booking.class_instance.template.name} on ${date} at ${time}! ${classUrl}`,
-        title: 'Join me for a Pilates class!',
-      });
-    } catch (error) {
-      console.error('Share error:', error);
-    }
-  };
-
-  const handleRescheduleBooking = (booking: Booking) => {
-    // TODO: Navigate to reschedule screen
-    Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
-  };
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -217,12 +198,11 @@ const BookingsScreen: React.FC = () => {
     <ClassCard
       classInstance={item.class_instance}
       booking={item}
-      variant="booking"
+      variant="list"
       onPress={() => handleBookingPress(item)}
       onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
-      onShare={() => handleShareBooking(item)}
-      onReschedule={() => handleRescheduleBooking(item)}
-      showActions={false}
+      isBooked={item.status === 'confirmed'}
+      showActions={true}
     />
   );
 
@@ -359,7 +339,7 @@ const BookingsScreen: React.FC = () => {
             </Text>
           </View>
         }
-        contentContainerStyle={filteredBookings.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={filteredBookings.length === 0 ? styles.emptyList : styles.listContent}
       />
 
       <FilterModal />
@@ -475,6 +455,9 @@ const styles = StyleSheet.create({
   emptyList: {
     flexGrow: 1,
     justifyContent: 'center',
+  },
+  listContent: {
+    padding: SPACING.lg,
   },
   filterModal: {
     flex: 1,

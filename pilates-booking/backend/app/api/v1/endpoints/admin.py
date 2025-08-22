@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -12,7 +12,11 @@ from ....models.user import User, UserRole
 from ....schemas.admin import (AttendanceReport, DashboardAnalytics,
                                PackageCreate, PackageUpdate, RevenueReport,
                                UserListResponse, UserUpdate)
-from ....schemas.package import PackageResponse
+from ....schemas.package import (PackageResponse, PaymentApprovalRequest,
+                                PaymentRejectionRequest, PendingApprovalResponse,
+                                PaymentApprovalResponse, ApprovalStatsResponse,
+                                PaymentStatus as SchemaPaymentStatus, 
+                                PaymentMethod as SchemaPaymentMethod)
 from sqlalchemy.orm import selectinload
 from ....services.admin_service import AdminService
 
@@ -523,4 +527,352 @@ async def reject_cash_reservation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reject cash reservation: {str(e)}",
+        )
+
+
+# New Payment Approval System Endpoints
+
+@router.get("/packages/pending-approvals", response_model=List[PendingApprovalResponse])
+async def get_pending_approvals(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get all packages pending payment approval."""
+    try:
+        # For now, return packages with RESERVED status as pending approvals
+        # This will be updated once the migration is working
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.status == UserPackageStatus.RESERVED)
+            .order_by(UserPackage.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        pending_packages = result.scalars().all()
+
+        pending_approvals = []
+        for package in pending_packages:
+            hours_waiting = (datetime.now(timezone.utc) - package.created_at).total_seconds() / 3600
+            
+            pending_approvals.append(PendingApprovalResponse(
+                id=package.id,
+                user_id=package.user_id,
+                user_name=f"{package.user.first_name} {package.user.last_name}",
+                user_email=package.user.email,
+                package_id=package.package_id,
+                package_name=package.package.name,
+                package_credits=package.package.credits,
+                package_price=package.package.price,
+                payment_method=SchemaPaymentMethod.CASH,  # Assume cash for now
+                payment_reference=None,  # Will be available after migration
+                purchase_date=package.created_at,
+                hours_waiting=int(hours_waiting)
+            ))
+
+        return pending_approvals
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get pending approvals: {str(e)}"
+        )
+
+
+@router.post("/packages/{package_id}/approve")
+async def approve_package_payment(
+    package_id: int,
+    approval_data: PaymentApprovalRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Approve a pending package payment."""
+    try:
+        # Get the package
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        # For now, check if it's in RESERVED status (will be updated after migration)
+        if user_package.status != UserPackageStatus.RESERVED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package is not pending approval"
+            )
+
+        # Approve the package by activating it from reservation
+        if not user_package.activate_from_reservation():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to approve package"
+            )
+
+        # Set the admin who approved this package
+        user_package.approved_by = current_user.id
+        
+        await db.commit()
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "APPROVE_PACKAGE_PAYMENT",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "payment_reference": approval_data.payment_reference,
+                "admin_notes": approval_data.admin_notes,
+            },
+            request,
+        )
+
+        return {
+            "message": "Package payment approved successfully",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "credits_available": user_package.credits_remaining,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve package payment: {str(e)}"
+        )
+
+
+@router.post("/packages/{package_id}/reject")
+async def reject_package_payment(
+    package_id: int,
+    rejection_data: PaymentRejectionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Reject a pending package payment."""
+    try:
+        # Get the package
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        # For now, check if it's in RESERVED status (will be updated after migration)
+        if user_package.status != UserPackageStatus.RESERVED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package is not pending approval"
+            )
+
+        # Reject the package by cancelling the reservation
+        if not user_package.cancel_reservation():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to reject package"
+            )
+
+        await db.commit()
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "REJECT_PACKAGE_PAYMENT",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "rejection_reason": rejection_data.rejection_reason,
+                "admin_notes": rejection_data.admin_notes,
+            },
+            request,
+        )
+
+        return {
+            "message": "Package payment rejected successfully",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "rejection_reason": rejection_data.rejection_reason,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject package payment: {str(e)}"
+        )
+
+
+@router.get("/packages/approval-stats", response_model=ApprovalStatsResponse)
+async def get_approval_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get payment approval statistics for admin dashboard."""
+    try:
+        today = datetime.now(timezone.utc).date()
+        yesterday = today - timedelta(days=1)
+
+        # Count total pending approvals
+        pending_stmt = select(func.count(UserPackage.id)).where(
+            UserPackage.status == UserPackageStatus.RESERVED
+        )
+        pending_result = await db.execute(pending_stmt)
+        total_pending = pending_result.scalar() or 0
+
+        # Count pending from today
+        pending_today_stmt = select(func.count(UserPackage.id)).where(
+            and_(
+                UserPackage.status == UserPackageStatus.RESERVED,
+                func.date(UserPackage.created_at) == today
+            )
+        )
+        pending_today_result = await db.execute(pending_today_stmt)
+        pending_today = pending_today_result.scalar() or 0
+
+        # Count pending over 24 hours
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+        pending_over_24h_stmt = select(func.count(UserPackage.id)).where(
+            and_(
+                UserPackage.status == UserPackageStatus.RESERVED,
+                UserPackage.created_at < cutoff_time
+            )
+        )
+        pending_over_24h_result = await db.execute(pending_over_24h_stmt)
+        pending_over_24h = pending_over_24h_result.scalar() or 0
+
+        # For now, use mock data for approved/rejected counts since we don't have the actual approval tracking yet
+        # This will be replaced with real queries once the migration is complete
+        
+        return ApprovalStatsResponse(
+            total_pending=total_pending,
+            pending_today=pending_today,
+            pending_over_24h=pending_over_24h,
+            avg_approval_time_hours=2.5,  # Mock data
+            total_approved_today=0,       # Mock data
+            total_rejected_today=0        # Mock data
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get approval stats: {str(e)}"
+        )
+
+
+@router.delete("/packages/{package_id}/admin-cancel")
+async def admin_cancel_package(
+    package_id: int,
+    request: Request,
+    reason: str = Query(..., description="Reason for cancellation"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Cancel a package (admin only functionality)."""
+    try:
+        # Get the package
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        if user_package.status == UserPackageStatus.CANCELLED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package is already cancelled"
+            )
+
+        # Check if package has been used
+        initial_credits = user_package.package.credits
+        used_credits = initial_credits - user_package.credits_remaining
+        
+        # Cancel the package
+        user_package.status = UserPackageStatus.CANCELLED
+        user_package.is_active = False
+
+        await db.commit()
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "ADMIN_CANCEL_PACKAGE",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "reason": reason,
+                "used_credits": used_credits,
+                "remaining_credits": user_package.credits_remaining,
+            },
+            request,
+        )
+
+        return {
+            "message": "Package cancelled successfully",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "reason": reason,
+            "used_credits": used_credits,
+            "remaining_credits": user_package.credits_remaining,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel package: {str(e)}"
         )

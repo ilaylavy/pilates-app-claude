@@ -391,11 +391,25 @@ class BookingService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
             )
 
-        if not user_package.is_valid:
+        # Check if package is pending payment approval
+        if hasattr(user_package, 'status') and user_package.status.value == 'reserved':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Package is expired or has no remaining credits",
+                detail="Package is pending payment approval. Please contact reception to complete your cash payment."
             )
+
+        if not user_package.is_valid:
+            # Check if it's due to pending approval (once migration is complete)
+            if hasattr(user_package, 'is_pending_approval') and user_package.is_pending_approval:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Package is pending payment approval. Please contact reception to complete your cash payment."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Package is expired or has no remaining credits",
+                )
 
         # Use credit
         if not user_package.use_credit():
@@ -510,3 +524,31 @@ class BookingService:
             await self.db.commit()
 
             # TODO: Send notification to user about promotion
+
+    async def add_to_waitlist(self, user_id: int, class_instance_id: int) -> WaitlistEntry:
+        """Public method to add user to waitlist for a class."""
+        return await self._add_to_waitlist(user_id, class_instance_id)
+    
+    async def remove_from_waitlist(self, user_id: int, class_instance_id: int):
+        """Remove user from waitlist for a class."""
+        # Find active waitlist entry for user and class
+        stmt = select(WaitlistEntry).where(
+            and_(
+                WaitlistEntry.user_id == user_id,
+                WaitlistEntry.class_instance_id == class_instance_id,
+                WaitlistEntry.is_active == True,
+            )
+        )
+        result = await self.db.execute(stmt)
+        waitlist_entry = result.scalar_one_or_none()
+        
+        if not waitlist_entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found on waitlist for this class"
+            )
+        
+        # Mark as inactive instead of deleting for audit trail
+        waitlist_entry.is_active = False
+        
+        await self.db.commit()

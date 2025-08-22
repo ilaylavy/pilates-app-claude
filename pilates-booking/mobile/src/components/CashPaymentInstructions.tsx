@@ -5,38 +5,71 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
+import { CashPaymentInstructions as CashPaymentInstructionsType } from '../types';
+import Button from './common/Button';
 
 interface Props {
-  packageName: string;
-  price: number;
-  currency: string;
-  reservationHours?: number;
+  visible: boolean;
+  instructions: CashPaymentInstructionsType;
+  onClose: () => void;
 }
 
 const CashPaymentInstructions: React.FC<Props> = ({
-  packageName,
-  price,
-  currency,
-  reservationHours = 48,
+  visible,
+  instructions,
+  onClose,
 }) => {
-  return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.headerIcon}>💵</Text>
-        <Text style={styles.headerTitle}>Cash Payment Selected</Text>
-        <Text style={styles.headerSubtitle}>
-          Reserve now, pay at studio reception
-        </Text>
-      </View>
+  const getReservationHours = () => {
+    if (instructions.reservation_expires_at) {
+      const expiryTime = new Date(instructions.reservation_expires_at);
+      const now = new Date();
+      const hoursLeft = Math.ceil((expiryTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+      return Math.max(0, hoursLeft);
+    }
+    return 48; // Default
+  };
 
-      <View style={styles.packageSummary}>
-        <Text style={styles.packageName}>{packageName}</Text>
-        <Text style={styles.packagePrice}>
-          {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)}
-        </Text>
-      </View>
+  const reservationHours = getReservationHours();
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={styles.container}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Ionicons name="close" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Cash Payment</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <Text style={styles.headerIcon}>💵</Text>
+            <Text style={styles.headerTitle}>{instructions.message}</Text>
+            <Text style={styles.headerSubtitle}>
+              Reserve now, pay at studio reception
+            </Text>
+          </View>
+
+          <View style={styles.packageSummary}>
+            <Text style={styles.packageName}>{instructions.package_name}</Text>
+            <Text style={styles.packagePrice}>
+              {instructions.currency === 'ILS' ? '₪' : instructions.currency}{Number(instructions.price || 0).toFixed(2)}
+            </Text>
+            <Text style={styles.referenceCode}>
+              Reference: {instructions.reference_code}
+            </Text>
+          </View>
 
       <View style={styles.instructionsContainer}>
         <Text style={styles.sectionTitle}>What happens next:</Text>
@@ -91,12 +124,31 @@ const CashPaymentInstructions: React.FC<Props> = ({
         </View>
       </View>
 
-      <View style={styles.confirmationNote}>
-        <Text style={styles.confirmationText}>
-          You'll receive a confirmation email with your reservation details and payment instructions.
-        </Text>
+          <View style={styles.instructionsListContainer}>
+            <Text style={styles.instructionTitle}>Payment Instructions:</Text>
+            {instructions.payment_instructions.map((instruction, index) => (
+              <Text key={index} style={styles.instructionText}>
+                • {instruction}
+              </Text>
+            ))}
+          </View>
+
+          <View style={styles.confirmationNote}>
+            <Text style={styles.confirmationText}>
+              Estimated approval time: {instructions.estimated_approval_time}
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Button
+            title="Got it!"
+            onPress={onClose}
+            style={styles.closeButtonStyle}
+          />
+        </View>
       </View>
-    </ScrollView>
+    </Modal>
   );
 };
 
@@ -105,11 +157,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  closeButton: {
+    padding: SPACING.xs,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  placeholder: {
+    width: 32,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.lg,
+  },
   header: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: SPACING.lg,
     alignItems: 'center',
+    marginTop: SPACING.lg,
     marginBottom: SPACING.lg,
   },
   headerIcon: {
@@ -145,6 +222,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.primary,
+    marginBottom: SPACING.sm,
+  },
+  referenceCode: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.secondary,
+    fontFamily: 'monospace',
+    backgroundColor: COLORS.secondary + '15',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: 8,
   },
   instructionsContainer: {
     backgroundColor: COLORS.surface,
@@ -227,6 +315,33 @@ const styles = StyleSheet.create({
     color: COLORS.success,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  instructionsListContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  instructionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  instructionText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.xs,
+  },
+  footer: {
+    padding: SPACING.lg,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  closeButtonStyle: {
+    borderRadius: 12,
   },
 });
 

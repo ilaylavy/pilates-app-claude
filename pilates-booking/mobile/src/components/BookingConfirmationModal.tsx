@@ -11,7 +11,6 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import QRCode from 'react-native-qrcode-svg';
 import { ClassInstance, Booking } from '../types';
 import { addClassToCalendar } from '../utils/calendarUtils';
 
@@ -58,13 +57,6 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
 
   const { date, time } = formatDateTime(classInstance.start_datetime);
 
-  const qrCodeData = JSON.stringify({
-    bookingId: booking.id,
-    classId: classInstance.id,
-    userId: booking.user_id,
-    className: classInstance.template.name,
-    date: classInstance.start_datetime,
-  });
 
   useEffect(() => {
     if (visible) {
@@ -197,18 +189,6 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
               </View>
             )}
 
-            {/* QR Code */}
-            <View style={styles.qrContainer}>
-              <Text style={styles.qrTitle}>Check-in QR Code</Text>
-              <View style={styles.qrCodeWrapper}>
-                <QRCode
-                  value={qrCodeData}
-                  size={120}
-                  backgroundColor="white"
-                />
-              </View>
-              <Text style={styles.qrSubtitle}>Show this at the studio</Text>
-            </View>
 
             {/* Action Buttons */}
             <View style={styles.actionsContainer}>
@@ -347,35 +327,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FF9800',
-  },
-  qrContainer: {
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  qrTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 15,
-  },
-  qrCodeWrapper: {
-    padding: 15,
-    backgroundColor: 'white',
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-    marginBottom: 10,
-  },
-  qrSubtitle: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
   },
   actionsContainer: {
     gap: 12,
