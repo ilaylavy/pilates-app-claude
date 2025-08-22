@@ -165,6 +165,7 @@ export interface UserListItem {
   role: 'student' | 'instructor' | 'admin';
   is_active: boolean;
   is_verified: boolean;
+  avatar_url?: string;
   created_at: string;
   total_bookings: number;
   active_packages: number;

@@ -131,6 +131,115 @@ async def deactivate_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.get("/users/{user_id}/packages")
+async def get_user_packages(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get all packages for a specific user (admin only)."""
+    try:
+        # Get user packages with package details
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.package),
+                selectinload(UserPackage.user)
+            )
+            .where(UserPackage.user_id == user_id)
+            .order_by(UserPackage.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        user_packages = result.scalars().all()
+
+        packages_data = []
+        for user_package in user_packages:
+            packages_data.append({
+                "id": user_package.id,
+                "package_id": user_package.package_id,
+                "package_name": user_package.package.name,
+                "package_description": user_package.package.description,
+                "total_credits": user_package.package.credits,
+                "credits_remaining": user_package.credits_remaining,
+                "credits_used": user_package.package.credits - user_package.credits_remaining,
+                "price": float(user_package.package.price),
+                "status": user_package.status.value,
+                "is_active": user_package.is_active,
+                "is_expired": user_package.is_expired,
+                "purchased_at": user_package.created_at.isoformat(),
+                "expires_at": user_package.expiry_date.isoformat() if user_package.expiry_date else None,
+                "is_unlimited": user_package.package.is_unlimited,
+                "validity_days": user_package.package.validity_days,
+            })
+
+        return packages_data
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user packages: {str(e)}"
+        )
+
+
+@router.get("/users/{user_id}/bookings")
+async def get_user_bookings(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get all bookings for a specific user (admin only)."""
+    try:
+        # Import here to avoid circular imports
+        from ....models.booking import Booking
+        from ....models.class_schedule import ClassInstance, ClassTemplate
+
+        # Get user bookings with class details
+        stmt = (
+            select(Booking)
+            .options(
+                selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+                selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+                selectinload(Booking.user)
+            )
+            .where(Booking.user_id == user_id)
+            .order_by(Booking.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        bookings = result.scalars().all()
+
+        bookings_data = []
+        for booking in bookings:
+            class_instance = booking.class_instance
+            class_template = class_instance.template
+            instructor = class_instance.instructor
+
+            bookings_data.append({
+                "id": booking.id,
+                "booking_date": booking.created_at.isoformat(),
+                "status": booking.status.value,
+                "class_id": class_instance.id,
+                "class_name": class_template.name,
+                "class_description": class_template.description,
+                "class_date": class_instance.start_datetime.isoformat(),
+                "class_duration": class_template.duration_minutes,
+                "instructor_name": f"{instructor.first_name} {instructor.last_name}" if instructor else "TBA",
+                "location": getattr(class_template, 'location', 'TBA'),
+                "capacity": class_template.capacity,
+                "is_cancelled": booking.status == 'cancelled',
+                "cancelled_at": booking.cancellation_date.isoformat() if booking.cancellation_date else None,
+                "attended": booking.status == 'completed',
+                "no_show": booking.status == 'no_show',
+            })
+
+        return bookings_data
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user bookings: {str(e)}"
+        )
+
+
 @router.get("/analytics/dashboard", response_model=DashboardAnalytics)
 async def get_dashboard_analytics(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)

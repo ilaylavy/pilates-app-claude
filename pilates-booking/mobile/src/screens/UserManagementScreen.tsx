@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,12 +20,15 @@ import { COLORS, SPACING } from '../utils/config';
 import { AdminGuard } from '../components/AdminGuard';
 import { adminApi } from '../api/admin';
 import { UserListItem } from '../types';
+import StudentDetailModal from '../components/StudentDetailModal';
 
 const UserManagementScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<string>('student');
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<UserListItem | null>(null);
+  const [isStudentDetailVisible, setIsStudentDetailVisible] = useState(false);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
@@ -70,6 +74,11 @@ const UserManagementScreen: React.FC = () => {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to deactivate user');
     },
   });
+
+  const handleViewStudent = (student: UserListItem) => {
+    setSelectedStudentForDetail(student);
+    setIsStudentDetailVisible(true);
+  };
 
   const handleEditUser = (user: UserListItem) => {
     setSelectedUser(user);
@@ -128,7 +137,22 @@ const UserManagementScreen: React.FC = () => {
   };
 
   const renderUserItem = ({ item }: { item: UserListItem }) => (
-    <View style={styles.userCard}>
+    <TouchableOpacity 
+      style={styles.userCard}
+      onPress={() => handleViewStudent(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.userAvatar}>
+        {item.avatar_url ? (
+          <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
+        ) : (
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarInitials}>
+              {item.first_name[0]}{item.last_name[0]}
+            </Text>
+          </View>
+        )}
+      </View>
       <View style={styles.userInfo}>
         <View style={styles.userHeader}>
           <Text style={styles.userName}>{item.first_name} {item.last_name}</Text>
@@ -159,7 +183,7 @@ const UserManagementScreen: React.FC = () => {
           <Ionicons name="person-remove" size={20} color={COLORS.error} />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderEditModal = () => (
@@ -271,7 +295,7 @@ const UserManagementScreen: React.FC = () => {
   return (
     <AdminGuard requiredRoles={['admin']}>
       <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>User Management</Text>
+        <Text style={styles.title}>Students</Text>
         
         {/* Search and Filter */}
         <View style={styles.searchContainer}>
@@ -286,24 +310,19 @@ const UserManagementScreen: React.FC = () => {
           </View>
           
           <View style={styles.filterContainer}>
-            <Text style={styles.filterLabel}>Role:</Text>
+            <Text style={styles.filterLabel}>Show:</Text>
+            <TouchableOpacity
+              style={[styles.filterButton, selectedRole === 'student' && styles.activeFilter]}
+              onPress={() => setSelectedRole('student')}
+            >
+              <Text style={[styles.filterText, selectedRole === 'student' && styles.activeFilterText]}>Students Only</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.filterButton, !selectedRole && styles.activeFilter]}
               onPress={() => setSelectedRole('')}
             >
-              <Text style={[styles.filterText, !selectedRole && styles.activeFilterText]}>All</Text>
+              <Text style={[styles.filterText, !selectedRole && styles.activeFilterText]}>All Users</Text>
             </TouchableOpacity>
-            {['student', 'instructor', 'admin'].map((role) => (
-              <TouchableOpacity
-                key={role}
-                style={[styles.filterButton, selectedRole === role && styles.activeFilter]}
-                onPress={() => setSelectedRole(role)}
-              >
-                <Text style={[styles.filterText, selectedRole === role && styles.activeFilterText]}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
           </View>
         </View>
 
@@ -324,6 +343,15 @@ const UserManagementScreen: React.FC = () => {
         )}
 
         {renderEditModal()}
+        
+        <StudentDetailModal
+          visible={isStudentDetailVisible}
+          student={selectedStudentForDetail}
+          onClose={() => {
+            setIsStudentDetailVisible(false);
+            setSelectedStudentForDetail(null);
+          }}
+        />
       </SafeAreaView>
     </AdminGuard>
   );
@@ -403,6 +431,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  userAvatar: {
+    marginRight: SPACING.md,
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  avatarPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitials: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.white,
   },
   userInfo: {
     flex: 1,

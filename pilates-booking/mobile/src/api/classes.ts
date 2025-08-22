@@ -26,6 +26,20 @@ export interface ClassUpdateData {
   notes?: string;
 }
 
+export interface ClassTemplate {
+  id: number;
+  name: string;
+  description: string;
+  duration_minutes: number;
+  capacity: number;
+  level: string;
+  day_of_week: string;
+  start_time: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export const classesApi = {
   getUpcomingClasses: async (daysAhead = 7): Promise<ClassInstance[]> => {
     const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/upcoming?days_ahead=${daysAhead}`);
@@ -52,6 +66,11 @@ export const classesApi = {
     return response.data;
   },
 
+  getTemplates: async (): Promise<ClassTemplate[]> => {
+    const response = await apiClient.get<ClassTemplate[]>('/api/v1/classes/templates');
+    return response.data;
+  },
+
   createClass: async (classData: ClassCreateData): Promise<ClassInstance> => {
     const response = await apiClient.post<ClassInstance>('/api/v1/classes/create', classData);
     return response.data;
@@ -64,5 +83,20 @@ export const classesApi = {
 
   deleteClass: async (classId: number): Promise<void> => {
     await apiClient.delete(`/api/v1/classes/${classId}`);
+  },
+
+  // Template management methods
+  createTemplate: async (templateData: Omit<ClassTemplate, 'id' | 'created_at' | 'updated_at' | 'is_active'>): Promise<ClassTemplate> => {
+    const response = await apiClient.post<ClassTemplate>('/api/v1/classes/templates', templateData);
+    return response.data;
+  },
+
+  updateTemplate: async (templateId: number, templateData: Partial<ClassTemplate>): Promise<ClassTemplate> => {
+    const response = await apiClient.patch<ClassTemplate>(`/api/v1/classes/templates/${templateId}`, templateData);
+    return response.data;
+  },
+
+  deleteTemplate: async (templateId: number): Promise<void> => {
+    await apiClient.delete(`/api/v1/classes/templates/${templateId}`);
   },
 };

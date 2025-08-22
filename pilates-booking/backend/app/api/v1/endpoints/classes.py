@@ -149,6 +149,68 @@ async def get_class_templates(
     return templates
 
 
+@router.patch("/templates/{template_id}", response_model=ClassTemplateResponse)
+async def update_class_template(
+    template_id: int,
+    template_update: ClassTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Update a class template (admin only)."""
+    # Get existing template
+    stmt = select(ClassTemplate).where(ClassTemplate.id == template_id)
+    result = await db.execute(stmt)
+    template = result.scalar_one_or_none()
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+
+    # Update fields
+    update_data = template_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(template, field, value)
+
+    await db.commit()
+    await db.refresh(template)
+
+    return template
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_class_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Delete a class template (admin only)."""
+    # Get existing template
+    stmt = select(ClassTemplate).where(ClassTemplate.id == template_id)
+    result = await db.execute(stmt)
+    template = result.scalar_one_or_none()
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+
+    # Check if template is being used by any instances
+    from sqlalchemy import func
+    stmt = select(func.count(ClassInstance.id)).where(ClassInstance.template_id == template_id)
+    result = await db.execute(stmt)
+    instance_count = result.scalar()
+
+    if instance_count > 0:
+        # Instead of deleting, mark as inactive
+        template.is_active = False
+        await db.commit()
+    else:
+        # Safe to delete if no instances
+        await db.delete(template)
+        await db.commit()
+
+
 @router.post(
     "/instances",
     response_model=ClassInstanceResponse,

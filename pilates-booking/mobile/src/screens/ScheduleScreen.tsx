@@ -14,6 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../navigation/Navigation';
 import { COLORS, SPACING } from '../utils/config';
 import ClassCard from '../components/ClassCard';
 import CalendarView from '../components/CalendarView';
@@ -30,17 +33,14 @@ import { packagesApi } from '../api/packages';
 import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { ClassInstance } from '../types';
 
+type ScheduleScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Main'>;
+
 const ScheduleScreen: React.FC = () => {
+  const navigation = useNavigation<ScheduleScreenNavigationProp>();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [showCalendarView, setShowCalendarView] = useState(false);
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    start_datetime: '',
-    end_datetime: '',
-    notes: '',
-  });
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
   const [filterInstructor, setFilterInstructor] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -213,7 +213,7 @@ const ScheduleScreen: React.FC = () => {
       // Show booking confirmation modal for successful bookings
       if (result.booking && result.success) {
         // Find the class instance to show in the modal
-        const classInstance = weekClasses?.find(cls => cls.id === classInstanceId);
+        const classInstance = classes?.find(cls => cls.id === classInstanceId);
         if (classInstance) {
           setCompletedBooking(result.booking);
           setBookedClassInstance(classInstance);
@@ -309,13 +309,7 @@ const ScheduleScreen: React.FC = () => {
   };
 
   const handleEditClass = (classInstance: ClassInstance) => {
-    setSelectedClass(classInstance);
-    setEditFormData({
-      start_datetime: classInstance.start_datetime,
-      end_datetime: classInstance.end_datetime,
-      notes: classInstance.notes || '',
-    });
-    setEditModalVisible(true);
+    navigation.navigate('EditClass', { classInstance });
   };
 
   // Booking action handlers
@@ -369,27 +363,6 @@ const ScheduleScreen: React.FC = () => {
     );
   };
 
-  const handleSaveEdit = async () => {
-    if (!selectedClass) return;
-    
-    try {
-      // Convert datetime strings to the format expected by the API
-      const updateData = {
-        start_datetime: editFormData.start_datetime,
-        end_datetime: editFormData.end_datetime,
-        notes: editFormData.notes,
-      };
-
-      await classesApi.updateClass(selectedClass.id, updateData);
-      queryClient.invalidateQueries({ queryKey: ['classes'] });
-      setEditModalVisible(false);
-      setSelectedClass(null);
-      Alert.alert('Success', 'Class updated successfully');
-    } catch (error) {
-      console.error('Edit class error:', error);
-      Alert.alert('Error', 'Failed to update class');
-    }
-  };
 
   const handleDeleteClass = (classInstance: ClassInstance) => {
     Alert.alert(
@@ -415,8 +388,15 @@ const ScheduleScreen: React.FC = () => {
   };
 
   const handleAddClass = () => {
-    console.log('Add new class');
-    // TODO: Navigate to add class screen
+    navigation.navigate('AddClass');
+  };
+
+  const handleManageTemplates = () => {
+    navigation.navigate('TemplateManagement');
+  };
+
+  const handleBulkOperations = () => {
+    navigation.navigate('BulkOperations');
   };
 
   const filterClasses = (classes: ClassInstance[]) => {
@@ -691,80 +671,6 @@ const ScheduleScreen: React.FC = () => {
         }}
       />
 
-      {/* Edit Class Modal */}
-      <Modal
-        visible={editModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => setEditModalVisible(false)}
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Edit Class</Text>
-            <TouchableOpacity
-              onPress={handleSaveEdit}
-              style={styles.modalSaveButton}
-            >
-              <Text style={styles.modalSaveText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {/* Class Info */}
-            <View style={styles.modalSection}>
-              <Text style={styles.modalSectionTitle}>Class Information</Text>
-              <Text style={styles.modalClassInfo}>
-                {selectedClass?.template?.name} • {selectedClass?.instructor?.first_name} {selectedClass?.instructor?.last_name}
-              </Text>
-            </View>
-
-            {/* Start Date/Time */}
-            <View style={styles.modalSection}>
-              <Text style={styles.modalLabel}>Start Date & Time</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={editFormData.start_datetime ? new Date(editFormData.start_datetime).toLocaleString() : ''}
-                placeholder="Start date and time"
-                editable={false}
-              />
-              <Text style={styles.modalInputNote}>
-                Note: Date/time editing will be available in a future update
-              </Text>
-            </View>
-
-            {/* End Date/Time */}
-            <View style={styles.modalSection}>
-              <Text style={styles.modalLabel}>End Date & Time</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={editFormData.end_datetime ? new Date(editFormData.end_datetime).toLocaleString() : ''}
-                placeholder="End date and time"
-                editable={false}
-              />
-            </View>
-
-            {/* Notes */}
-            <View style={styles.modalSection}>
-              <Text style={styles.modalLabel}>Notes</Text>
-              <TextInput
-                style={[styles.modalInput, styles.modalTextArea]}
-                value={editFormData.notes}
-                onChangeText={(text) => setEditFormData(prev => ({ ...prev, notes: text }))}
-                placeholder="Add notes for this class..."
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
 
       {/* Booking Confirmation Modal */}
       {completedBooking && bookedClassInstance && (
@@ -789,7 +695,8 @@ const ScheduleScreen: React.FC = () => {
       {isAdmin && !showCalendarView && (
         <FloatingActionButton
           onAddClass={handleAddClass}
-          onBatchOperations={() => Alert.alert('Batch Operations', 'Feature coming soon!')}
+          onManageTemplates={handleManageTemplates}
+          onBatchOperations={handleBulkOperations}
           onCopyClass={() => Alert.alert('Copy Class', 'Feature coming soon!')}
           onCreateRecurring={() => Alert.alert('Recurring Class', 'Feature coming soon!')}
         />
@@ -953,85 +860,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
-  },
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-  },
-  modalCloseButton: {
-    padding: SPACING.xs,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-    textAlign: 'center',
-  },
-  modalSaveButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-  },
-  modalSaveText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  modalContent: {
-    flex: 1,
-    padding: SPACING.lg,
-  },
-  modalSection: {
-    marginBottom: SPACING.lg,
-  },
-  modalSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-  },
-  modalClassInfo: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    backgroundColor: COLORS.lightGray,
-    padding: SPACING.md,
-    borderRadius: 8,
-  },
-  modalLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: 16,
-    backgroundColor: COLORS.white,
-  },
-  modalTextArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  modalInputNote: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    fontStyle: 'italic',
   },
 });
 

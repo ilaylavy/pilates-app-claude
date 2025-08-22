@@ -29,6 +29,10 @@ import PackageManagementScreen from '../screens/PackageManagementScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SystemSettingsScreen from '../screens/SystemSettingsScreen';
 import AdminApprovalScreen from '../screens/AdminApprovalScreen';
+import AddClassScreen from '../screens/AddClassScreen';
+import EditClassScreen from '../screens/EditClassScreen';
+import TemplateManagementScreen from '../screens/TemplateManagementScreen';
+import BulkOperationsScreen from '../screens/BulkOperationsScreen';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -42,6 +46,10 @@ export type RootStackParamList = {
   Reports: undefined;
   SystemSettings: undefined;
   AdminApproval: undefined;
+  AddClass: undefined;
+  EditClass: { classInstance: any };
+  TemplateManagement: undefined;
+  BulkOperations: undefined;
   Payment: { 
     packageId: number; 
     packageName: string; 
@@ -148,7 +156,7 @@ const MainNavigator = () => {
       {isAdmin && (
         <>
           <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'Classes' }} />
-          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Users' }} />
+          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
           <MainTab.Screen name="Packages" component={PackageManagementScreen} />
           <MainTab.Screen name="Approvals" component={AdminApprovalScreen} options={{ title: 'Approvals' }} />
           <MainTab.Screen name="Reports" component={ReportsScreen} />
@@ -237,6 +245,26 @@ const Navigation = () => {
             name="PurchaseConfirmation" 
             component={PurchaseConfirmationScreen}
             options={{ headerShown: true, title: 'Purchase Confirmation' }}
+          />
+          <RootStack.Screen 
+            name="AddClass" 
+            component={AddClassScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen 
+            name="EditClass" 
+            component={EditClassScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen 
+            name="TemplateManagement" 
+            component={TemplateManagementScreen}
+            options={{ headerShown: true, title: 'Class Templates' }}
+          />
+          <RootStack.Screen 
+            name="BulkOperations" 
+            component={BulkOperationsScreen}
+            options={{ headerShown: false }}
           />
         </>
       ) : (

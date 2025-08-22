@@ -16,6 +16,7 @@ interface FloatingActionButtonProps {
   onBatchOperations?: () => void;
   onCopyClass?: () => void;
   onCreateRecurring?: () => void;
+  onManageTemplates?: () => void;
 }
 
 const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
@@ -23,6 +24,7 @@ const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
   onBatchOperations,
   onCopyClass,
   onCreateRecurring,
+  onManageTemplates,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [rotation] = useState(new Animated.Value(0));
@@ -72,6 +74,14 @@ const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
       onPress: () => {
         setExpanded(false);
         onCreateRecurring?.();
+      },
+    },
+    {
+      icon: 'document-text',
+      label: 'Manage Templates',
+      onPress: () => {
+        setExpanded(false);
+        onManageTemplates?.();
       },
     },
     {
