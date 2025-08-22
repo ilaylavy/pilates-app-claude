@@ -223,18 +223,21 @@ async def create_cash_reservation(
 
         if existing_reservation and not existing_reservation.is_reservation_expired:
             logger.info(
-                "User already has active reservation - returning existing reservation",
-                user_id=str(current_user.id),
-                package_id=package_id,
-                existing_reservation_id=str(existing_reservation.id),
+                f"User already has active reservation - returning existing reservation",
+                extra={
+                    "user_id": str(current_user.id),
+                    "package_id": str(package.id),
+                    "existing_reservation_id": str(existing_reservation.id),
+                }
             )
             
             # Return existing reservation instead of error
             return {
-                "message": "You already have an active reservation for this package",
+                "message": "You already have an active reservation for this package - waiting for admin approval",
                 "reservation_id": existing_reservation.id,
-                "expires_at": existing_reservation.expires_at,
-                "is_existing": True
+                "expires_at": existing_reservation.reservation_expires_at.isoformat() if existing_reservation.reservation_expires_at else None,
+                "is_existing": True,
+                "status": "pending_approval"
             }
 
         # Set reservation expiry (48 hours from now)
@@ -278,11 +281,12 @@ async def create_cash_reservation(
         await db.refresh(payment)
 
         return {
-            "message": "Package reserved successfully",
+            "message": "Package reserved successfully - waiting for admin approval",
             "reservation_id": str(user_package.id),
             "expires_at": reservation_expires_at.isoformat(),
             "payment_id": payment.id,
-            "instructions": "Please pay at reception within 48 hours to activate your credits",
+            "instructions": "Your package is reserved. An admin will approve your purchase and activate your credits soon.",
+            "status": "pending_approval"
         }
 
     except Exception as e:

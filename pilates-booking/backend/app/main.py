@@ -81,9 +81,9 @@ if admin_whitelist:
     app.add_middleware(IPWhitelistMiddleware, whitelist=admin_whitelist)
 
 # Set all CORS enabled origins
-if settings.CORS_ORIGINS:
+cors_origins = settings.cors_origins_list
+if cors_origins:
     # Configure CORS properly for production
-    cors_origins = settings.CORS_ORIGINS
     if settings.ENVIRONMENT == "production":
         # Remove wildcard in production
         cors_origins = [origin for origin in cors_origins if origin != "*"]

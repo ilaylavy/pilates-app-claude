@@ -267,7 +267,7 @@ const PaymentMethodsScreen: React.FC = () => {
             </View>
             <View style={styles.historyAmount}>
               <Text style={styles.historyAmountText}>
-                ₪{payment.amount.toFixed(2)}
+                ₪{Number(payment.amount || 0).toFixed(2)}
               </Text>
               {payment.status === 'completed' && payment.is_refundable && (
                 <Text style={styles.refundableText}>Refundable</Text>

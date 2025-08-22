@@ -70,6 +70,7 @@ class ClassInstance(Base):
         Integer, nullable=True
     )  # Override template capacity if needed
     notes = Column(Text, nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")  # For optimistic locking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -317,7 +317,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     if (paymentMethod === 'card') {
       return (
         <Button
-          title={`Pay ${currency === 'ils' ? '₪' : currency.toUpperCase()}${price.toFixed(2)}`}
+          title={`Pay ${currency === 'ils' ? '₪' : currency.toUpperCase()}${Number(price || 0).toFixed(2)}`}
           onPress={handleCardPayment}
           disabled={loading || !cardDetails?.complete}
           loading={loading}
@@ -350,7 +350,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Package Information */}
         <View style={styles.packageInfo}>
           <Text style={styles.packageName}>{packageName}</Text>
-          <Text style={styles.packagePrice}>₪{price.toFixed(2)}</Text>
+          <Text style={styles.packagePrice}>₪{Number(price || 0).toFixed(2)}</Text>
         </View>
 
         {/* Payment Method Selection */}

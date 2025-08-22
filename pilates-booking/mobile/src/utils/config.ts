@@ -17,7 +17,7 @@ export const BACKUP_API_URLS = [
   'http://10.0.0.19:8000',      // Another local IP
   'http://10.0.2.2:8000',      // Android emulator host
   'http://localhost:8000',     // standard localhost
-  'http://192.168.1.107:8000', // Common router IP range
+  'http://192.168.235.110:8000', // Common router IP range
   'http://192.168.0.107:8000', // Common router IP range
 ];
 

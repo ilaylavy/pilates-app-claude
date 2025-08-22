@@ -101,28 +101,33 @@ async def safe_get_booking_with_relationships(session: AsyncSession, booking_id:
 
 
 async def safe_get_user_bookings(session: AsyncSession, user_id: int, include_past: bool = False) -> List[Any]:
-    """Safely get user bookings with all needed relationships."""
+    """Safely get user bookings with all needed relationships using optimized query."""
     from ..models.booking import Booking
     from ..models.class_schedule import ClassInstance
     from datetime import datetime, timezone
+    from sqlalchemy.orm import selectinload
     
-    query = (safe_query(session, Booking)
-            .with_relationships("user", "user_package") 
-            .with_nested_relationship("class_instance", "template")
-            .with_nested_relationship("class_instance", "instructor")
-            .where(Booking.user_id == user_id))
+    # Build the base query with all relationships loaded efficiently
+    stmt = select(Booking).options(
+        selectinload(Booking.user),
+        selectinload(Booking.user_package),
+        selectinload(Booking.class_instance).selectinload(ClassInstance.template),
+        selectinload(Booking.class_instance).selectinload(ClassInstance.instructor)
+    ).where(Booking.user_id == user_id)
+    
+    # Add join for filtering and ordering by class start time
+    stmt = stmt.join(ClassInstance, Booking.class_instance_id == ClassInstance.id)
     
     if not include_past:
-        # Join with ClassInstance to filter by datetime
-        from sqlalchemy import and_
-        query = query.where(ClassInstance.start_datetime > datetime.now(timezone.utc))
-        query._stmt = query._stmt.join(ClassInstance)
-        query = query.order_by(ClassInstance.start_datetime)
+        # Filter to only future classes
+        stmt = stmt.where(ClassInstance.start_datetime > datetime.now(timezone.utc))
+        stmt = stmt.order_by(ClassInstance.start_datetime)
     else:
-        query._stmt = query._stmt.join(ClassInstance)
-        query = query.order_by(ClassInstance.start_datetime.desc())
-        
-    return await query.get_all()
+        # Include all classes, ordered by most recent first
+        stmt = stmt.order_by(ClassInstance.start_datetime.desc())
+    
+    result = await session.execute(stmt)
+    return result.scalars().unique().all()  # unique() to avoid duplicate results from joins
 
 
 async def safe_get_class_instance_with_counts(session: AsyncSession, class_id: int) -> Optional[Any]:

@@ -466,9 +466,8 @@ def setup_logging() -> None:
                 "propagate": False,
             },
             "app.database": {
-                "level": "DEBUG",
-                "handlers": ["database_file"]
-                + (["console"] if log_level == "DEBUG" else []),
+                "level": "INFO",
+                "handlers": ["database_file"],
                 "propagate": False,
             },
             "app.booking": {
@@ -504,8 +503,7 @@ def setup_logging() -> None:
             },
             "sqlalchemy.engine": {
                 "level": "WARNING",
-                "handlers": ["database_file"]
-                + (["console"] if log_level == "DEBUG" else []),
+                "handlers": ["database_file"],
                 "propagate": False,
             },
             "sqlalchemy.dialects": {

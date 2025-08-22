@@ -94,7 +94,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleShare = async () => {
     try {
       const message = isCardPayment
-        ? `I just purchased ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nCredits: ${credits}\nAmount: ${currency === 'ils' ? '₪' : currency.toUpperCase()}${price.toFixed(2)}\n\nReady to get stronger! 🧘‍♀️`
+        ? `I just purchased ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nCredits: ${credits}\nAmount: ${currency === 'ils' ? '₪' : currency.toUpperCase()}${Number(price || 0).toFixed(2)}\n\nReady to get stronger! 🧘‍♀️`
         : `I reserved ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nReservation: ${getReceiptNumber()}\n\nCan't wait to start my Pilates journey! 🧘‍♀️`;
 
       await Share.share({
@@ -140,7 +140,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Amount:</Text>
         <Text style={styles.detailValue}>
-          {currency === 'ils' ? '₪' : currency.toUpperCase()}{price.toFixed(2)}
+          {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)}
         </Text>
       </View>
 
@@ -196,7 +196,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.instructionItem}>
           <Text style={styles.instructionNumber}>2</Text>
           <Text style={styles.instructionText}>
-            Pay {currency === 'ils' ? '₪' : currency.toUpperCase()}{price.toFixed(2)} in cash and show this confirmation
+            Pay {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)} in cash and show this confirmation
           </Text>
         </View>
 

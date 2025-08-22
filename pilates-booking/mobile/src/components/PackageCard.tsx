@@ -170,8 +170,8 @@ const PackageCard: React.FC<PackageCardProps> = ({
             pkg.is_active && styles.valueText
           ]}>
             {pkg.is_unlimited 
-              ? `₪${(pkg.price / 30).toFixed(2)}/day` 
-              : `₪${(pkg.price / (pkg.credits || 1)).toFixed(2)}/class`
+              ? `₪${(Number(pkg.price) / 30).toFixed(2)}/day` 
+              : `₪${(Number(pkg.price) / (Number(pkg.credits) || 1)).toFixed(2)}/class`
             }
           </Text>
         </View>

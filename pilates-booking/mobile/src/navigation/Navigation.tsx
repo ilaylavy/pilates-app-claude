@@ -21,6 +21,7 @@ import PackagesScreen from '../screens/PackagesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
+import PurchaseConfirmationScreen from '../screens/PurchaseConfirmationScreen';
 
 // Admin screens
 import UserManagementScreen from '../screens/UserManagementScreen';
@@ -46,6 +47,16 @@ export type RootStackParamList = {
     currency: string; 
   };
   PaymentHistory: undefined;
+  PurchaseConfirmation: {
+    paymentMethod: string;
+    packageName: string;
+    price: string;
+    currency: string;
+    paymentId?: number;
+    reservationId?: string;
+    credits?: number;
+    expiryDate?: string;
+  };
 };
 
 export type AuthStackParamList = {
@@ -211,6 +222,11 @@ const Navigation = () => {
             name="PaymentHistory" 
             component={PaymentHistoryScreen}
             options={{ headerShown: true, title: 'Payment History' }}
+          />
+          <RootStack.Screen 
+            name="PurchaseConfirmation" 
+            component={PurchaseConfirmationScreen}
+            options={{ headerShown: true, title: 'Purchase Confirmation' }}
           />
         </>
       ) : (

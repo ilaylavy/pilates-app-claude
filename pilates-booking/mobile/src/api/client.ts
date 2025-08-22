@@ -7,6 +7,11 @@ class ApiClient {
   private instance: AxiosInstance;
   private currentBaseURL: string = API_BASE_URL;
   private refreshPromise: Promise<string> | null = null;
+  private isRefreshing: boolean = false;
+  private failedQueue: {
+    resolve: (token: string) => void;
+    reject: (error: Error) => void;
+  }[] = [];
 
   private buildUrl(url: string): string {
     return url.startsWith('/') ? url : `/${url}`;
@@ -206,22 +211,38 @@ class ApiClient {
             method: originalRequest?.method
           });
 
+          // If we're already refreshing, queue this request
+          if (this.isRefreshing) {
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({
+                resolve: (token: string) => {
+                  originalRequest.headers.Authorization = `Bearer ${token}`;
+                  resolve(this.instance(originalRequest));
+                },
+                reject: (err: any) => {
+                  reject(err);
+                }
+              });
+            });
+          }
+
+          // Set refreshing flag and start refresh process
+          this.isRefreshing = true;
+
           try {
-            // Use existing refresh promise or create new one to prevent race conditions
-            if (!this.refreshPromise) {
-              this.refreshPromise = this.performTokenRefresh();
-            }
+            // Perform token refresh
+            const accessToken = await this.performTokenRefresh();
             
-            const accessToken = await this.refreshPromise;
+            // Process queued requests with new token
+            this.processQueue(accessToken, null);
             
-            // Clear the refresh promise after completion
-            this.refreshPromise = null;
-            
+            // Update current request and execute
             originalRequest.headers.Authorization = `Bearer ${accessToken}`;
             return this.instance(originalRequest);
+            
           } catch (refreshError) {
-            // Clear the refresh promise on error
-            this.refreshPromise = null;
+            // Process queued requests with error
+            this.processQueue(null, refreshError);
             
             // Refresh failed, redirect to login
             Logger.error('Token refresh failed', refreshError as Error, {
@@ -239,12 +260,35 @@ class ApiClient {
             
             // Return 401 error to trigger app-wide logout
             return Promise.reject(new Error('Authentication failed - please log in again'));
+          } finally {
+            // Reset refreshing state
+            this.isRefreshing = false;
+            this.refreshPromise = null;
           }
         }
 
         return Promise.reject(error);
       }
     );
+  }
+
+  private processQueue(token: string | null, error: any) {
+    /**
+     * Process all queued requests after token refresh completes.
+     * Either resolves with new token or rejects with error.
+     */
+    this.failedQueue.forEach(({ resolve, reject }) => {
+      if (error) {
+        reject(error);
+      } else if (token) {
+        resolve(token);
+      } else {
+        reject(new Error('Token refresh succeeded but no token provided'));
+      }
+    });
+    
+    // Clear the queue
+    this.failedQueue = [];
   }
 
   private async performTokenRefresh(): Promise<string> {
@@ -255,23 +299,56 @@ class ApiClient {
 
     Logger.debug('Refresh token found, attempting refresh');
     
-    // Use the current working base URL instead of hardcoded API_BASE_URL
-    const response = await axios.post(`${this.currentBaseURL}/api/v1/auth/refresh`, {
-      refresh_token: refreshToken,
-    }, { timeout: 15000 }); // Shorter timeout for refresh
+    try {
+      // Use the current working base URL with shorter timeout for refresh
+      const response = await axios.post(`${this.currentBaseURL}/api/v1/auth/refresh`, {
+        refresh_token: refreshToken,
+      }, { 
+        timeout: 10000,  // 10 second timeout for refresh
+        validateStatus: (status) => status < 500, // Don't throw on 4xx errors
+      });
 
-    const { access_token, refresh_token: newRefreshToken } = response.data;
-    
-    await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
-    await SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+      if (response.status !== 200) {
+        throw new Error(`Token refresh failed with status ${response.status}: ${response.data?.message || 'Unknown error'}`);
+      }
 
-    // Log successful token refresh
-    Logger.info('Token refresh successful');
-    Logger.trackEvent('auth.token_refreshed', {
-      timestamp: new Date().toISOString()
-    });
+      const { access_token, refresh_token: newRefreshToken } = response.data;
+      
+      if (!access_token || !newRefreshToken) {
+        throw new Error('Invalid token refresh response: missing tokens');
+      }
+      
+      // Atomically store both tokens
+      await Promise.all([
+        SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token),
+        SecureStore.setItemAsync(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken)
+      ]);
 
-    return access_token;
+      // Log successful token refresh
+      Logger.info('Token refresh successful');
+      Logger.trackEvent('auth.token_refreshed', {
+        timestamp: new Date().toISOString()
+      });
+
+      return access_token;
+      
+    } catch (error: any) {
+      // Enhanced error handling for token refresh
+      Logger.error('Token refresh failed', error, {
+        errorCode: error.code,
+        errorMessage: error.message,
+        responseStatus: error.response?.status,
+        responseData: error.response?.data
+      });
+
+      // Clear invalid tokens on certain errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        Logger.warn('Clearing tokens due to auth error during refresh');
+        await this.clearTokens();
+      }
+
+      throw new Error(`Token refresh failed: ${error.message}`);
+    }
   }
 
   async clearTokens() {

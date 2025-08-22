@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -6,12 +6,14 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....api.v1.deps import get_admin_user, get_db
-from ....models.package import Package
+from ....models.package import Package, UserPackage, UserPackageStatus
+from ....models.payment import Payment, PaymentMethod, PaymentStatus
 from ....models.user import User, UserRole
 from ....schemas.admin import (AttendanceReport, DashboardAnalytics,
                                PackageCreate, PackageUpdate, RevenueReport,
                                UserListResponse, UserUpdate)
 from ....schemas.package import PackageResponse
+from sqlalchemy.orm import selectinload
 from ....services.admin_service import AdminService
 
 router = APIRouter()
@@ -266,3 +268,259 @@ async def get_attendance_report(
     admin_service = AdminService(db)
     report = await admin_service.get_attendance_report(start_date, end_date)
     return AttendanceReport(**report)
+
+
+# Cash Reservation Management Endpoints
+
+@router.get("/cash-reservations")
+async def get_pending_cash_reservations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get all pending cash reservations for admin approval."""
+    try:
+        # Get all pending cash reservations with user and package details
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.status == UserPackageStatus.RESERVED)
+            .order_by(UserPackage.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        reservations = result.scalars().all()
+
+        # Format response with relevant details
+        reservations_data = []
+        for reservation in reservations:
+            # Get associated payment details
+            payment_stmt = select(Payment).where(
+                and_(
+                    Payment.user_package_id == reservation.id,
+                    Payment.payment_method == PaymentMethod.CASH
+                )
+            )
+            payment_result = await db.execute(payment_stmt)
+            payment = payment_result.scalar_one_or_none()
+
+            reservations_data.append({
+                "id": reservation.id,
+                "user": {
+                    "id": reservation.user.id,
+                    "email": reservation.user.email,
+                    "first_name": reservation.user.first_name,
+                    "last_name": reservation.user.last_name,
+                },
+                "package": {
+                    "id": reservation.package.id,
+                    "name": reservation.package.name,
+                    "credits": reservation.package.credits,
+                    "price": float(reservation.package.price),
+                },
+                "credits_remaining": reservation.credits_remaining,
+                "created_at": reservation.created_at.isoformat(),
+                "expires_at": reservation.reservation_expires_at.isoformat() if reservation.reservation_expires_at else None,
+                "is_expired": reservation.is_reservation_expired,
+                "payment_id": payment.id if payment else None,
+                "payment_amount": float(payment.amount) if payment else None,
+            })
+
+        return {
+            "reservations": reservations_data,
+            "total": len(reservations_data)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve cash reservations: {str(e)}"
+        )
+
+
+@router.post("/cash-reservations/{reservation_id}/approve")
+async def approve_cash_reservation(
+    reservation_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Approve a cash reservation and activate the package."""
+    try:
+        # Get the reservation
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(
+                and_(
+                    UserPackage.id == reservation_id,
+                    UserPackage.status == UserPackageStatus.RESERVED,
+                )
+            )
+        )
+        result = await db.execute(stmt)
+        reservation = result.scalar_one_or_none()
+
+        if not reservation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Reservation not found or already processed",
+            )
+
+        if reservation.is_reservation_expired:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reservation has expired and cannot be approved",
+            )
+
+        # Activate the package
+        if not reservation.activate_from_reservation():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to activate reservation",
+            )
+
+        # Update payment status
+        payment_stmt = select(Payment).where(
+            and_(
+                Payment.user_package_id == reservation.id,
+                Payment.payment_method == PaymentMethod.CASH,
+                Payment.status == PaymentStatus.PENDING,
+            )
+        )
+        payment_result = await db.execute(payment_stmt)
+        payment = payment_result.scalar_one_or_none()
+
+        if payment:
+            payment.status = PaymentStatus.COMPLETED
+            payment.payment_date = datetime.now(timezone.utc)
+
+        await db.commit()
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "APPROVE_CASH_RESERVATION",
+            "UserPackage",
+            reservation_id,
+            {
+                "user_email": reservation.user.email,
+                "package_name": reservation.package.name,
+                "credits": reservation.credits_remaining,
+                "payment_id": payment.id if payment else None,
+            },
+            request,
+        )
+
+        return {
+            "message": "Cash reservation approved successfully",
+            "user_package_id": reservation.id,
+            "user_email": reservation.user.email,
+            "package_name": reservation.package.name,
+            "credits_available": reservation.credits_remaining,
+            "expires_at": reservation.expiry_date.isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to approve cash reservation: {str(e)}",
+        )
+
+
+@router.post("/cash-reservations/{reservation_id}/reject")
+async def reject_cash_reservation(
+    reservation_id: int,
+    reason: Optional[str] = None,
+    request: Request = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Reject/cancel a cash reservation."""
+    try:
+        # Get the reservation
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(
+                and_(
+                    UserPackage.id == reservation_id,
+                    UserPackage.status == UserPackageStatus.RESERVED,
+                )
+            )
+        )
+        result = await db.execute(stmt)
+        reservation = result.scalar_one_or_none()
+
+        if not reservation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Reservation not found or already processed",
+            )
+
+        # Cancel the reservation
+        if not reservation.cancel_reservation():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to cancel reservation",
+            )
+
+        # Update payment status to cancelled
+        payment_stmt = select(Payment).where(
+            and_(
+                Payment.user_package_id == reservation.id,
+                Payment.payment_method == PaymentMethod.CASH,
+                Payment.status == PaymentStatus.PENDING,
+            )
+        )
+        payment_result = await db.execute(payment_stmt)
+        payment = payment_result.scalar_one_or_none()
+
+        if payment:
+            payment.status = PaymentStatus.CANCELLED
+
+        await db.commit()
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "REJECT_CASH_RESERVATION",
+            "UserPackage",
+            reservation_id,
+            {
+                "user_email": reservation.user.email,
+                "package_name": reservation.package.name,
+                "reason": reason or "No reason provided",
+                "payment_id": payment.id if payment else None,
+            },
+            request,
+        )
+
+        return {
+            "message": "Cash reservation rejected successfully",
+            "user_package_id": reservation.id,
+            "user_email": reservation.user.email,
+            "package_name": reservation.package.name,
+            "reason": reason or "No reason provided",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject cash reservation: {str(e)}",
+        )

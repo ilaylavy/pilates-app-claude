@@ -57,7 +57,7 @@ class UserPackage(Base):
     purchase_date = Column(DateTime(timezone=True), server_default=func.now())
     expiry_date = Column(DateTime(timezone=True), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    status = Column(Enum(UserPackageStatus), default=UserPackageStatus.ACTIVE, nullable=False)
+    status = Column(Enum(UserPackageStatus, name='userpackagestatus', values_callable=lambda x: [e.value for e in x]), default=UserPackageStatus.ACTIVE, nullable=False)
     reservation_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

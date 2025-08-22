@@ -34,7 +34,7 @@ const CashPaymentInstructions: React.FC<Props> = ({
       <View style={styles.packageSummary}>
         <Text style={styles.packageName}>{packageName}</Text>
         <Text style={styles.packagePrice}>
-          {currency === 'ils' ? '₪' : currency.toUpperCase()}{price.toFixed(2)}
+          {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)}
         </Text>
       </View>
 

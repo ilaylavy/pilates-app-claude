@@ -185,8 +185,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
                 <Ionicons name="calculator" size={16} color={COLORS.success} />
                 <Text style={[styles.detailText, styles.valueText]}>
                   {pkg.is_unlimited
-                    ? `₪${(pkg.price / 30).toFixed(2)} per day`
-                    : `₪${(pkg.price / pkg.credits).toFixed(2)} per class`}
+                    ? `₪${(Number(pkg.price) / 30).toFixed(2)} per day`
+                    : `₪${(Number(pkg.price) / Number(pkg.credits)).toFixed(2)} per class`}
                 </Text>
               </View>
             </View>
