@@ -15,7 +15,7 @@ from .middleware.logging import LoggingMiddleware
 from .middleware.security import (InputSanitizationMiddleware,
                                   IPWhitelistMiddleware, RateLimitMiddleware,
                                   SecurityMiddleware)
-from .services.business_logging_service import business_logger
+from .services.business_logging_service import business_logger, EventType
 
 
 @asynccontextmanager
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Pilates Booking System API")
-    business_logger.log_event("system.shutdown")
+    business_logger.log_event(EventType.SYSTEM_SHUTDOWN)
 
     if hasattr(app.state, "redis") and app.state.redis:
         app.state.redis.close()

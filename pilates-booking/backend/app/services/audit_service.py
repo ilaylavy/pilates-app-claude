@@ -40,10 +40,15 @@ class AuditService:
             error_message=error_message,
         )
 
-        self.db.add(audit_log)
-        await self.db.commit()
-        await self.db.refresh(audit_log)
-        return audit_log
+        try:
+            self.db.add(audit_log)
+            await self.db.commit()
+            await self.db.refresh(audit_log)
+            return audit_log
+        except Exception as e:
+            await self.db.rollback()
+            # Re-raise the exception so the caller can handle it
+            raise e
 
     async def log_from_request(
         self,

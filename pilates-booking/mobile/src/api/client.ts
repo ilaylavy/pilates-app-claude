@@ -142,15 +142,21 @@ class ApiClient {
         const duration = originalRequest?.metadata ? Date.now() - originalRequest.metadata.startTime : 0;
         
         // Comprehensive error logging
+        const fullUrl = originalRequest?.url ? 
+          new URL(originalRequest.url, this.currentBaseURL).toString() : 
+          'unknown';
         const errorDetails = {
           method: originalRequest?.method?.toUpperCase(),
           url: originalRequest?.url,
+          fullUrl,
           baseURL: this.currentBaseURL,
           status: error.response?.status,
           statusText: error.response?.statusText,
           code: error.code,
           message: error.message,
           duration,
+          requestData: originalRequest?.data ? (typeof originalRequest.data === 'string' ? originalRequest.data : JSON.stringify(originalRequest.data).substring(0, 200)) : null,
+          responseData: error.response?.data ? JSON.stringify(error.response.data).substring(0, 500) : null,
           errorType: 'api_request_error'
         };
         
@@ -170,6 +176,16 @@ class ApiClient {
           });
         } else {
           Logger.error('API request failed', error, errorDetails);
+          // Also console log for immediate debugging
+          console.error('[ERROR] API request failed', {
+            fullUrl,
+            method: errorDetails.method,
+            status: errorDetails.status,
+            code: errorDetails.code,
+            message: errorDetails.message,
+            requestData: errorDetails.requestData,
+            responseData: errorDetails.responseData
+          });
         }
         
         // Track failed API call

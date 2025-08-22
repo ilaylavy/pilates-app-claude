@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
 } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { COLORS, SPACING } from '../utils/config';
 import Button from '../components/common/Button';
@@ -46,6 +49,7 @@ interface Props {
 }
 
 const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
+  const queryClient = useQueryClient();
   const {
     paymentMethod,
     packageName,
@@ -56,6 +60,14 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
     credits,
     expiryDate,
   } = route.params;
+
+  // Invalidate cache when screen is focused to ensure data is up to date
+  useFocusEffect(
+    React.useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+    }, [queryClient])
+  );
 
   const isCardPayment = paymentMethod === 'card';
   const isCashReservation = paymentMethod === 'cash';

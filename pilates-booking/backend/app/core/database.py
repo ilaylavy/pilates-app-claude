@@ -5,12 +5,22 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from .config import settings
 
-# Create async engine
+# Create async engine with database-specific configuration
+db_url = settings.DATABASE_URL
+connect_args = {}
+
+# Handle different database types
+if "postgresql" in db_url:
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+    connect_args = {"server_settings": {"jit": "off"}}
+elif "sqlite" in db_url:
+    connect_args = {"check_same_thread": False}
+
 engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    db_url,
     echo=settings.DEBUG,
     future=True,
-    connect_args={"server_settings": {"jit": "off"}},
+    connect_args=connect_args,
 )
 
 # Create async session factory
@@ -29,6 +39,15 @@ convention = {
 
 metadata = MetaData(naming_convention=convention)
 Base = declarative_base(metadata=metadata)
+
+
+async def get_db():
+    """Get database session dependency."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
 async def init_db():

@@ -42,7 +42,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   onNavigateToPayment,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'cash'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash'>('card');
 
   const formatCurrency = (amount: number) => {
     const numAmount = Number(amount) || 0;
@@ -89,7 +89,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
     // Handle non-card payments (legacy flow)
     Alert.alert(
       'Confirm Purchase',
-      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)} via ${paymentMethod === 'bank' ? 'bank transfer' : 'cash payment'}?`,
+      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)} via cash payment?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -128,7 +128,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
   const paymentMethods = [
     { id: 'card', name: 'Credit/Debit Card', icon: 'card' },
-    { id: 'bank', name: 'Bank Transfer', icon: 'business' },
     { id: 'cash', name: 'Cash Payment', icon: 'cash' },
   ] as const;
 

@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { COLORS, SPACING } from '../utils/config';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -45,6 +46,7 @@ interface UserPackage {
 const PackagesScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
+  const navigation = useNavigation();
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -109,6 +111,10 @@ const PackagesScreen: React.FC = () => {
   const handlePurchasePackage = (pkg: Package) => {
     setPackageToPurchase(pkg);
     setShowPurchaseModal(true);
+  };
+
+  const handleNavigateToPayment = (packageData: { packageId: number; packageName: string; price: number; currency: string }) => {
+    navigation.navigate('Payment', packageData);
   };
 
   const handleDeletePackage = (pkg: Package) => {
@@ -255,6 +261,7 @@ const PackagesScreen: React.FC = () => {
                   <PackageCard
                     package={item}
                     onPress={() => handlePurchasePackage(item)}
+                    onPurchase={() => handlePurchasePackage(item)}
                     style={styles.packageCardHorizontal}
                   />
                 )}
@@ -330,6 +337,7 @@ const PackagesScreen: React.FC = () => {
             setPackageToPurchase(null);
             queryClient.invalidateQueries({ queryKey: ['user-packages'] });
           }}
+          onNavigateToPayment={handleNavigateToPayment}
         />
       )}
     </SafeAreaView>

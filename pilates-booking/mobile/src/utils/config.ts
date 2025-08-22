@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
 
 const getDevApiUrl = () => {
   // For physical device, use actual IP
-  const LOCAL_IP = '192.168.173.110'; // Updated to working IP
+  const LOCAL_IP = '10.100.102.24'; // Updated to current IP
   return `http://${LOCAL_IP}:8000`;
 };
 

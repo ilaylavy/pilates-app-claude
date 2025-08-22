@@ -212,6 +212,7 @@ async def create_class_instance(
 @router.get("/week/{week_date}", response_model=List[ClassInstanceResponse])
 async def get_classes_for_week(
     week_date: date,
+    include_past: bool = Query(False, description="Include past classes in the response"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -221,6 +222,18 @@ async def get_classes_for_week(
     week_start = week_date - timedelta(days=days_since_monday)
     week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
 
+    # Build base conditions
+    conditions = [
+        ClassInstance.start_datetime >= datetime.combine(week_start, datetime.min.time()),
+        ClassInstance.start_datetime <= datetime.combine(week_end, datetime.min.time()),
+        ClassInstance.status == ClassStatus.SCHEDULED,
+    ]
+    
+    # Only show future classes unless include_past is True
+    if not include_past:
+        current_time = datetime.now(timezone.utc)
+        conditions.append(ClassInstance.start_datetime > current_time)
+    
     stmt = (
         select(ClassInstance)
         .options(
@@ -229,15 +242,7 @@ async def get_classes_for_week(
             selectinload(ClassInstance.bookings).selectinload(Booking.user),
             selectinload(ClassInstance.waitlist_entries),
         )
-        .where(
-            and_(
-                ClassInstance.start_datetime
-                >= datetime.combine(week_start, datetime.min.time()),
-                ClassInstance.start_datetime
-                <= datetime.combine(week_end, datetime.min.time()),
-                ClassInstance.status == ClassStatus.SCHEDULED,
-            )
-        )
+        .where(and_(*conditions))
         .order_by(ClassInstance.start_datetime)
     )
 

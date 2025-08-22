@@ -74,7 +74,7 @@ export interface Invoice {
 export const paymentsApi = {
   // Create payment intent for package purchase
   createPaymentIntent: async (packageId: number, currency: string = 'ils'): Promise<PaymentIntent> => {
-    const response = await apiClient.post<PaymentIntent>('/payments/create-payment-intent', {
+    const response = await apiClient.post<PaymentIntent>('/api/v1/payments/create-payment-intent', {
       package_id: packageId,
       currency,
       save_payment_method: true
@@ -84,7 +84,7 @@ export const paymentsApi = {
 
   // Confirm payment after successful card processing
   confirmPayment: async (paymentIntentId: string) => {
-    const response = await apiClient.post('/payments/confirm-payment', {
+    const response = await apiClient.post('/api/v1/payments/confirm-payment', {
       payment_intent_id: paymentIntentId
     });
     return response.data;
@@ -92,7 +92,7 @@ export const paymentsApi = {
 
   // Create cash reservation
   createCashReservation: async (packageId: number) => {
-    const response = await apiClient.post('/payments/reserve-cash', {
+    const response = await apiClient.post('/api/v1/payments/reserve-cash', {
       package_id: packageId
     });
     return response.data;
@@ -100,19 +100,19 @@ export const paymentsApi = {
 
   // Get saved payment methods
   getPaymentMethods: async (): Promise<PaymentMethod[]> => {
-    const response = await apiClient.get<PaymentMethod[]>('/payments/methods');
+    const response = await apiClient.get<PaymentMethod[]>('/api/v1/payments/methods');
     return response.data;
   },
 
   // Remove saved payment method
   removePaymentMethod: async (methodId: string) => {
-    const response = await apiClient.delete(`/payments/methods/${methodId}`);
+    const response = await apiClient.delete(`/api/v1/payments/methods/${methodId}`);
     return response.data;
   },
 
   // Get payment history
   getPaymentHistory: async (page: number = 1, perPage: number = 10): Promise<PaymentHistory> => {
-    const response = await apiClient.get<PaymentHistory>('/payments/history', {
+    const response = await apiClient.get<PaymentHistory>('/api/v1/payments/history', {
       params: { page, per_page: perPage }
     });
     return response.data;
@@ -120,13 +120,13 @@ export const paymentsApi = {
 
   // Get invoice details
   getInvoice: async (invoiceId: string): Promise<Invoice> => {
-    const response = await apiClient.get<Invoice>(`/payments/invoices/${invoiceId}`);
+    const response = await apiClient.get<Invoice>(`/api/v1/payments/invoices/${invoiceId}`);
     return response.data;
   },
 
   // Subscription management
   createSubscription: async (priceId?: string, paymentMethodId?: string): Promise<Subscription> => {
-    const response = await apiClient.post<Subscription>('/payments/subscriptions', {
+    const response = await apiClient.post<Subscription>('/api/v1/payments/subscriptions', {
       price_id: priceId,
       payment_method_id: paymentMethodId
     });
@@ -134,13 +134,13 @@ export const paymentsApi = {
   },
 
   cancelSubscription: async (subscriptionId: string) => {
-    const response = await apiClient.delete(`/payments/subscriptions/${subscriptionId}`);
+    const response = await apiClient.delete(`/api/v1/payments/subscriptions/${subscriptionId}`);
     return response.data;
   },
 
   // Admin-only endpoints (will fail for non-admin users)
   processRefund: async (paymentId: number, amount?: number, reason?: string) => {
-    const response = await apiClient.post(`/payments/refund/${paymentId}`, {
+    const response = await apiClient.post(`/api/v1/payments/refund/${paymentId}`, {
       payment_id: paymentId,
       amount,
       reason: reason || 'requested_by_customer'

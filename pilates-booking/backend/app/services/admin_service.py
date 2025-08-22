@@ -1,4 +1,6 @@
+import json
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
@@ -10,7 +12,7 @@ from ..models.audit_log import AuditLog
 from ..models.booking import Booking
 from ..models.class_schedule import ClassInstance
 from ..models.package import Package, UserPackage
-from ..models.payment import Payment
+from ..models.payment import Payment, PaymentStatus
 from ..models.transaction import Transaction
 from ..models.user import User, UserRole
 
@@ -18,6 +20,20 @@ from ..models.user import User, UserRole
 class AdminService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _sanitize_for_json(obj: Any) -> Any:
+        """Convert objects to JSON-serializable format."""
+        if isinstance(obj, Decimal):
+            return float(obj)
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {key: AdminService._sanitize_for_json(value) for key, value in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [AdminService._sanitize_for_json(item) for item in obj]
+        else:
+            return obj
 
     async def log_action(
         self,
@@ -36,12 +52,15 @@ class AdminService:
             ip_address = request.client.host if request.client else None
             user_agent = request.headers.get("user-agent")
 
+        # Sanitize details to ensure JSON serialization works
+        sanitized_details = self._sanitize_for_json(details) if details else None
+
         audit_log = AuditLog(
             user_id=user.id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
-            details=details,
+            details=sanitized_details,
             ip_address=ip_address,
             user_agent=user_agent,
         )
@@ -159,16 +178,21 @@ class AdminService:
         total_bookings_stmt = select(func.count(Booking.id))
         total_bookings = await self.db.scalar(total_bookings_stmt)
 
-        # Total revenue (from payments)
-        total_revenue_stmt = select(func.coalesce(func.sum(Payment.amount), 0))
+        # Total revenue (from completed payments only)
+        total_revenue_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.status == PaymentStatus.COMPLETED
+        )
         total_revenue = await self.db.scalar(total_revenue_stmt)
 
-        # Monthly revenue (current month)
+        # Monthly revenue (current month, completed payments only)
         first_of_month = datetime.utcnow().replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
         monthly_revenue_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
-            Payment.created_at >= first_of_month
+            and_(
+                Payment.created_at >= first_of_month,
+                Payment.status == PaymentStatus.COMPLETED
+            )
         )
         monthly_revenue = await self.db.scalar(monthly_revenue_stmt)
 
@@ -211,7 +235,11 @@ class AdminService:
                 func.sum(Payment.amount).label("revenue"),
             )
             .where(
-                and_(Payment.created_at >= start_date, Payment.created_at <= end_date)
+                and_(
+                    Payment.created_at >= start_date, 
+                    Payment.created_at <= end_date,
+                    Payment.status == PaymentStatus.COMPLETED
+                )
             )
             .group_by(func.date(Payment.created_at))
             .order_by("date")
@@ -222,17 +250,21 @@ class AdminService:
             {"date": str(row[0]), "revenue": float(row[1])} for row in result.fetchall()
         ]
 
-        # Revenue by package
+        # Revenue by package - use direct package_id relationship
         revenue_by_package_stmt = (
             select(
                 Package.name,
                 func.sum(Payment.amount).label("revenue"),
                 func.count(Payment.id).label("count"),
             )
-            .join(UserPackage)
-            .join(Payment)
+            .select_from(Package)
+            .join(Payment, Package.id == Payment.package_id)
             .where(
-                and_(Payment.created_at >= start_date, Payment.created_at <= end_date)
+                and_(
+                    Payment.created_at >= start_date, 
+                    Payment.created_at <= end_date,
+                    Payment.status == PaymentStatus.COMPLETED  # Only count completed payments
+                )
             )
             .group_by(Package.id, Package.name)
             .order_by(desc("revenue"))
@@ -246,7 +278,11 @@ class AdminService:
 
         # Total for period
         total_stmt = select(func.sum(Payment.amount)).where(
-            and_(Payment.created_at >= start_date, Payment.created_at <= end_date)
+            and_(
+                Payment.created_at >= start_date, 
+                Payment.created_at <= end_date,
+                Payment.status == PaymentStatus.COMPLETED
+            )
         )
         total_revenue = await self.db.scalar(total_stmt)
 
@@ -289,19 +325,19 @@ class AdminService:
 
         # Popular class times
         popular_times_stmt = (
-            select(ClassInstance.start_time, func.count(Booking.id).label("bookings"))
+            select(ClassInstance.start_datetime, func.count(Booking.id).label("bookings"))
             .join(Booking)
             .where(
                 and_(Booking.created_at >= start_date, Booking.created_at <= end_date)
             )
-            .group_by(ClassInstance.start_time)
+            .group_by(ClassInstance.start_datetime)
             .order_by(desc("bookings"))
             .limit(10)
         )
 
         result = await self.db.execute(popular_times_stmt)
         popular_times = [
-            {"time": str(row[0]), "bookings": row[1]} for row in result.fetchall()
+            {"time": row[0].strftime("%H:%M") if row[0] else "unknown", "bookings": row[1]} for row in result.fetchall()
         ]
 
         return {

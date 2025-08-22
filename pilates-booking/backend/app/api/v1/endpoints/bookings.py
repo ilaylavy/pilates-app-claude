@@ -292,7 +292,7 @@ async def get_user_bookings(
 @router.get("/my-bookings", response_model=List[BookingResponse])
 async def get_my_bookings(
     request: Request,
-    status: Optional[str] = None,
+    booking_status: Optional[str] = None,
     upcoming: bool = False,
     limit: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
@@ -309,14 +309,14 @@ async def get_my_bookings(
             "Filtered user bookings retrieval request",
             user_id=str(current_user.id),
             email=current_user.email,
-            status_filter=status,
+            status_filter=booking_status,
             upcoming=upcoming,
             limit=limit,
             client_ip=client_ip,
         )
 
         bookings = await booking_service.get_user_bookings_filtered(
-            user_id=current_user.id, status=status, upcoming=upcoming, limit=limit
+            user_id=current_user.id, status=booking_status, upcoming=upcoming, limit=limit
         )
 
         # Log successful retrieval
@@ -324,7 +324,7 @@ async def get_my_bookings(
             "Filtered user bookings retrieved successfully",
             user_id=str(current_user.id),
             bookings_count=len(bookings),
-            status_filter=status,
+            status_filter=booking_status,
             upcoming=upcoming,
             limit=limit,
             client_ip=client_ip,
@@ -338,7 +338,7 @@ async def get_my_bookings(
             security_level=SecurityLevel.LOW,
             details={
                 "resource": "user_bookings_filtered",
-                "status_filter": status,
+                "status_filter": booking_status,
                 "upcoming": upcoming,
                 "limit": limit,
                 "results_count": len(bookings),

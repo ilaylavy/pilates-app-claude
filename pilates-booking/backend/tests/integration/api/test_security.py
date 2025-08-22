@@ -8,12 +8,11 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import Base, get_db
 from app.core.security import (create_access_token, generate_refresh_token,
                                hash_token, validate_password_strength)
 from app.main import app
@@ -23,80 +22,23 @@ from app.models.user import User, UserRole
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 
-# Test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///./test_security.db"
-
-engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-TestingSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=engine, class_=AsyncSession
-)
+# Database setup is handled in conftest.py
+# Override rate limit setting for tests
+settings.LOGIN_RATE_LIMIT_PER_MINUTE = 1000  # Very high limit for tests
 
 
-async def override_get_db():
-    async with TestingSessionLocal() as session:
-        yield session
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-@pytest.fixture
-async def db_session():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    async with TestingSessionLocal() as session:
-        yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
-
-
-@pytest.fixture
-async def test_user(db_session: AsyncSession):
-    """Create a test user for authentication tests."""
-    from app.core.security import get_password_hash
-
-    user = User(
-        email="test@example.com",
-        hashed_password=get_password_hash("SecurePassword123!"),
-        first_name="Test",
-        last_name="User",
-        role=UserRole.STUDENT,
-        is_active=True,
-        is_verified=True,
+def make_login_request(client, email="test@example.com", password="TestPassword123!", delay_seconds=0):
+    """Make a login request with optional delay to avoid rate limiting."""
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
+    
+    return client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
     )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
 
 
-@pytest.fixture
-async def admin_user(db_session: AsyncSession):
-    """Create an admin user for authorization tests."""
-    from app.core.security import get_password_hash
-
-    user = User(
-        email="admin@example.com",
-        hashed_password=get_password_hash("AdminPassword123!"),
-        first_name="Admin",
-        last_name="User",
-        role=UserRole.ADMIN,
-        is_active=True,
-        is_verified=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    await db_session.refresh(user)
-    return user
+# Fixtures are provided by conftest.py
 
 
 class TestAuthentication:
@@ -106,7 +48,7 @@ class TestAuthentication:
         """Test successful login with valid credentials."""
         response = client.post(
             "/api/v1/auth/login",
-            json={"email": "test@example.com", "password": "SecurePassword123!"},
+            json={"email": "test@example.com", "password": "TestPassword123!"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -130,7 +72,7 @@ class TestAuthentication:
         # Create unverified user
         user = User(
             email="unverified@example.com",
-            hashed_password=get_password_hash("SecurePassword123!"),
+            hashed_password=get_password_hash("TestPassword123!"),
             first_name="Unverified",
             last_name="User",
             role=UserRole.STUDENT,
@@ -142,7 +84,7 @@ class TestAuthentication:
 
         response = client.post(
             "/api/v1/auth/login",
-            json={"email": "unverified@example.com", "password": "SecurePassword123!"},
+            json={"email": "unverified@example.com", "password": "TestPassword123!"},
         )
         assert response.status_code == 400
         assert "verify your email" in response.json()["detail"]
@@ -175,7 +117,7 @@ class TestAuthentication:
         assert medium["strength"] == "medium"
 
         # Strong password
-        strong = validate_password_strength("SecurePassword123!")
+        strong = validate_password_strength("TestPassword123!")
         assert strong["is_valid"]
         assert strong["strength"] == "strong"
 
@@ -188,7 +130,7 @@ class TestTokenSecurity:
         # Login to get initial tokens
         response = client.post(
             "/api/v1/auth/login",
-            json={"email": "test@example.com", "password": "SecurePassword123!"},
+            json={"email": "test@example.com", "password": "TestPassword123!"},
         )
         initial_tokens = response.json()
 
@@ -275,7 +217,7 @@ class TestInputValidation:
                 "/api/v1/auth/register",
                 json={
                     "email": "test@example.com",
-                    "password": "SecurePassword123!",
+                    "password": "TestPassword123!",
                     "first_name": payload,
                     "last_name": "User",
                 },
@@ -292,7 +234,7 @@ class TestInputValidation:
             "/api/v1/auth/register",
             json={
                 "email": "test@example.com",
-                "password": "SecurePassword123!",
+                "password": "TestPassword123!",
                 "first_name": large_payload,
                 "last_name": "User",
             },
@@ -309,7 +251,7 @@ class TestAuthorization:
         # Get regular user token
         response = client.post(
             "/api/v1/auth/login",
-            json={"email": "test@example.com", "password": "SecurePassword123!"},
+            json={"email": "test@example.com", "password": "TestPassword123!"},
         )
         user_token = response.json()["access_token"]
 
@@ -549,7 +491,7 @@ class TestPasswordReset:
         # Test with invalid token
         response = client.post(
             "/api/v1/auth/reset-password",
-            json={"token": "invalid_token", "new_password": "NewSecurePassword123!"},
+            json={"token": "invalid_token", "new_password": "NewTestPassword123!"},
         )
         assert response.status_code == 400
 
@@ -558,7 +500,7 @@ class TestPasswordReset:
         # Login to create a session
         response = client.post(
             "/api/v1/auth/login",
-            json={"email": "test@example.com", "password": "SecurePassword123!"},
+            json={"email": "test@example.com", "password": "TestPassword123!"},
         )
         old_tokens = response.json()
 
@@ -595,13 +537,17 @@ class TestSecurityPerformance:
         # Should complete within reasonable time (adjust as needed)
         assert total_time < 5.0  # 5 seconds for 5 requests
 
-    def test_token_validation_performance(self, client, test_user):
+    @pytest.mark.asyncio
+    async def test_token_validation_performance(self, client, test_user):
         """Test token validation performance."""
         # Login to get token
-        response = client.post(
-            "/api/v1/auth/login",
-            json={"email": "test@example.com", "password": "SecurePassword123!"},
-        )
+        response = make_login_request(client)
+        
+        # Check if login was successful first
+        print(f"Login response status: {response.status_code}")
+        print(f"Login response body: {response.json()}")
+        
+        assert response.status_code == 200, f"Login failed: {response.json()}"
         token = response.json()["access_token"]
 
         start_time = time.time()

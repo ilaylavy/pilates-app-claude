@@ -19,7 +19,7 @@ import {
   PaymentIntent,
   CardFieldInput
 } from '@stripe/stripe-react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { COLORS, SPACING } from '../utils/config';
 import { paymentsApi } from '../api/payments';
@@ -58,6 +58,7 @@ interface Props {
 const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const { packageId, packageName, price, currency } = route.params;
   const { confirmPayment, initPaymentSheet, presentPaymentSheet } = useStripe();
+  const queryClient = useQueryClient();
 
   const [cardDetails, setCardDetails] = useState<CardFieldInput.Details>();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('card');
@@ -81,6 +82,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const createCashReservationMutation = useMutation({
     mutationFn: () => paymentsApi.createCashReservation(packageId),
     onSuccess: (data) => {
+      // Invalidate queries to refresh package data
+      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      
       Vibration.vibrate(100);
       navigation.navigate('PurchaseConfirmation', {
         paymentMethod: 'cash',
@@ -102,6 +107,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const confirmPaymentMutation = useMutation({
     mutationFn: (paymentIntentId: string) => paymentsApi.confirmPayment(paymentIntentId),
     onSuccess: (data) => {
+      // Invalidate queries to refresh package data
+      queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      
       Vibration.vibrate([100, 100, 100]);
       navigation.navigate('PurchaseConfirmation', {
         paymentMethod: 'card',
@@ -118,7 +127,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       console.error('Failed to confirm payment:', error);
       Alert.alert(
         'Payment Confirmation Failed', 
-        'Your card was charged but we couldn\'t confirm the purchase. Please contact support with your payment receipt.',
+        error.response?.data?.detail || 'Your card was charged but we couldn\'t confirm the purchase. Please contact support with your payment receipt.',
         [
           { text: 'Contact Support', onPress: () => {/* TODO: Add support contact */} },
           { text: 'OK', style: 'cancel' }

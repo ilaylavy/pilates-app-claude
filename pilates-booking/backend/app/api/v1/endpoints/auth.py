@@ -156,13 +156,20 @@ async def login(
                 failure_reason="invalid_credentials",
             )
 
-            # Also log with audit service
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                error_message="Invalid credentials",
-            )
+            # Also log with audit service (gracefully handle failures)
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    error_message="Invalid credentials",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for failed login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - invalid credentials",
@@ -187,13 +194,20 @@ async def login(
                 failure_reason="account_inactive",
             )
 
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                user=user,
-                error_message="User account is inactive",
-            )
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    user=user,
+                    error_message="User account is inactive",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for inactive user login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - user account inactive",
@@ -217,13 +231,20 @@ async def login(
                 failure_reason="email_not_verified",
             )
 
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                user=user,
-                error_message="Email not verified",
-            )
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    user=user,
+                    error_message="Email not verified",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for unverified user login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - email not verified",
@@ -259,9 +280,16 @@ async def login(
             user_agent=user_agent,
         )
 
-        await audit_service.log_login_attempt(
-            request=request, email=user_login.email, success=True, user=user
-        )
+        try:
+            await audit_service.log_login_attempt(
+                request=request, email=user_login.email, success=True, user=user
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Failed to log audit event for successful login",
+                email=user_login.email,
+                error=str(audit_error),
+            )
 
         logger.info(
             "Login successful",
@@ -277,12 +305,19 @@ async def login(
         raise
     except Exception as e:
         # Log unexpected error
-        await audit_service.log_login_attempt(
-            request=request,
-            email=user_login.email,
-            success=False,
-            error_message=f"Unexpected error: {str(e)}",
-        )
+        try:
+            await audit_service.log_login_attempt(
+                request=request,
+                email=user_login.email,
+                success=False,
+                error_message=f"Unexpected error: {str(e)}",
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Failed to log audit event for unexpected login error",
+                email=user_login.email,
+                error=str(audit_error),
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed due to server error",
