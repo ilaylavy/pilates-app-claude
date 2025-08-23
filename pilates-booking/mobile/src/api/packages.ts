@@ -36,12 +36,26 @@ export const packagesApi = {
     return response.data;
   },
 
+  // Legacy single-step approval (keep for backward compatibility)
   approvePackage: async (packageId: number, data: PaymentApprovalRequest): Promise<void> => {
     await apiClient.post(`/api/v1/admin/packages/${packageId}/approve`, data);
   },
 
   rejectPackage: async (packageId: number, data: PaymentRejectionRequest): Promise<void> => {
     await apiClient.post(`/api/v1/admin/packages/${packageId}/reject`, data);
+  },
+
+  // Two-step approval endpoints
+  authorizePackage: async (packageId: number, data: PaymentApprovalRequest): Promise<void> => {
+    await apiClient.post(`/api/v1/admin/packages/${packageId}/authorize`, data);
+  },
+
+  confirmPayment: async (packageId: number, data: PaymentApprovalRequest): Promise<void> => {
+    await apiClient.post(`/api/v1/admin/packages/${packageId}/confirm-payment`, data);
+  },
+
+  revokeAuthorization: async (packageId: number, data: PaymentRejectionRequest): Promise<void> => {
+    await apiClient.post(`/api/v1/admin/packages/${packageId}/revoke-authorization`, data);
   },
 
   getApprovalStats: async (): Promise<ApprovalStats> => {

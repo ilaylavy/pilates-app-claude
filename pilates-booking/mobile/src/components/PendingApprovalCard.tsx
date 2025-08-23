@@ -48,15 +48,38 @@ const PendingApprovalCard: React.FC<Props> = ({
     }
   };
 
+  const getStatusMessage = () => {
+    switch (userPackage.payment_status) {
+      case 'authorized':
+        return {
+          title: 'Payment Authorization Status',
+          message: `Your ${userPackage.package.name} package has been authorized!\n\n` +
+                  '✅ You can start using your credits immediately\n' +
+                  '⏳ Payment confirmation is still pending\n' +
+                  '📍 Please complete cash payment at reception\n\n' +
+                  'Your package will be fully confirmed once payment is received.',
+          canUseCredits: true
+        };
+      case 'pending_approval':
+      default:
+        return {
+          title: 'Cash Payment Process',
+          message: `To activate your ${userPackage.package.name} package:\n\n` +
+                  '1. Visit the studio reception\n' +
+                  '2. Make the cash payment\n' +
+                  '3. Show your reference code to staff\n' +
+                  '4. Your package will be activated within 2 hours\n\n' +
+                  'Note: You cannot book classes until payment is confirmed.',
+          canUseCredits: false
+        };
+    }
+  };
+
   const handleShowInfo = () => {
+    const statusInfo = getStatusMessage();
     Alert.alert(
-      'Cash Payment Process',
-      `To activate your ${userPackage.package.name} package:\n\n` +
-      '1. Visit the studio reception\n' +
-      '2. Make the cash payment\n' +
-      '3. Show your reference code to staff\n' +
-      '4. Your package will be activated within 2 hours\n\n' +
-      'Note: You cannot book classes until payment is confirmed.',
+      statusInfo.title,
+      statusInfo.message,
       [
         { text: 'Show Instructions', onPress: onShowInstructions },
         { text: 'OK', style: 'default' },
@@ -68,7 +91,11 @@ const PendingApprovalCard: React.FC<Props> = ({
   const expiringSoon = isExpiringSoon();
 
   return (
-    <View style={[styles.container, expiringSoon && styles.urgentContainer]}>
+    <View style={[
+      styles.container, 
+      expiringSoon && styles.urgentContainer,
+      userPackage.payment_status === 'authorized' && styles.authorizedContainer
+    ]}>
       <View style={styles.header}>
         <View style={styles.packageInfo}>
           <Text style={styles.packageName}>{userPackage.package.name}</Text>
@@ -104,6 +131,13 @@ const PendingApprovalCard: React.FC<Props> = ({
           <View style={styles.statusRow}>
             <Text style={styles.statusLabel}>Reference:</Text>
             <Text style={styles.referenceCode}>{userPackage.payment_reference}</Text>
+          </View>
+        )}
+
+        {userPackage.payment_status === 'authorized' && (
+          <View style={styles.statusRow}>
+            <Text style={styles.statusLabel}>Credits Status:</Text>
+            <Text style={styles.creditsActiveText}>✅ Ready to Use</Text>
           </View>
         )}
       </View>
@@ -149,6 +183,11 @@ const styles = StyleSheet.create({
   urgentContainer: {
     borderColor: COLORS.warning,
     backgroundColor: COLORS.warning + '05',
+  },
+  authorizedContainer: {
+    borderColor: '#ff9500',
+    backgroundColor: '#ff9500' + '08',
+    borderWidth: 2,
   },
   header: {
     flexDirection: 'row',
@@ -241,6 +280,12 @@ const styles = StyleSheet.create({
     color: COLORS.warning,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  creditsActiveText: {
+    fontSize: 14,
+    color: '#28a745', // Green color for active credits
+    fontWeight: '600',
+    textAlign: 'right',
   },
 });
 

@@ -90,6 +90,58 @@ const AdminApprovalScreen: React.FC = () => {
     },
   });
 
+  // Two-step approval mutations
+  const authorizeMutation = useMutation({
+    mutationFn: ({ packageId, data }: { packageId: number; data: PaymentApprovalRequest }) =>
+      packagesApi.authorizePackage(packageId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pendingApprovals'] });
+      queryClient.invalidateQueries({ queryKey: ['approvalStats'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      setShowApproveModal(false);
+      setSelectedApproval(null);
+      setApprovalData({ payment_reference: '', admin_notes: '' });
+      Alert.alert('Success', 'Package authorized - user can start using credits!');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to authorize payment');
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: ({ packageId, data }: { packageId: number; data: PaymentApprovalRequest }) =>
+      packagesApi.confirmPayment(packageId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pendingApprovals'] });
+      queryClient.invalidateQueries({ queryKey: ['approvalStats'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      setShowApproveModal(false);
+      setSelectedApproval(null);
+      setApprovalData({ payment_reference: '', admin_notes: '' });
+      Alert.alert('Success', 'Payment confirmed - package is now fully active!');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to confirm payment');
+    },
+  });
+
+  const revokeAuthorizationMutation = useMutation({
+    mutationFn: ({ packageId, data }: { packageId: number; data: PaymentRejectionRequest }) =>
+      packagesApi.revokeAuthorization(packageId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pendingApprovals'] });
+      queryClient.invalidateQueries({ queryKey: ['approvalStats'] });
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      setShowRejectModal(false);
+      setSelectedApproval(null);
+      setRejectionData({ rejection_reason: '', admin_notes: '' });
+      Alert.alert('Success', 'Authorization revoked successfully');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to revoke authorization');
+    },
+  });
+
   const handleRefresh = useCallback(() => {
     refetch();
   }, [refetch]);
@@ -119,13 +171,59 @@ const AdminApprovalScreen: React.FC = () => {
     setShowRejectModal(true);
   };
 
+  const handleAuthorize = (approval: PendingApproval) => {
+    setSelectedApproval(approval);
+    setApprovalData({
+      payment_reference: approval.payment_reference || `CASH-${approval.id}-${approval.user_id}`,
+      admin_notes: '',
+      expected_version: approval.version,
+    });
+    setShowApproveModal(true);
+  };
+
+  const handleConfirmPayment = (approval: PendingApproval) => {
+    setSelectedApproval(approval);
+    setApprovalData({
+      payment_reference: '',
+      admin_notes: '',
+      expected_version: approval.version,
+    });
+    setShowApproveModal(true);
+  };
+
+  const handleRevokeAuthorization = (approval: PendingApproval) => {
+    setSelectedApproval(approval);
+    setRejectionData({
+      rejection_reason: '',
+      admin_notes: '',
+      expected_version: approval.version,
+    });
+    setShowRejectModal(true);
+  };
+
   const handleConfirmApprove = () => {
     if (!selectedApproval) return;
     
-    approveMutation.mutate({
-      packageId: selectedApproval.id,
-      data: approvalData,
-    });
+    // Determine which mutation to use based on current status
+    if (selectedApproval.approval_status === 'pending') {
+      // Authorize payment (Step 1)
+      authorizeMutation.mutate({
+        packageId: selectedApproval.id,
+        data: approvalData,
+      });
+    } else if (selectedApproval.approval_status === 'authorized') {
+      // Confirm payment (Step 2)
+      confirmPaymentMutation.mutate({
+        packageId: selectedApproval.id,
+        data: approvalData,
+      });
+    } else {
+      // Fallback to legacy single-step approval
+      approveMutation.mutate({
+        packageId: selectedApproval.id,
+        data: approvalData,
+      });
+    }
   };
 
   const handleConfirmReject = () => {
@@ -134,10 +232,20 @@ const AdminApprovalScreen: React.FC = () => {
       return;
     }
     
-    rejectMutation.mutate({
-      packageId: selectedApproval.id,
-      data: rejectionData,
-    });
+    // Determine which mutation to use based on current status
+    if (selectedApproval.approval_status === 'authorized') {
+      // Revoke authorization
+      revokeAuthorizationMutation.mutate({
+        packageId: selectedApproval.id,
+        data: rejectionData,
+      });
+    } else {
+      // Regular rejection
+      rejectMutation.mutate({
+        packageId: selectedApproval.id,
+        data: rejectionData,
+      });
+    }
   };
 
   const formatTimeWaiting = (hours: number) => {
@@ -236,7 +344,10 @@ const AdminApprovalScreen: React.FC = () => {
                     ]}>
                       {formatTimeWaiting(approval.hours_waiting)}
                     </Text>
-                    <PaymentStatusBadge status="pending_approval" size="small" />
+                    <PaymentStatusBadge 
+                      status={approval.payment_status || 'pending_approval'} 
+                      size="small" 
+                    />
                   </View>
                 </View>
 
@@ -256,21 +367,46 @@ const AdminApprovalScreen: React.FC = () => {
                 )}
 
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.rejectButton}
-                    onPress={() => handleReject(approval)}
-                  >
-                    <Ionicons name="close" size={20} color={COLORS.white} />
-                    <Text style={styles.rejectButtonText}>Reject</Text>
-                  </TouchableOpacity>
+                  {/* Show different actions based on approval status */}
+                  {approval.approval_status === 'pending' && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.rejectButton}
+                        onPress={() => handleReject(approval)}
+                      >
+                        <Ionicons name="close" size={20} color={COLORS.white} />
+                        <Text style={styles.rejectButtonText}>Reject</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={styles.authorizeButton}
+                        onPress={() => handleAuthorize(approval)}
+                      >
+                        <Ionicons name="checkmark-circle" size={20} color={COLORS.white} />
+                        <Text style={styles.authorizeButtonText}>Authorize</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                   
-                  <TouchableOpacity
-                    style={styles.approveButton}
-                    onPress={() => handleApprove(approval)}
-                  >
-                    <Ionicons name="checkmark" size={20} color={COLORS.white} />
-                    <Text style={styles.approveButtonText}>Approve</Text>
-                  </TouchableOpacity>
+                  {approval.approval_status === 'authorized' && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.revokeButton}
+                        onPress={() => handleRevokeAuthorization(approval)}
+                      >
+                        <Ionicons name="remove-circle" size={20} color={COLORS.white} />
+                        <Text style={styles.revokeButtonText}>Revoke</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={styles.confirmButton}
+                        onPress={() => handleConfirmPayment(approval)}
+                      >
+                        <Ionicons name="checkmark-done" size={20} color={COLORS.white} />
+                        <Text style={styles.confirmButtonText}>Confirm Payment</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </View>
               </View>
             ))}
@@ -290,7 +426,9 @@ const AdminApprovalScreen: React.FC = () => {
             <TouchableOpacity onPress={() => setShowApproveModal(false)}>
               <Ionicons name="close" size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Approve Payment</Text>
+            <Text style={styles.modalTitle}>
+              {selectedApproval?.approval_status === 'authorized' ? 'Confirm Payment' : 'Authorize Payment'}
+            </Text>
             <View style={styles.placeholder} />
           </View>
 
@@ -331,10 +469,10 @@ const AdminApprovalScreen: React.FC = () => {
 
           <View style={styles.modalFooter}>
             <Button
-              title="Approve Payment"
+              title={selectedApproval?.approval_status === 'authorized' ? 'Confirm Payment' : 'Authorize Payment'}
               onPress={handleConfirmApprove}
-              loading={approveMutation.isPending}
-              disabled={approveMutation.isPending}
+              loading={approveMutation.isPending || authorizeMutation.isPending || confirmPaymentMutation.isPending}
+              disabled={approveMutation.isPending || authorizeMutation.isPending || confirmPaymentMutation.isPending}
             />
           </View>
         </View>
@@ -352,7 +490,9 @@ const AdminApprovalScreen: React.FC = () => {
             <TouchableOpacity onPress={() => setShowRejectModal(false)}>
               <Ionicons name="close" size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Reject Payment</Text>
+            <Text style={styles.modalTitle}>
+              {selectedApproval?.approval_status === 'authorized' ? 'Revoke Authorization' : 'Reject Payment'}
+            </Text>
             <View style={styles.placeholder} />
           </View>
 
@@ -395,10 +535,10 @@ const AdminApprovalScreen: React.FC = () => {
 
           <View style={styles.modalFooter}>
             <Button
-              title="Reject Payment"
+              title={selectedApproval?.approval_status === 'authorized' ? 'Revoke Authorization' : 'Reject Payment'}
               onPress={handleConfirmReject}
-              loading={rejectMutation.isPending}
-              disabled={rejectMutation.isPending || !rejectionData.rejection_reason.trim()}
+              loading={rejectMutation.isPending || revokeAuthorizationMutation.isPending}
+              disabled={rejectMutation.isPending || revokeAuthorizationMutation.isPending || !rejectionData.rejection_reason.trim()}
               style={styles.rejectButtonStyle}
             />
           </View>
@@ -615,6 +755,53 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   approveButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Two-step approval button styles
+  authorizeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ff9500', // Orange for authorize
+    borderRadius: 8,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  authorizeButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.success, // Green for confirm
+    borderRadius: 8,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  confirmButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  revokeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ff6b35', // Orange-red for revoke
+    borderRadius: 8,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  revokeButtonText: {
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',

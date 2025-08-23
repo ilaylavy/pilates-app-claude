@@ -71,11 +71,13 @@ async def handle_cash_purchase(
     db: AsyncSession,
 ):
     """Handle cash package purchase by creating a pending approval package."""
+    from ....models.package import ApprovalStatus
     
     # Create UserPackage with RESERVED status for cash payments
     # This will require admin approval before credits become available
     expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
     reservation_expires_at = datetime.now(timezone.utc) + timedelta(hours=48)  # 48 hour window to pay cash
+    approval_deadline = datetime.now(timezone.utc) + timedelta(hours=72)  # 72 hour approval deadline
     
     user_package = UserPackage(
         user_id=current_user.id,
@@ -88,11 +90,19 @@ async def handle_cash_purchase(
         payment_status=PaymentStatus.PENDING_APPROVAL,
         payment_method=ModelPaymentMethod.CASH,
         payment_reference=purchase_data.payment_reference,
+        approval_status=ApprovalStatus.PENDING,
+        approval_deadline=approval_deadline,
+        version=1,
+        approval_attempt_count=0,
     )
     
     db.add(user_package)
     await db.commit()
     await db.refresh(user_package)
+    
+    # Generate idempotency key after we have the ID
+    user_package.generate_idempotency_key()
+    await db.commit()
     
     # Generate a unique reference code for the cash payment
     reference_code = f"CASH-{user_package.id}-{current_user.id}"
@@ -134,7 +144,57 @@ async def get_user_packages(
     result = await db.execute(stmt)
     user_packages = result.scalars().all()
 
-    return user_packages
+    # Pre-load all properties while session is active to avoid detached instance issues
+    response_data = []
+    for pkg in user_packages:
+        # Access all properties while the session is still active
+        pkg_data = {
+            'id': pkg.id,
+            'user_id': pkg.user_id,
+            'package_id': pkg.package_id,
+            'package': pkg.package,
+            'credits_remaining': pkg.credits_remaining,
+            'purchase_date': pkg.purchase_date,
+            'expiry_date': pkg.expiry_date,
+            'is_active': pkg.is_active,
+            'is_expired': pkg.is_expired,
+            'is_valid': pkg.is_valid,
+            'days_until_expiry': pkg.days_until_expiry,
+            'payment_status': pkg.payment_status,
+            'payment_method': pkg.payment_method,
+            'approved_by': pkg.approved_by,
+            'approved_at': pkg.approved_at,
+            'rejection_reason': pkg.rejection_reason,
+            'payment_reference': pkg.payment_reference,
+            'admin_notes': pkg.admin_notes,
+            'is_pending_approval': pkg.is_pending_approval,
+            'is_approved': pkg.is_approved,
+            'is_rejected': pkg.is_rejected,
+            'version': pkg.version,
+            'approval_deadline': pkg.approval_deadline,
+            'approval_status': pkg.approval_status,
+            'idempotency_key': pkg.idempotency_key,
+            'last_approval_attempt_at': pkg.last_approval_attempt_at,
+            'approval_attempt_count': pkg.approval_attempt_count,
+            'can_be_approved': pkg.can_be_approved,
+            'approval_timeout_hours': pkg.approval_timeout_hours,
+            # Two-step approval fields
+            'authorized_by': pkg.authorized_by,
+            'authorized_at': pkg.authorized_at,
+            'payment_confirmed_by': pkg.payment_confirmed_by,
+            'payment_confirmed_at': pkg.payment_confirmed_at,
+            'payment_confirmation_reference': pkg.payment_confirmation_reference,
+            'is_payment_pending': pkg.is_payment_pending,
+            'is_fully_confirmed': pkg.is_fully_confirmed,
+            'can_be_authorized': pkg.can_be_authorized,
+            'can_confirm_payment': pkg.can_confirm_payment,
+            'can_be_revoked': pkg.can_be_revoked,
+            'created_at': pkg.created_at,
+            'updated_at': pkg.updated_at,
+        }
+        response_data.append(pkg_data)
+
+    return response_data
 
 
 # Admin endpoints

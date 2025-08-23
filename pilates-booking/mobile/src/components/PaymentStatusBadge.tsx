@@ -23,7 +23,21 @@ const PaymentStatusBadge: React.FC<Props> = ({
           backgroundColor: COLORS.warning + '15',
           icon: '⏳',
         };
-      case 'approved':
+      case 'authorized':
+        return {
+          label: 'Payment Pending',
+          color: '#ff9500', // Orange color for authorized but payment pending
+          backgroundColor: '#ff9500' + '15',
+          icon: '⏸️',
+        };
+      case 'payment_confirmed':
+        return {
+          label: 'Active',
+          color: COLORS.success,
+          backgroundColor: COLORS.success + '15',
+          icon: '✅',
+        };
+      case 'approved': // Legacy status - keep for backward compatibility
         return {
           label: 'Active',
           color: COLORS.success,

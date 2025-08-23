@@ -31,9 +31,11 @@ const PendingApprovalsScreen: React.FC = () => {
     queryFn: packagesApi.getUserPackages,
   });
 
-  // Filter packages that are pending approval
+  // Filter packages that are pending approval or authorized (payment pending)
   const pendingPackages = userPackages.filter(
-    (pkg) => pkg.is_pending_approval || pkg.payment_status === 'pending_approval'
+    (pkg) => pkg.is_pending_approval || 
+             pkg.payment_status === 'pending_approval' ||
+             pkg.payment_status === 'authorized'
   );
 
   const handleShowInstructions = useCallback((userPackage: UserPackage) => {
@@ -88,7 +90,7 @@ const PendingApprovalsScreen: React.FC = () => {
         <View style={styles.header}>
           <Text style={styles.title}>Pending Payments</Text>
           <Text style={styles.subtitle}>
-            Complete your cash payments at reception to activate your packages
+            Complete your cash payments at reception to fully confirm your packages
           </Text>
           <TouchableOpacity
             style={styles.refreshButton}
@@ -119,13 +121,15 @@ const PendingApprovalsScreen: React.FC = () => {
             ))}
 
             <View style={styles.infoSection}>
-              <Text style={styles.infoTitle}>Payment Status</Text>
+              <Text style={styles.infoTitle}>Payment Process</Text>
               <Text style={styles.infoText}>
-                • Visit reception and pay the amount shown above{'\n'}
+                • <Text style={styles.infoTextBold}>Step 1:</Text> Admin authorizes your payment - you can use credits immediately{'\n'}
+                • <Text style={styles.infoTextBold}>Step 2:</Text> Visit reception to complete cash payment{'\n'}
                 • Show your reference code to the staff{'\n'}
-                • Your credits will be activated within 2 hours{'\n'}
+                • Payment will be fully confirmed within 2 hours{'\n'}
                 • Use "Check Status" button to see updates{'\n'}{'\n'}
-                <Text style={styles.infoTextBold}>Need help?</Text> Contact reception if payment isn't approved within 2 hours.
+                <Text style={styles.infoTextBold}>📍 Can I use my credits?</Text> Yes! Once authorized (orange status), you can start booking classes immediately.{'\n'}{'\n'}
+                <Text style={styles.infoTextBold}>Need help?</Text> Contact reception if payment isn't processed within 2 hours.
               </Text>
             </View>
           </View>

@@ -16,7 +16,9 @@ class PaymentMethod(str, Enum):
 
 class PaymentStatus(str, Enum):
     PENDING_APPROVAL = "pending_approval"
-    APPROVED = "approved"
+    AUTHORIZED = "authorized"
+    PAYMENT_CONFIRMED = "payment_confirmed"
+    APPROVED = "approved"  # Keep for backward compatibility
     REJECTED = "rejected"
 
 
@@ -63,6 +65,16 @@ class PackageResponse(PackageBase):
     model_config = {"from_attributes": True}
 
 
+class ApprovalStatus(str, Enum):
+    PENDING = "pending"
+    IN_REVIEW = "in_review"
+    AUTHORIZED = "authorized"
+    PAYMENT_CONFIRMED = "payment_confirmed"
+    APPROVED = "approved"  # Keep for backward compatibility
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
 class UserPackageResponse(BaseModel):
     id: int
     user_id: int
@@ -85,6 +97,29 @@ class UserPackageResponse(BaseModel):
     is_pending_approval: bool
     is_approved: bool
     is_rejected: bool
+    
+    # New approval system fields
+    version: int
+    approval_deadline: Optional[datetime] = None
+    approval_status: ApprovalStatus
+    idempotency_key: Optional[str] = None
+    last_approval_attempt_at: Optional[datetime] = None
+    approval_attempt_count: int
+    can_be_approved: bool
+    approval_timeout_hours: int
+    
+    # Two-step approval fields
+    authorized_by: Optional[int] = None
+    authorized_at: Optional[datetime] = None
+    payment_confirmed_by: Optional[int] = None
+    payment_confirmed_at: Optional[datetime] = None
+    payment_confirmation_reference: Optional[str] = None
+    is_payment_pending: bool
+    is_fully_confirmed: bool
+    can_be_authorized: bool
+    can_confirm_payment: bool
+    can_be_revoked: bool
+    
     created_at: datetime
     updated_at: datetime
 
@@ -94,11 +129,13 @@ class UserPackageResponse(BaseModel):
 class PaymentApprovalRequest(BaseModel):
     payment_reference: Optional[str] = None
     admin_notes: Optional[str] = None
+    expected_version: Optional[int] = None  # For optimistic locking
 
 
 class PaymentRejectionRequest(BaseModel):
     rejection_reason: str
     admin_notes: Optional[str] = None
+    expected_version: Optional[int] = None  # For optimistic locking
 
 
 class PendingApprovalResponse(BaseModel):
@@ -114,6 +151,27 @@ class PendingApprovalResponse(BaseModel):
     payment_reference: Optional[str] = None
     purchase_date: datetime
     hours_waiting: int
+    
+    # New approval system fields
+    version: int
+    approval_status: ApprovalStatus
+    payment_status: PaymentStatus
+    approval_deadline: Optional[datetime] = None
+    approval_timeout_hours: int
+    can_be_approved: bool
+    can_be_authorized: bool
+    can_confirm_payment: bool
+    can_be_revoked: bool
+    approval_attempt_count: int
+    
+    # Two-step approval fields
+    authorized_by: Optional[int] = None
+    authorized_at: Optional[datetime] = None
+    payment_confirmed_by: Optional[int] = None
+    payment_confirmed_at: Optional[datetime] = None
+    payment_confirmation_reference: Optional[str] = None
+    is_payment_pending: bool
+    is_fully_confirmed: bool
     
     model_config = {"from_attributes": True}
 

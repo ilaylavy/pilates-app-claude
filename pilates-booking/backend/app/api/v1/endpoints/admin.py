@@ -6,8 +6,9 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....api.v1.deps import get_admin_user, get_db
-from ....models.package import Package, UserPackage, UserPackageStatus
-from ....models.payment import Payment, PaymentMethod, PaymentStatus
+from ....models.package import Package, UserPackage, UserPackageStatus, ApprovalStatus, PaymentStatus
+from ....models.payment import Payment, PaymentMethod
+from ....models.payment import PaymentStatus as PaymentPaymentStatus
 from ....models.user import User, UserRole
 from ....schemas.admin import (AttendanceReport, DashboardAnalytics,
                                PackageCreate, PackageUpdate, RevenueReport,
@@ -648,15 +649,23 @@ async def get_pending_approvals(
 ):
     """Get all packages pending payment approval."""
     try:
-        # For now, return packages with RESERVED status as pending approvals
-        # This will be updated once the migration is working
+        # Get packages that are pending approval (new security system)
         stmt = (
             select(UserPackage)
             .options(
                 selectinload(UserPackage.user),
                 selectinload(UserPackage.package)
             )
-            .where(UserPackage.status == UserPackageStatus.RESERVED)
+            .where(
+                # Include both pending and authorized packages for two-step approval
+                and_(
+                    UserPackage.payment_status.in_([
+                        PaymentStatus.PENDING_APPROVAL,  # Step 1: Needs authorization
+                        PaymentStatus.AUTHORIZED         # Step 2: Needs payment confirmation
+                    ]),
+                    UserPackage.is_active == True
+                )
+            )
             .order_by(UserPackage.created_at.desc())
         )
         result = await db.execute(stmt)
@@ -676,9 +685,30 @@ async def get_pending_approvals(
                 package_credits=package.package.credits,
                 package_price=package.package.price,
                 payment_method=SchemaPaymentMethod.CASH,  # Assume cash for now
-                payment_reference=None,  # Will be available after migration
+                payment_reference=getattr(package, 'payment_reference', None),
                 purchase_date=package.created_at,
-                hours_waiting=int(hours_waiting)
+                hours_waiting=int(hours_waiting),
+                
+                # Security and approval fields
+                version=getattr(package, 'version', 1),
+                approval_status=getattr(package, 'approval_status', 'pending'),
+                payment_status=package.payment_status,
+                approval_deadline=getattr(package, 'approval_deadline', None),
+                approval_timeout_hours=package.approval_timeout_hours if hasattr(package, 'approval_timeout_hours') else -1,
+                can_be_approved=package.can_be_approved if hasattr(package, 'can_be_approved') else True,
+                can_be_authorized=package.can_be_authorized if hasattr(package, 'can_be_authorized') else True,
+                can_confirm_payment=package.can_confirm_payment if hasattr(package, 'can_confirm_payment') else False,
+                can_be_revoked=package.can_be_revoked if hasattr(package, 'can_be_revoked') else False,
+                approval_attempt_count=getattr(package, 'approval_attempt_count', 0),
+                
+                # Two-step approval fields
+                authorized_by=package.authorized_by,
+                authorized_at=package.authorized_at,
+                payment_confirmed_by=package.payment_confirmed_by,
+                payment_confirmed_at=package.payment_confirmed_at,
+                payment_confirmation_reference=package.payment_confirmation_reference,
+                is_payment_pending=package.is_payment_pending,
+                is_fully_confirmed=package.is_fully_confirmed,
             ))
 
         return pending_approvals
@@ -698,9 +728,14 @@ async def approve_package_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    """Approve a pending package payment."""
+    """Approve a pending package payment with atomic operations and optimistic locking."""
+    from ....models.package import PaymentApproval, PaymentApprovalAction, ApprovalStatus
+    import time
+    
+    start_time = time.time()
+    
     try:
-        # Get the package
+        # Get the package with row-level locking
         stmt = (
             select(UserPackage)
             .options(
@@ -708,6 +743,7 @@ async def approve_package_payment(
                 selectinload(UserPackage.package)
             )
             .where(UserPackage.id == package_id)
+            .with_for_update()  # Row-level lock for concurrency control
         )
         result = await db.execute(stmt)
         user_package = result.scalar_one_or_none()
@@ -718,24 +754,63 @@ async def approve_package_payment(
                 detail="Package not found"
             )
 
-        # For now, check if it's in RESERVED status (will be updated after migration)
-        if user_package.status != UserPackageStatus.RESERVED:
+        # Check if package can be approved
+        if not user_package.can_be_approved:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Package is not pending approval"
+                detail=f"Package cannot be approved (status: {user_package.approval_status.value})"
             )
 
-        # Approve the package by activating it from reservation
-        if not user_package.activate_from_reservation():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to approve package"
-            )
-
-        # Set the admin who approved this package
-        user_package.approved_by = current_user.id
+        # Validate approval data
+        if approval_data.payment_reference and len(approval_data.payment_reference.strip()) == 0:
+            approval_data.payment_reference = None
         
-        await db.commit()
+        if approval_data.admin_notes and len(approval_data.admin_notes.strip()) == 0:
+            approval_data.admin_notes = None
+
+        # Get current version for optimistic locking
+        current_version = user_package.version
+        expected_version = approval_data.expected_version if approval_data.expected_version is not None else current_version
+
+        # Approve the payment using the new method
+        success, message = user_package.approve_payment(
+            admin_id=current_user.id,
+            payment_reference=approval_data.payment_reference,
+            admin_notes=approval_data.admin_notes,
+            expected_version=expected_version
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        # Activate from reservation if it's a cash payment
+        if user_package.status == UserPackageStatus.RESERVED:
+            activation_success, activation_message = user_package.activate_from_reservation()
+            if not activation_success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to activate package: {activation_message}"
+                )
+
+        # Create comprehensive audit record
+        approval_duration = int(time.time() - start_time)
+        client_ip = getattr(request, 'client', {}).host if hasattr(request, 'client') else None
+        user_agent = request.headers.get('user-agent', None)
+        
+        audit_record = PaymentApproval.create_approval_record(
+            user_package=user_package,
+            admin_id=current_user.id,
+            action=PaymentApprovalAction.APPROVED,
+            notes=approval_data.admin_notes,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            approval_duration_seconds=approval_duration
+        )
+        
+        db.add(audit_record)
 
         # Log the admin action
         admin_service = AdminService(db)
@@ -749,9 +824,14 @@ async def approve_package_payment(
                 "package_name": user_package.package.name,
                 "payment_reference": approval_data.payment_reference,
                 "admin_notes": approval_data.admin_notes,
+                "package_version": user_package.version,
+                "approval_duration_seconds": approval_duration,
             },
             request,
         )
+        
+        # Commit the transaction
+        await db.commit()
 
         return {
             "message": "Package payment approved successfully",
@@ -759,6 +839,8 @@ async def approve_package_payment(
             "user_email": user_package.user.email,
             "package_name": user_package.package.name,
             "credits_available": user_package.credits_remaining,
+            "approval_status": user_package.approval_status.value,
+            "package_version": user_package.version,
         }
 
     except HTTPException:
@@ -779,9 +861,14 @@ async def reject_package_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    """Reject a pending package payment."""
+    """Reject a pending package payment with atomic operations and optimistic locking."""
+    from ....models.package import PaymentApproval, PaymentApprovalAction, ApprovalStatus
+    import time
+    
+    start_time = time.time()
+    
     try:
-        # Get the package
+        # Get the package with row-level locking
         stmt = (
             select(UserPackage)
             .options(
@@ -789,6 +876,7 @@ async def reject_package_payment(
                 selectinload(UserPackage.package)
             )
             .where(UserPackage.id == package_id)
+            .with_for_update()  # Row-level lock for concurrency control
         )
         result = await db.execute(stmt)
         user_package = result.scalar_one_or_none()
@@ -799,21 +887,81 @@ async def reject_package_payment(
                 detail="Package not found"
             )
 
-        # For now, check if it's in RESERVED status (will be updated after migration)
-        if user_package.status != UserPackageStatus.RESERVED:
+        # Validate rejection reason
+        if not rejection_data.rejection_reason or not rejection_data.rejection_reason.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Package is not pending approval"
+                detail="Rejection reason is required"
             )
 
-        # Reject the package by cancelling the reservation
-        if not user_package.cancel_reservation():
+        # Check if package can be rejected (similar to approval check)
+        if user_package.payment_status != PaymentStatus.PENDING_APPROVAL:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to reject package"
+                detail=f"Package is not pending approval (status: {user_package.payment_status.value})"
             )
 
-        await db.commit()
+        if user_package.approval_status == ApprovalStatus.APPROVED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package is already approved and cannot be rejected"
+            )
+
+        if user_package.approval_status == ApprovalStatus.REJECTED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Package was already rejected"
+            )
+
+        # Clean up data
+        if rejection_data.admin_notes and len(rejection_data.admin_notes.strip()) == 0:
+            rejection_data.admin_notes = None
+
+        # Get current version for optimistic locking
+        current_version = user_package.version
+        expected_version = rejection_data.expected_version if rejection_data.expected_version is not None else current_version
+
+        # Reject the payment using the new method
+        success, message = user_package.reject_payment(
+            admin_id=current_user.id,
+            rejection_reason=rejection_data.rejection_reason.strip(),
+            admin_notes=rejection_data.admin_notes,
+            expected_version=expected_version
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        # Cancel reservation if it's a cash payment
+        if user_package.status == UserPackageStatus.RESERVED:
+            cancellation_success, cancellation_message = user_package.cancel_reservation()
+            if not cancellation_success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to cancel reservation: {cancellation_message}"
+                )
+
+        # Create comprehensive audit record
+        approval_duration = int(time.time() - start_time)
+        client_ip = getattr(request, 'client', {}).host if hasattr(request, 'client') else None
+        user_agent = request.headers.get('user-agent', None)
+        
+        audit_record = PaymentApproval.create_approval_record(
+            user_package=user_package,
+            admin_id=current_user.id,
+            action=PaymentApprovalAction.REJECTED,
+            notes=rejection_data.admin_notes,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            approval_duration_seconds=approval_duration
+        )
+        # Set failure reason in audit
+        audit_record.failure_reason = rejection_data.rejection_reason.strip()
+        
+        db.add(audit_record)
 
         # Log the admin action
         admin_service = AdminService(db)
@@ -827,9 +975,14 @@ async def reject_package_payment(
                 "package_name": user_package.package.name,
                 "rejection_reason": rejection_data.rejection_reason,
                 "admin_notes": rejection_data.admin_notes,
+                "package_version": user_package.version,
+                "approval_duration_seconds": approval_duration,
             },
             request,
         )
+        
+        # Commit the transaction
+        await db.commit()
 
         return {
             "message": "Package payment rejected successfully",
@@ -837,6 +990,8 @@ async def reject_package_payment(
             "user_email": user_package.user.email,
             "package_name": user_package.package.name,
             "rejection_reason": rejection_data.rejection_reason,
+            "approval_status": user_package.approval_status.value,
+            "package_version": user_package.version,
         }
 
     except HTTPException:
@@ -846,6 +1001,399 @@ async def reject_package_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reject package payment: {str(e)}"
+        )
+
+
+@router.post("/packages/{package_id}/authorize")
+async def authorize_package_payment(
+    package_id: int,
+    authorization_data: PaymentApprovalRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Authorize package payment - Step 1 of two-step approval. User can use credits but package stays visible to admin."""
+    from ....models.package import PaymentApproval, PaymentApprovalAction
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        # Get the package with row-level locking
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+            .with_for_update()  # Row-level lock for concurrency control
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        # Check if package can be authorized
+        if not user_package.can_be_authorized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Package cannot be authorized (current status: {user_package.approval_status.value})"
+            )
+
+        # Validate authorization data
+        if authorization_data.payment_reference and len(authorization_data.payment_reference.strip()) == 0:
+            authorization_data.payment_reference = None
+        
+        if authorization_data.admin_notes and len(authorization_data.admin_notes.strip()) == 0:
+            authorization_data.admin_notes = None
+
+        # Get current version for optimistic locking
+        current_version = user_package.version
+        expected_version = authorization_data.expected_version if authorization_data.expected_version is not None else current_version
+
+        # Authorize the payment using the new method
+        success, message = user_package.authorize_payment(
+            admin_id=current_user.id,
+            payment_reference=authorization_data.payment_reference,
+            admin_notes=authorization_data.admin_notes,
+            expected_version=expected_version
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        # Create comprehensive audit record
+        approval_duration = int(time.time() - start_time)
+        client_ip = getattr(request, 'client', {}).host if hasattr(request, 'client') else None
+        user_agent = request.headers.get('user-agent', None)
+        
+        audit_record = PaymentApproval.create_approval_record(
+            user_package=user_package,
+            admin_id=current_user.id,
+            action=PaymentApprovalAction.APPROVED,  # Use APPROVED action for authorization
+            notes=f"AUTHORIZED: {authorization_data.admin_notes or ''}",
+            ip_address=client_ip,
+            user_agent=user_agent,
+            approval_duration_seconds=approval_duration
+        )
+        
+        db.add(audit_record)
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "AUTHORIZE_PACKAGE_PAYMENT",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "payment_reference": authorization_data.payment_reference,
+                "admin_notes": authorization_data.admin_notes,
+                "package_version": user_package.version,
+                "approval_duration_seconds": approval_duration,
+                "step": "authorization"
+            },
+            request,
+        )
+        
+        # Commit the transaction
+        await db.commit()
+
+        return {
+            "message": "Package payment authorized successfully - user can use credits",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "credits_available": user_package.credits_remaining,
+            "approval_status": user_package.approval_status.value,
+            "payment_status": user_package.payment_status.value,
+            "package_version": user_package.version,
+            "is_payment_pending": user_package.is_payment_pending,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to authorize package payment: {str(e)}"
+        )
+
+
+@router.post("/packages/{package_id}/confirm-payment")
+async def confirm_package_payment(
+    package_id: int,
+    confirmation_data: PaymentApprovalRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Confirm package payment received - Step 2 of two-step approval. Package moves to history."""
+    from ....models.package import PaymentApproval, PaymentApprovalAction
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        # Get the package with row-level locking
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+            .with_for_update()  # Row-level lock for concurrency control
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        # Check if package payment can be confirmed
+        if not user_package.can_confirm_payment:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Package payment cannot be confirmed (payment status: {user_package.payment_status.value}, approval status: {user_package.approval_status.value})"
+            )
+
+        # Validate confirmation data
+        if confirmation_data.payment_reference and len(confirmation_data.payment_reference.strip()) == 0:
+            confirmation_data.payment_reference = None
+        
+        if confirmation_data.admin_notes and len(confirmation_data.admin_notes.strip()) == 0:
+            confirmation_data.admin_notes = None
+
+        # Get current version for optimistic locking
+        current_version = user_package.version
+        expected_version = confirmation_data.expected_version if confirmation_data.expected_version is not None else current_version
+
+        # Confirm the payment using the new method
+        success, message = user_package.confirm_payment(
+            admin_id=current_user.id,
+            confirmation_reference=confirmation_data.payment_reference,
+            admin_notes=confirmation_data.admin_notes,
+            expected_version=expected_version
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        # Activate from reservation if it's a cash payment
+        if user_package.status == UserPackageStatus.RESERVED:
+            activation_success, activation_message = user_package.activate_from_reservation()
+            if not activation_success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to activate package: {activation_message}"
+                )
+
+        # Create comprehensive audit record
+        approval_duration = int(time.time() - start_time)
+        client_ip = getattr(request, 'client', {}).host if hasattr(request, 'client') else None
+        user_agent = request.headers.get('user-agent', None)
+        
+        audit_record = PaymentApproval.create_approval_record(
+            user_package=user_package,
+            admin_id=current_user.id,
+            action=PaymentApprovalAction.APPROVED,  # Use APPROVED action for confirmation
+            notes=f"CONFIRMED: {confirmation_data.admin_notes or ''}",
+            ip_address=client_ip,
+            user_agent=user_agent,
+            approval_duration_seconds=approval_duration
+        )
+        
+        db.add(audit_record)
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "CONFIRM_PACKAGE_PAYMENT",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "confirmation_reference": confirmation_data.payment_reference,
+                "admin_notes": confirmation_data.admin_notes,
+                "package_version": user_package.version,
+                "approval_duration_seconds": approval_duration,
+                "step": "confirmation"
+            },
+            request,
+        )
+        
+        # Commit the transaction
+        await db.commit()
+
+        return {
+            "message": "Package payment confirmed successfully - package is now fully active",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "credits_available": user_package.credits_remaining,
+            "approval_status": user_package.approval_status.value,
+            "payment_status": user_package.payment_status.value,
+            "package_version": user_package.version,
+            "is_fully_confirmed": user_package.is_fully_confirmed,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to confirm package payment: {str(e)}"
+        )
+
+
+@router.post("/packages/{package_id}/revoke-authorization")
+async def revoke_package_authorization(
+    package_id: int,
+    revocation_data: PaymentRejectionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Revoke an authorized package payment."""
+    from ....models.package import PaymentApproval, PaymentApprovalAction
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        # Get the package with row-level locking
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.id == package_id)
+            .with_for_update()  # Row-level lock for concurrency control
+        )
+        result = await db.execute(stmt)
+        user_package = result.scalar_one_or_none()
+
+        if not user_package:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package not found"
+            )
+
+        # Check if package authorization can be revoked
+        if not user_package.can_be_revoked:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Package authorization cannot be revoked (payment status: {user_package.payment_status.value}, approval status: {user_package.approval_status.value})"
+            )
+
+        # Validate revocation data
+        if not revocation_data.rejection_reason or not revocation_data.rejection_reason.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Revocation reason is required"
+            )
+        
+        if revocation_data.admin_notes and len(revocation_data.admin_notes.strip()) == 0:
+            revocation_data.admin_notes = None
+
+        # Get current version for optimistic locking
+        current_version = user_package.version
+        expected_version = revocation_data.expected_version if revocation_data.expected_version is not None else current_version
+
+        # Revoke the authorization using the new method
+        success, message = user_package.revoke_authorization(
+            admin_id=current_user.id,
+            revocation_reason=revocation_data.rejection_reason.strip(),
+            admin_notes=revocation_data.admin_notes,
+            expected_version=expected_version
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        # Create comprehensive audit record
+        approval_duration = int(time.time() - start_time)
+        client_ip = getattr(request, 'client', {}).host if hasattr(request, 'client') else None
+        user_agent = request.headers.get('user-agent', None)
+        
+        audit_record = PaymentApproval.create_approval_record(
+            user_package=user_package,
+            admin_id=current_user.id,
+            action=PaymentApprovalAction.REJECTED,  # Use REJECTED action for revocation
+            notes=f"REVOKED: {revocation_data.admin_notes or ''}",
+            ip_address=client_ip,
+            user_agent=user_agent,
+            approval_duration_seconds=approval_duration
+        )
+        # Set failure reason in audit
+        audit_record.failure_reason = revocation_data.rejection_reason.strip()
+        
+        db.add(audit_record)
+
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "REVOKE_PACKAGE_AUTHORIZATION",
+            "UserPackage",
+            package_id,
+            {
+                "user_email": user_package.user.email,
+                "package_name": user_package.package.name,
+                "revocation_reason": revocation_data.rejection_reason,
+                "admin_notes": revocation_data.admin_notes,
+                "package_version": user_package.version,
+                "approval_duration_seconds": approval_duration,
+            },
+            request,
+        )
+        
+        # Commit the transaction
+        await db.commit()
+
+        return {
+            "message": "Package authorization revoked successfully",
+            "user_package_id": package_id,
+            "user_email": user_package.user.email,
+            "package_name": user_package.package.name,
+            "revocation_reason": revocation_data.rejection_reason,
+            "approval_status": user_package.approval_status.value,
+            "payment_status": user_package.payment_status.value,
+            "package_version": user_package.version,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke package authorization: {str(e)}"
         )
 
 
