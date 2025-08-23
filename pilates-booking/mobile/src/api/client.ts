@@ -2,6 +2,19 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL, BACKUP_API_URLS, STORAGE_KEYS } from '../utils/config';
 import { Logger } from '../services/LoggingService';
+import { networkQueue } from '../services/NetworkQueueService';
+import NetInfo from '@react-native-community/netinfo';
+
+interface RequestCache {
+  [key: string]: {
+    response: AxiosResponse;
+    timestamp: number;
+  };
+}
+
+interface RequestDeduplication {
+  [key: string]: Promise<AxiosResponse>;
+}
 
 class ApiClient {
   private instance: AxiosInstance;
@@ -12,6 +25,15 @@ class ApiClient {
     resolve: (token: string) => void;
     reject: (error: Error) => void;
   }[] = [];
+  private requestCache: RequestCache = {};
+  private pendingRequests: RequestDeduplication = {};
+  private isOnline: boolean = true;
+  private retryConfig = {
+    retries: 3,
+    retryDelay: 1000,
+    retryDelayMultiplier: 2,
+    maxRetryDelay: 10000,
+  };
 
   private buildUrl(url: string): string {
     return url.startsWith('/') ? url : `/${url}`;
@@ -20,7 +42,7 @@ class ApiClient {
   constructor() {
     this.instance = axios.create({
       baseURL: this.currentBaseURL,
-      timeout: 8000, // Faster timeout for quicker fallback to backup URLs
+      timeout: 8000,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -28,7 +50,81 @@ class ApiClient {
     });
 
     this.setupInterceptors();
+    this.setupNetworkMonitoring();
     this.testConnection();
+    this.startCacheCleanup();
+  }
+
+  private setupNetworkMonitoring(): void {
+    NetInfo.addEventListener(state => {
+      this.isOnline = state.isConnected ?? false;
+      
+      Logger.trackEvent('network.state_changed', {
+        isConnected: this.isOnline,
+        type: state.type,
+        isInternetReachable: state.isInternetReachable,
+      });
+    });
+  }
+
+  private startCacheCleanup(): void {
+    setInterval(() => {
+      this.cleanupCache();
+    }, 300000); // Clean cache every 5 minutes
+  }
+
+  private cleanupCache(): void {
+    const now = Date.now();
+    const cacheExpiryMs = 300000; // 5 minutes
+    
+    Object.keys(this.requestCache).forEach(key => {
+      if (now - this.requestCache[key].timestamp > cacheExpiryMs) {
+        delete this.requestCache[key];
+      }
+    });
+  }
+
+  private shouldRetryRequest(error: any, config: any): boolean {
+    // Don't retry if already exceeded max retries
+    const retryCount = config?._retryCount || 0;
+    if (retryCount >= this.retryConfig.retries) {
+      return false;
+    }
+
+    // Don't retry authentication errors or 4xx client errors (except 408, 429)
+    const status = error.response?.status;
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+      return false;
+    }
+
+    // Retry network errors, timeouts, and 5xx server errors
+    const shouldRetry = 
+      error.code === 'ECONNABORTED' || // Timeout
+      error.code === 'ERR_NETWORK' || // Network error
+      error.code === 'NETWORK_ERROR' ||
+      !error.response || // No response received
+      (status >= 500 && status < 600) || // Server error
+      status === 408 || // Request timeout
+      status === 429; // Too many requests
+
+    return shouldRetry;
+  }
+
+  private calculateRetryDelay(retryCount: number): number {
+    const baseDelay = this.retryConfig.retryDelay;
+    const multiplier = this.retryConfig.retryDelayMultiplier;
+    const maxDelay = this.retryConfig.maxRetryDelay;
+    
+    // Exponential backoff with jitter
+    const exponentialDelay = baseDelay * Math.pow(multiplier, retryCount - 1);
+    const jitter = Math.random() * 1000; // Add up to 1 second jitter
+    const delay = Math.min(exponentialDelay + jitter, maxDelay);
+    
+    return delay;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async testConnection(): Promise<void> {
@@ -57,12 +153,41 @@ class ApiClient {
     console.error('❌ No working API URLs found. Check your network connection and backend status.');
   }
 
+  private generateRequestKey(config: AxiosRequestConfig): string {
+    const method = config.method?.toUpperCase() || 'GET';
+    const url = config.url || '';
+    const params = JSON.stringify(config.params || {});
+    const data = config.data ? JSON.stringify(config.data) : '';
+    return `${method}:${url}:${params}:${data}`;
+  }
+
+  private shouldCacheRequest(config: AxiosRequestConfig): boolean {
+    const method = config.method?.toUpperCase();
+    return method === 'GET' && !config.url?.includes('/auth/');
+  }
+
+  private shouldDeduplicateRequest(config: AxiosRequestConfig): boolean {
+    const method = config.method?.toUpperCase();
+    return ['GET', 'PUT', 'PATCH'].includes(method || 'GET');
+  }
+
+  private async shouldQueueOfflineRequest(config: AxiosRequestConfig): Promise<boolean> {
+    if (this.isOnline) return false;
+    
+    const method = config.method?.toUpperCase();
+    const isReadOperation = method === 'GET';
+    const isAuthRequest = config.url?.includes('/auth/');
+    
+    return !isReadOperation && !isAuthRequest;
+  }
+
   private setupInterceptors() {
-    // Request interceptor to add auth token and logging
+    // Enhanced request interceptor
     this.instance.interceptors.request.use(
       async (config) => {
         const startTime = Date.now();
-        (config as any).metadata = { startTime };
+        const requestKey = this.generateRequestKey(config);
+        (config as any).metadata = { startTime, requestKey };
         
         try {
           const token = await SecureStore.getItemAsync(STORAGE_KEYS.ACCESS_TOKEN);
@@ -75,7 +200,43 @@ class ApiClient {
         
         // Handle FormData uploads properly
         if (config.data instanceof FormData) {
-          delete config.headers['Content-Type']; // Let browser set it
+          delete config.headers['Content-Type'];
+        }
+        
+        // Request deduplication
+        if (this.shouldDeduplicateRequest(config) && this.pendingRequests[requestKey]) {
+          Logger.debug('Request deduplicated', { requestKey });
+          Logger.trackEvent('api.request_deduplicated', { requestKey });
+          return this.pendingRequests[requestKey];
+        }
+        
+        // Cache lookup for GET requests
+        if (this.shouldCacheRequest(config)) {
+          const cachedResponse = this.requestCache[requestKey];
+          if (cachedResponse && (Date.now() - cachedResponse.timestamp) < 300000) { // 5 min cache
+            Logger.debug('Request served from cache', { requestKey });
+            Logger.trackEvent('api.request_cached', { requestKey });
+            return Promise.resolve(cachedResponse.response.config);
+          }
+        }
+        
+        // Queue offline requests
+        if (await this.shouldQueueOfflineRequest(config)) {
+          const queueId = await networkQueue.enqueue(
+            config.url!,
+            config.method!.toUpperCase() as any,
+            config.data,
+            {
+              priority: config.url?.includes('/booking') ? 'high' : 'normal',
+              headers: config.headers as Record<string, string>,
+              maxRetries: 3,
+            }
+          );
+          
+          Logger.info('Request queued for offline processing', { queueId, requestKey });
+          Logger.trackEvent('api.request_queued_offline', { queueId, requestKey });
+          
+          throw new Error('Request queued - device is offline');
         }
         
         // Comprehensive request logging
@@ -87,15 +248,16 @@ class ApiClient {
           timeout: config.timeout,
           hasAuth: !!config.headers.Authorization,
           contentType: config.headers['Content-Type'],
-          requestSize: config.data ? JSON.stringify(config.data).length : 0
+          requestSize: config.data ? JSON.stringify(config.data).length : 0,
+          isOnline: this.isOnline,
         });
         
-        // Track API call initiation
         Logger.trackEvent('api.request_started', {
           method: config.method?.toUpperCase(),
           endpoint: config.url,
           baseURL: config.baseURL,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          isOnline: this.isOnline,
         });
         
         return config;
@@ -108,10 +270,25 @@ class ApiClient {
       }
     );
 
-    // Response interceptor to handle token refresh and logging
+    // Enhanced response interceptor
     this.instance.interceptors.response.use(
       (response) => {
-        const duration = (response.config as any).metadata ? Date.now() - (response.config as any).metadata.startTime : 0;
+        const metadata = (response.config as any).metadata;
+        const duration = metadata ? Date.now() - metadata.startTime : 0;
+        const requestKey = metadata?.requestKey;
+        
+        // Clean up pending request tracking
+        if (requestKey && this.pendingRequests[requestKey]) {
+          delete this.pendingRequests[requestKey];
+        }
+        
+        // Cache GET responses
+        if (requestKey && this.shouldCacheRequest(response.config)) {
+          this.requestCache[requestKey] = {
+            response,
+            timestamp: Date.now(),
+          };
+        }
         
         // Log successful response
         Logger.debug('API request completed', {
@@ -120,7 +297,8 @@ class ApiClient {
           status: response.status,
           statusText: response.statusText,
           duration,
-          responseSize: JSON.stringify(response.data).length
+          responseSize: JSON.stringify(response.data).length,
+          fromCache: false,
         });
         
         // Track successful API call
@@ -128,7 +306,7 @@ class ApiClient {
           response.config.url || 'unknown',
           response.config.method?.toUpperCase() || 'GET',
           response.status,
-          duration / 1000 // Convert to seconds
+          duration / 1000
         );
         
         // Log slow requests
@@ -139,13 +317,60 @@ class ApiClient {
             duration,
             status: response.status
           });
+          
+          Logger.trackEvent('api.slow_request', {
+            method: response.config.method?.toUpperCase(),
+            url: response.config.url,
+            duration,
+            status: response.status,
+          });
         }
         
         return response;
       },
       async (error) => {
         const originalRequest = error.config;
-        const duration = originalRequest?.metadata ? Date.now() - originalRequest.metadata.startTime : 0;
+        const metadata = originalRequest?.metadata;
+        const duration = metadata ? Date.now() - metadata.startTime : 0;
+        const requestKey = metadata?.requestKey;
+        
+        // Clean up pending request tracking
+        if (requestKey && this.pendingRequests[requestKey]) {
+          delete this.pendingRequests[requestKey];
+        }
+        
+        // Retry logic with exponential backoff
+        const shouldRetry = this.shouldRetryRequest(error, originalRequest);
+        if (shouldRetry) {
+          const retryCount = (originalRequest._retryCount || 0) + 1;
+          const delay = this.calculateRetryDelay(retryCount);
+          
+          Logger.info('Retrying request with exponential backoff', {
+            url: originalRequest?.url,
+            retryCount,
+            delay,
+            error: error.message,
+          });
+          
+          Logger.trackEvent('api.request_retry', {
+            url: originalRequest?.url,
+            retryCount,
+            delay,
+            errorStatus: error.response?.status,
+            errorCode: error.code,
+          });
+          
+          // Set retry metadata
+          originalRequest._retryCount = retryCount;
+          originalRequest.metadata = {
+            ...metadata,
+            startTime: Date.now(),
+          };
+          
+          // Wait for delay then retry
+          await this.delay(delay);
+          return this.instance.request(originalRequest);
+        }
         
         // Comprehensive error logging
         const fullUrl = originalRequest?.url ? 

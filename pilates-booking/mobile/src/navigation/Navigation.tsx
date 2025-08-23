@@ -14,7 +14,7 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // Main app screens
 import HomeScreen from '../screens/HomeScreen';
-import ScheduleScreen from '../screens/ScheduleScreen';
+import NewScheduleScreen from '../screens/NewScheduleScreen'; // Updated unified schedule
 import BookingsScreen from '../screens/BookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PackagesScreen from '../screens/PackagesScreen';
@@ -29,10 +29,8 @@ import PackageManagementScreen from '../screens/PackageManagementScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SystemSettingsScreen from '../screens/SystemSettingsScreen';
 import AdminApprovalScreen from '../screens/AdminApprovalScreen';
-import AddClassScreen from '../screens/AddClassScreen';
-import EditClassScreen from '../screens/EditClassScreen';
-import TemplateManagementScreen from '../screens/TemplateManagementScreen';
-import BulkOperationsScreen from '../screens/BulkOperationsScreen';
+// Removed: AddClassScreen, EditClassScreen, TemplateManagementScreen, BulkOperationsScreen
+// These are now integrated into the unified NewScheduleScreen
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -46,10 +44,7 @@ export type RootStackParamList = {
   Reports: undefined;
   SystemSettings: undefined;
   AdminApproval: undefined;
-  AddClass: undefined;
-  EditClass: { classInstance: any };
-  TemplateManagement: undefined;
-  BulkOperations: undefined;
+  // Removed: AddClass, EditClass, TemplateManagement, BulkOperations - integrated into Schedule
   Payment: { 
     packageId: number; 
     packageName: string; 
@@ -139,7 +134,7 @@ const MainNavigator = () => {
       {isStudent && (
         <>
           <MainTab.Screen name="Home" component={HomeScreen} />
-          <MainTab.Screen name="Schedule" component={ScheduleScreen} />
+          <MainTab.Screen name="Schedule" component={NewScheduleScreen} />
           <MainTab.Screen name="Bookings" component={BookingsScreen} />
         </>
       )}
@@ -147,7 +142,7 @@ const MainNavigator = () => {
       {/* Instructor screens */}
       {isInstructor && (
         <>
-          <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'My Classes' }} />
+          <MainTab.Screen name="Schedule" component={NewScheduleScreen} options={{ title: 'My Classes' }} />
           <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
         </>
       )}
@@ -155,7 +150,7 @@ const MainNavigator = () => {
       {/* Admin screens */}
       {isAdmin && (
         <>
-          <MainTab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'Classes' }} />
+          <MainTab.Screen name="Schedule" component={NewScheduleScreen} options={{ title: 'Schedule' }} />
           <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
           <MainTab.Screen name="Packages" component={PackageManagementScreen} />
           <MainTab.Screen name="Approvals" component={AdminApprovalScreen} options={{ title: 'Approvals' }} />
@@ -246,26 +241,7 @@ const Navigation = () => {
             component={PurchaseConfirmationScreen}
             options={{ headerShown: true, title: 'Purchase Confirmation' }}
           />
-          <RootStack.Screen 
-            name="AddClass" 
-            component={AddClassScreen}
-            options={{ headerShown: false }}
-          />
-          <RootStack.Screen 
-            name="EditClass" 
-            component={EditClassScreen}
-            options={{ headerShown: false }}
-          />
-          <RootStack.Screen 
-            name="TemplateManagement" 
-            component={TemplateManagementScreen}
-            options={{ headerShown: true, title: 'Class Templates' }}
-          />
-          <RootStack.Screen 
-            name="BulkOperations" 
-            component={BulkOperationsScreen}
-            options={{ headerShown: false }}
-          />
+          {/* Removed old class management screens - now integrated into Schedule tab */}
         </>
       ) : (
         <RootStack.Screen name="Auth" component={AuthNavigator} />

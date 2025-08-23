@@ -24,14 +24,31 @@ interface LogLevel {
   CRITICAL: 'critical';
 }
 
+enum LogCategory {
+  AUTH = 'AUTH',
+  API = 'API',
+  UI = 'UI',
+  NAVIGATION = 'NAVIGATION',
+  PAYMENT = 'PAYMENT',
+  SOCIAL = 'SOCIAL',
+  BOOKING = 'BOOKING',
+  PERFORMANCE = 'PERFORMANCE',
+  SECURITY = 'SECURITY',
+  SYSTEM = 'SYSTEM',
+  GENERAL = 'GENERAL',
+}
+
 interface LogEntry {
   id: string;
   timestamp: string;
   level: keyof LogLevel;
+  category: LogCategory;
   message: string;
   context: LogContext;
   extra?: Record<string, any>;
   stackTrace?: string;
+  breadcrumbs?: string[];
+  samplingRate?: number;
 }
 
 interface LogContext {
@@ -80,6 +97,7 @@ class MobileLoggingService {
   private deviceInfo?: DeviceInfo;
   private isOnline: boolean = true;
   private logLevel: keyof LogLevel = 'INFO';
+  private breadcrumbs: string[] = [];
   
   // Configuration
   private readonly MAX_BUFFER_SIZE = 1000;
@@ -87,8 +105,32 @@ class MobileLoggingService {
   private readonly FLUSH_INTERVAL = 30000; // 30 seconds
   private readonly LOG_STORAGE_KEY = 'pilates_logs';
   private readonly EVENTS_STORAGE_KEY = 'pilates_events';
+  private readonly LOG_RETENTION_DAYS = 7;
+  private readonly MAX_BREADCRUMBS = 50;
+  
+  // Category-specific settings
+  private categorySamplingRates: Map<LogCategory, number> = new Map([
+    [LogCategory.PERFORMANCE, 0.1], // 10% sampling for performance logs
+    [LogCategory.UI, 0.05], // 5% sampling for UI logs
+    [LogCategory.API, 1.0], // 100% sampling for API logs
+    [LogCategory.AUTH, 1.0], // 100% sampling for auth logs
+    [LogCategory.PAYMENT, 1.0], // 100% sampling for payment logs
+    [LogCategory.SECURITY, 1.0], // 100% sampling for security logs
+    [LogCategory.GENERAL, 0.3], // 30% sampling for general logs
+  ]);
+  
+  private categoryLogLevels: Map<LogCategory, keyof LogLevel> = new Map([
+    [LogCategory.PERFORMANCE, 'DEBUG'],
+    [LogCategory.UI, 'INFO'],
+    [LogCategory.API, 'DEBUG'],
+    [LogCategory.AUTH, 'INFO'],
+    [LogCategory.PAYMENT, 'INFO'],
+    [LogCategory.SECURITY, 'WARN'],
+    [LogCategory.GENERAL, 'INFO'],
+  ]);
   
   private flushTimer?: NodeJS.Timeout;
+  private rotationTimer?: NodeJS.Timeout;
 
   private constructor() {
     this.sessionId = this.generateSessionId();
@@ -96,6 +138,7 @@ class MobileLoggingService {
     this.setupNetworkListener();
     this.loadStoredLogs();
     this.startPeriodicFlush();
+    this.startLogRotation();
   }
 
   public static getInstance(): MobileLoggingService {
@@ -177,6 +220,60 @@ class MobileLoggingService {
     }, this.FLUSH_INTERVAL);
   }
 
+  private startLogRotation(): void {
+    // Rotate logs daily at midnight
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const msUntilMidnight = tomorrow.getTime() - now.getTime();
+
+    // Initial rotation check
+    this.rotateOldLogs();
+
+    // Set timer for midnight rotation
+    setTimeout(() => {
+      this.rotateOldLogs();
+      this.rotationTimer = setInterval(() => {
+        this.rotateOldLogs();
+      }, 24 * 60 * 60 * 1000); // Daily rotation
+    }, msUntilMidnight);
+  }
+
+  private async rotateOldLogs(): Promise<void> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - this.LOG_RETENTION_DAYS);
+      
+      // Filter out old logs
+      const filteredLogs = this.logBuffer.filter(
+        log => new Date(log.timestamp) > cutoffDate
+      );
+      
+      const removedCount = this.logBuffer.length - filteredLogs.length;
+      this.logBuffer = filteredLogs;
+      
+      if (removedCount > 0) {
+        console.log(`Rotated ${removedCount} old log entries`);
+        await AsyncStorage.setItem(this.LOG_STORAGE_KEY, JSON.stringify(this.logBuffer));
+      }
+
+      // Also clean up old events
+      const filteredEvents = this.eventBuffer.filter(
+        event => new Date(event.timestamp) > cutoffDate
+      );
+      
+      const removedEventCount = this.eventBuffer.length - filteredEvents.length;
+      this.eventBuffer = filteredEvents;
+      
+      if (removedEventCount > 0) {
+        await AsyncStorage.setItem(this.EVENTS_STORAGE_KEY, JSON.stringify(this.eventBuffer));
+      }
+    } catch (error) {
+      console.error('Failed to rotate old logs:', error);
+    }
+  }
+
   // Configuration methods
   public setUserId(userId: string): void {
     this.userId = userId;
@@ -202,20 +299,20 @@ class MobileLoggingService {
     this.logLevel = level;
   }
 
-  // Core logging methods
-  public debug(message: string, extra?: Record<string, any>): void {
-    this.log('DEBUG', message, extra);
+  // Enhanced logging methods with categories
+  public debug(message: string, extra?: Record<string, any>, category: LogCategory = LogCategory.GENERAL): void {
+    this.log('DEBUG', message, category, extra);
   }
 
-  public info(message: string, extra?: Record<string, any>): void {
-    this.log('INFO', message, extra);
+  public info(message: string, extra?: Record<string, any>, category: LogCategory = LogCategory.GENERAL): void {
+    this.log('INFO', message, category, extra);
   }
 
-  public warn(message: string, extra?: Record<string, any>): void {
-    this.log('WARN', message, extra);
+  public warn(message: string, extra?: Record<string, any>, category: LogCategory = LogCategory.GENERAL): void {
+    this.log('WARN', message, category, extra);
   }
 
-  public error(message: string, error?: Error, extra?: Record<string, any>): void {
+  public error(message: string, error?: Error, extra?: Record<string, any>, category: LogCategory = LogCategory.GENERAL): void {
     const logExtra = {
       ...extra,
       error: error ? {
@@ -225,10 +322,10 @@ class MobileLoggingService {
       } : undefined,
     };
 
-    this.log('ERROR', message, logExtra, error?.stack);
+    this.log('ERROR', message, category, logExtra, error?.stack);
   }
 
-  public critical(message: string, error?: Error, extra?: Record<string, any>): void {
+  public critical(message: string, error?: Error, extra?: Record<string, any>, category: LogCategory = LogCategory.GENERAL): void {
     const logExtra = {
       ...extra,
       error: error ? {
@@ -238,7 +335,51 @@ class MobileLoggingService {
       } : undefined,
     };
 
-    this.log('CRITICAL', message, logExtra, error?.stack);
+    this.log('CRITICAL', message, category, logExtra, error?.stack);
+  }
+
+  // Category-specific convenience methods
+  public logAuth(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.AUTH, extra);
+  }
+
+  public logAPI(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.API, extra);
+  }
+
+  public logUI(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.UI, extra);
+  }
+
+  public logNavigation(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.NAVIGATION, extra);
+  }
+
+  public logPayment(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.PAYMENT, extra);
+  }
+
+  public logBooking(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.BOOKING, extra);
+  }
+
+  public logSecurity(level: keyof LogLevel, message: string, extra?: Record<string, any>): void {
+    this.log(level, message, LogCategory.SECURITY, extra);
+  }
+
+  // Breadcrumb management
+  public addBreadcrumb(message: string, category?: LogCategory): void {
+    const breadcrumb = `${new Date().toISOString()} [${category || 'GENERAL'}] ${message}`;
+    this.breadcrumbs.push(breadcrumb);
+    
+    // Keep only last N breadcrumbs
+    if (this.breadcrumbs.length > this.MAX_BREADCRUMBS) {
+      this.breadcrumbs = this.breadcrumbs.slice(-this.MAX_BREADCRUMBS);
+    }
+  }
+
+  public clearBreadcrumbs(): void {
+    this.breadcrumbs = [];
   }
 
   // Event tracking methods
@@ -306,22 +447,35 @@ class MobileLoggingService {
     this.error(`Error in ${context || 'unknown context'}`, error);
   }
 
-  // Core logging implementation
-  private log(level: keyof LogLevel, message: string, extra?: Record<string, any>, 
-             stackTrace?: string): void {
+  // Enhanced core logging implementation
+  private log(level: keyof LogLevel, message: string, category: LogCategory, 
+             extra?: Record<string, any>, stackTrace?: string): void {
     // Check if log level should be recorded
-    if (!this.shouldLog(level)) {
+    if (!this.shouldLog(level, category)) {
       return;
     }
+
+    // Apply category sampling
+    const samplingRate = this.categorySamplingRates.get(category) || 1.0;
+    if (Math.random() > samplingRate) {
+      return; // Skip this log due to sampling
+    }
+
+    // Filter sensitive data
+    const sanitizedExtra = this.sanitizeLogData(extra);
+    const sanitizedMessage = this.sanitizeSensitiveData(message);
 
     const logEntry: LogEntry = {
       id: this.generateLogId(),
       timestamp: new Date().toISOString(),
       level,
-      message,
+      category,
+      message: sanitizedMessage,
       context: this.getLogContext(),
-      extra,
+      extra: sanitizedExtra,
       stackTrace,
+      breadcrumbs: [...this.breadcrumbs], // Snapshot of current breadcrumbs
+      samplingRate,
     };
 
     this.logBuffer.push(logEntry);
@@ -329,7 +483,7 @@ class MobileLoggingService {
     // Also console log in development
     if (__DEV__) {
       const consoleMethod = this.getConsoleMethod(level);
-      consoleMethod(`[${level}] ${message}`, extra);
+      consoleMethod(`[${level}][${category}] ${sanitizedMessage}`, sanitizedExtra);
     }
 
     // Manage buffer size
@@ -343,6 +497,37 @@ class MobileLoggingService {
     if (level === 'ERROR' || level === 'CRITICAL') {
       this.flushLogs();
     }
+  }
+
+  private sanitizeLogData(data?: Record<string, any>): Record<string, any> | undefined {
+    if (!data) return data;
+    
+    const sensitiveFields = [
+      'password', 'token', 'secret', 'key', 'authorization',
+      'credit_card', 'ssn', 'email', 'phone'
+    ];
+    
+    const sanitized = { ...data };
+    
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (typeof key === 'string' && sensitiveFields.some(field => 
+        key.toLowerCase().includes(field))) {
+        sanitized[key] = '[REDACTED]';
+      } else if (typeof value === 'object' && value !== null) {
+        sanitized[key] = this.sanitizeLogData(value as Record<string, any>);
+      }
+    }
+    
+    return sanitized;
+  }
+
+  private sanitizeSensitiveData(message: string): string {
+    // Remove potential credit card numbers, emails, phones, etc.
+    return message
+      .replace(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, '[CARD-REDACTED]')
+      .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL-REDACTED]')
+      .replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE-REDACTED]')
+      .replace(/\b(?:token|key|secret)[\s=:]+[^\s]+/gi, '[TOKEN-REDACTED]');
   }
 
   private getLogContext(): LogContext {
@@ -361,7 +546,7 @@ class MobileLoggingService {
     };
   }
 
-  private shouldLog(level: keyof LogLevel): boolean {
+  private shouldLog(level: keyof LogLevel, category?: LogCategory): boolean {
     const levels: Record<keyof LogLevel, number> = {
       DEBUG: 0,
       INFO: 1,
@@ -370,7 +555,19 @@ class MobileLoggingService {
       CRITICAL: 4,
     };
 
-    return levels[level] >= levels[this.logLevel];
+    // Check global log level
+    const globalCheck = levels[level] >= levels[this.logLevel];
+    
+    // Check category-specific log level if available
+    if (category) {
+      const categoryLevel = this.categoryLogLevels.get(category);
+      if (categoryLevel) {
+        const categoryCheck = levels[level] >= levels[categoryLevel];
+        return globalCheck && categoryCheck;
+      }
+    }
+
+    return globalCheck;
   }
 
   private getConsoleMethod(level: keyof LogLevel): Function {
@@ -526,10 +723,22 @@ class MobileLoggingService {
     return chunks;
   }
 
+  // Configuration methods for categories
+  public setCategorySamplingRate(category: LogCategory, rate: number): void {
+    this.categorySamplingRates.set(category, Math.max(0, Math.min(1, rate)));
+  }
+
+  public setCategoryLogLevel(category: LogCategory, level: keyof LogLevel): void {
+    this.categoryLogLevels.set(category, level);
+  }
+
   // Cleanup
   public destroy(): void {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
+    }
+    if (this.rotationTimer) {
+      clearInterval(this.rotationTimer);
     }
     this.flushLogs();
   }
@@ -575,6 +784,7 @@ export const setupGlobalErrorHandler = (): void => {
 
 // Export singleton instance
 export const Logger = MobileLoggingService.getInstance();
+export { LogCategory };
 
 // Export convenience functions
 export const logDebug = (message: string, extra?: Record<string, any>) => Logger.debug(message, extra);

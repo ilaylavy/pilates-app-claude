@@ -329,9 +329,18 @@ def clear_request_context():
 def setup_logging() -> None:
     """Set up comprehensive logging configuration."""
 
-    # Create logs directory
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    # Determine if we should use file logging
+    use_file_logging = settings.ENVIRONMENT in ["production", "staging"]
+    
+    # Create logs directory only if using file logging
+    if use_file_logging:
+        log_dir = Path("logs")
+        try:
+            log_dir.mkdir(exist_ok=True)
+        except PermissionError:
+            # Fall back to console-only logging if we can't create log directory
+            use_file_logging = False
+            print("Warning: Cannot create logs directory, using console-only logging")
 
     # Determine log level based on environment
     if settings.ENVIRONMENT == "production":
@@ -344,6 +353,7 @@ def setup_logging() -> None:
         log_level = "DEBUG"
         console_level = "DEBUG"
 
+    # Base configuration with console-only logging
     logging_config: Dict[str, Any] = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -377,6 +387,94 @@ def setup_logging() -> None:
                 "filters": ["request_context", "sensitive_data"],
                 "stream": sys.stdout,
             },
+        },
+        "loggers": {
+            "app": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.events": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.security": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.access": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.database": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.performance": {
+                "level": "WARNING",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.booking": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.auth": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.payment": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "app.admin": {
+                "level": log_level,
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            # Third-party loggers
+            "uvicorn": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "sqlalchemy.engine": {
+                "level": "WARNING",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "sqlalchemy.dialects": {
+                "level": "WARNING",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+            "stripe": {
+                "level": "INFO",
+                "handlers": ["console"],
+                "propagate": False,
+            },
+        },
+        "root": {
+            "level": "WARNING",
+            "handlers": ["console"],
+        },
+    }
+    
+    # Add file handlers only in production/staging environments
+    if use_file_logging:
+        file_handlers = {
             "app_file": {
                 "class": "logging.handlers.TimedRotatingFileHandler",
                 "level": log_level,
@@ -443,90 +541,28 @@ def setup_logging() -> None:
                 "backupCount": 7,
                 "encoding": "utf8",
             },
-        },
-        "loggers": {
-            "app": {
-                "level": log_level,
-                "handlers": ["console", "app_file", "error_file"],
-                "propagate": False,
-            },
-            "app.events": {
-                "level": "INFO",
-                "handlers": ["events_file", "app_file"],
-                "propagate": False,
-            },
-            "app.security": {
-                "level": "INFO",
-                "handlers": ["security_file", "error_file", "console"],
-                "propagate": False,
-            },
-            "app.access": {
-                "level": "INFO",
-                "handlers": ["access_file"],
-                "propagate": False,
-            },
-            "app.database": {
-                "level": "INFO",
-                "handlers": ["database_file"],
-                "propagate": False,
-            },
-            "app.performance": {
-                "level": "WARNING",  # Only show slow queries and errors
-                "handlers": ["database_file"],
-                "propagate": False,
-            },
-            "app.booking": {
-                "level": log_level,
-                "handlers": ["console", "app_file", "error_file"],
-                "propagate": False,
-            },
-            "app.auth": {
-                "level": log_level,
-                "handlers": ["console", "app_file", "error_file"],
-                "propagate": False,
-            },
-            "app.payment": {
-                "level": log_level,
-                "handlers": ["console", "app_file", "error_file"],
-                "propagate": False,
-            },
-            "app.admin": {
-                "level": log_level,
-                "handlers": ["console", "app_file", "error_file", "security_file"],
-                "propagate": False,
-            },
-            # Third-party loggers
-            "uvicorn": {
-                "level": "INFO",
-                "handlers": ["console", "app_file"],
-                "propagate": False,
-            },
-            "uvicorn.access": {
-                "level": "INFO",
-                "handlers": ["access_file"],
-                "propagate": False,
-            },
-            "sqlalchemy.engine": {
-                "level": "WARNING",
-                "handlers": ["database_file"],
-                "propagate": False,
-            },
-            "sqlalchemy.dialects": {
-                "level": "WARNING",
-                "handlers": ["database_file"],
-                "propagate": False,
-            },
-            "stripe": {
-                "level": "INFO",
-                "handlers": ["app_file", "error_file"],
-                "propagate": False,
-            },
-        },
-        "root": {
-            "level": "WARNING",
-            "handlers": ["console", "app_file"],
-        },
-    }
+        }
+        
+        # Add file handlers to configuration
+        logging_config["handlers"].update(file_handlers)
+        
+        # Update logger handlers to include file handlers
+        logging_config["loggers"]["app"]["handlers"].extend(["app_file", "error_file"])
+        logging_config["loggers"]["app.events"]["handlers"].extend(["events_file", "app_file"])
+        logging_config["loggers"]["app.security"]["handlers"].extend(["security_file", "error_file"])
+        logging_config["loggers"]["app.access"]["handlers"] = ["access_file"]
+        logging_config["loggers"]["app.database"]["handlers"] = ["database_file"]
+        logging_config["loggers"]["app.performance"]["handlers"] = ["database_file"]
+        logging_config["loggers"]["app.booking"]["handlers"].extend(["app_file", "error_file"])
+        logging_config["loggers"]["app.auth"]["handlers"].extend(["app_file", "error_file"])
+        logging_config["loggers"]["app.payment"]["handlers"].extend(["app_file", "error_file"])
+        logging_config["loggers"]["app.admin"]["handlers"].extend(["app_file", "error_file", "security_file"])
+        logging_config["loggers"]["uvicorn"]["handlers"].extend(["app_file"])
+        logging_config["loggers"]["uvicorn.access"]["handlers"] = ["access_file"]
+        logging_config["loggers"]["sqlalchemy.engine"]["handlers"] = ["database_file"]
+        logging_config["loggers"]["sqlalchemy.dialects"]["handlers"] = ["database_file"]
+        logging_config["loggers"]["stripe"]["handlers"] = ["app_file", "error_file"]
+        logging_config["root"]["handlers"].append("app_file")
 
     # Apply configuration
     logging.config.dictConfig(logging_config)

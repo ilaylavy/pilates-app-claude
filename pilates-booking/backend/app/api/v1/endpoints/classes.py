@@ -85,33 +85,7 @@ async def get_upcoming_classes(
     return [class_instance_to_response(instance) for instance in class_instances]
 
 
-@router.get("/{class_id}", response_model=ClassInstanceResponse)
-async def get_class_instance(
-    class_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Get specific class instance by ID."""
-    stmt = (
-        select(ClassInstance)
-        .options(
-            selectinload(ClassInstance.template),
-            selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings),
-            selectinload(ClassInstance.waitlist_entries),
-        )
-        .where(ClassInstance.id == class_id)
-    )
-    result = await db.execute(stmt)
-    class_instance = result.scalar_one_or_none()
-
-    if not class_instance:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Class not found"
-        )
-
-    return class_instance_to_response(class_instance)
-
+# Specific routes MUST come before parameterized routes like /{class_id}
 
 # Template management endpoints (admin/instructor only)
 @router.post(
@@ -211,67 +185,7 @@ async def delete_class_template(
         await db.commit()
 
 
-@router.post(
-    "/instances",
-    response_model=ClassInstanceResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_class_instance(
-    instance_create: ClassInstanceCreate,
-    db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user),
-):
-    """Create a new class instance (admin only)."""
-    # Verify template exists
-    stmt = select(ClassTemplate).where(ClassTemplate.id == instance_create.template_id)
-    result = await db.execute(stmt)
-    template = result.scalar_one_or_none()
-
-    if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Class template not found"
-        )
-
-    # Verify instructor exists
-    from ....models.user import User, UserRole
-
-    stmt = select(User).where(
-        and_(
-            User.id == instance_create.instructor_id,
-            User.role.in_([UserRole.INSTRUCTOR, UserRole.ADMIN]),
-        )
-    )
-    result = await db.execute(stmt)
-    instructor = result.scalar_one_or_none()
-
-    if not instructor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Instructor not found"
-        )
-
-    db_instance = ClassInstance(**instance_create.dict())
-
-    db.add(db_instance)
-    await db.commit()
-    await db.refresh(db_instance)
-
-    # Load relationships for computed fields
-    stmt = (
-        select(ClassInstance)
-        .options(
-            selectinload(ClassInstance.template),
-            selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings),
-            selectinload(ClassInstance.waitlist_entries),
-        )
-        .where(ClassInstance.id == db_instance.id)
-    )
-    result = await db.execute(stmt)
-    loaded_instance = result.scalar_one()
-
-    return class_instance_to_response(loaded_instance)
-
-
+# Date-based endpoints
 @router.get("/week/{week_date}", response_model=List[ClassInstanceResponse])
 async def get_classes_for_week(
     week_date: date,
@@ -359,6 +273,128 @@ async def get_classes_for_month(
     return [class_instance_to_response(instance) for instance in class_instances]
 
 
+# Class instance management
+@router.post(
+    "/create", response_model=ClassInstanceResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_class(
+    instance_create: ClassInstanceCreate,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Create a new class instance (admin only)."""
+    return await create_class_instance(instance_create, db, admin_user)
+
+
+@router.post(
+    "/instances",
+    response_model=ClassInstanceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_class_instance(
+    instance_create: ClassInstanceCreate,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Create a new class instance (admin only)."""
+    # Verify template exists
+    stmt = select(ClassTemplate).where(ClassTemplate.id == instance_create.template_id)
+    result = await db.execute(stmt)
+    template = result.scalar_one_or_none()
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Class template not found"
+        )
+
+    # Verify instructor exists
+    from ....models.user import User, UserRole
+
+    stmt = select(User).where(
+        and_(
+            User.id == instance_create.instructor_id,
+            User.role.in_([UserRole.INSTRUCTOR, UserRole.ADMIN]),
+        )
+    )
+    result = await db.execute(stmt)
+    instructor = result.scalar_one_or_none()
+
+    if not instructor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Instructor not found"
+        )
+
+    db_instance = ClassInstance(**instance_create.dict())
+
+    db.add(db_instance)
+    await db.commit()
+    await db.refresh(db_instance)
+
+    # Load relationships for computed fields
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries),
+        )
+        .where(ClassInstance.id == db_instance.id)
+    )
+    result = await db.execute(stmt)
+    loaded_instance = result.scalar_one()
+
+    return class_instance_to_response(loaded_instance)
+
+
+# Waitlist endpoints  
+@router.post("/{class_id}/waitlist", response_model=WaitlistEntryResponse)
+async def join_waitlist(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Join waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        waitlist_entry = await booking_service.add_to_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
+        )
+        return waitlist_entry
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/{class_id}/waitlist", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_waitlist(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Leave waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        await booking_service.remove_from_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
 @router.get("/{class_id}/participants", response_model=List[ParticipantResponse])
 async def get_class_participants(
     class_id: int,
@@ -407,16 +443,33 @@ async def get_class_participants(
     return participants
 
 
-@router.post(
-    "/create", response_model=ClassInstanceResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_class(
-    instance_create: ClassInstanceCreate,
+# Class instance by ID - MUST be last since it's a catch-all pattern
+@router.get("/{class_id}", response_model=ClassInstanceResponse)
+async def get_class_instance(
+    class_id: int,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Create a new class instance (admin only)."""
-    return await create_class_instance(instance_create, db, admin_user)
+    """Get specific class instance by ID."""
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries),
+        )
+        .where(ClassInstance.id == class_id)
+    )
+    result = await db.execute(stmt)
+    class_instance = result.scalar_one_or_none()
+
+    if not class_instance:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Class not found"
+        )
+
+    return class_instance_to_response(class_instance)
 
 
 @router.patch("/{class_id}", response_model=ClassInstanceResponse)
@@ -497,50 +550,3 @@ async def delete_class(
         # Safe to delete if no bookings
         await db.delete(class_instance)
         await db.commit()
-
-
-@router.post("/{class_id}/waitlist", response_model=WaitlistEntryResponse)
-async def join_waitlist(
-    class_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Join waitlist for a class."""
-    from ....services.booking_service import BookingService
-    
-    booking_service = BookingService(db)
-    
-    try:
-        waitlist_entry = await booking_service.add_to_waitlist(
-            user_id=current_user.id, 
-            class_instance_id=class_id
-        )
-        return waitlist_entry
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-
-@router.delete("/{class_id}/waitlist", status_code=status.HTTP_204_NO_CONTENT)
-async def leave_waitlist(
-    class_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Leave waitlist for a class."""
-    from ....services.booking_service import BookingService
-    
-    booking_service = BookingService(db)
-    
-    try:
-        await booking_service.remove_from_waitlist(
-            user_id=current_user.id, 
-            class_instance_id=class_id
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
