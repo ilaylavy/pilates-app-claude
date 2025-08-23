@@ -177,12 +177,19 @@ const StudentScheduleTab: React.FC = () => {
           return (
             <View key={index} style={[styles.dayContainer]}>
               <View style={[styles.dayHeader, isToday && styles.todayHeader]}>
-                <Text style={[styles.dayName, isToday && styles.todayText]}>
-                  {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                </Text>
-                <Text style={[styles.dayDate, isToday && styles.todayText]}>
-                  {day.getDate()}
-                </Text>
+                <View style={styles.dayInfo}>
+                  <Text style={[styles.dayName, isToday && styles.todayText]}>
+                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                  </Text>
+                  <Text style={[styles.dayDate, isToday && styles.todayText]}>
+                    {day.getDate()}
+                  </Text>
+                </View>
+                <View style={styles.dayActions}>
+                  <Text style={styles.dayClassCount}>
+                    {dayClasses.length} {dayClasses.length === 1 ? 'class' : 'classes'}
+                  </Text>
+                </View>
               </View>
               
               <View style={styles.dayClasses}>
@@ -192,42 +199,14 @@ const StudentScheduleTab: React.FC = () => {
                   </View>
                 ) : (
                   dayClasses.map((classInstance) => (
-                    <TouchableOpacity
+                    <ClassCard
                       key={classInstance.id}
-                      style={styles.classItem}
+                      classInstance={classInstance}
+                      variant="schedule"
+                      showTimeLeft={true}
                       onPress={() => handleClassPress(classInstance)}
-                    >
-                      <View style={styles.classTime}>
-                        <Text style={styles.classTimeText}>
-                          {new Date(classInstance.start_datetime).toLocaleTimeString('en-US', {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true,
-                          })}
-                        </Text>
-                      </View>
-                      <View style={styles.classInfo}>
-                        <Text style={styles.classTitle}>{classInstance.template?.name}</Text>
-                        <Text style={styles.classInstructor}>
-                          {classInstance.instructor?.first_name} {classInstance.instructor?.last_name}
-                        </Text>
-                      </View>
-                      <View style={styles.classCapacity}>
-                        <Text style={styles.capacityText}>
-                          {classInstance.participant_count || 0}/{(classInstance.participant_count || 0) + (classInstance.available_spots || 0)}
-                        </Text>
-                        <View style={[
-                          styles.capacityDot,
-                          {
-                            backgroundColor: classInstance.is_full 
-                              ? COLORS.error 
-                              : (classInstance.participant_count || 0) > ((classInstance.participant_count || 0) + (classInstance.available_spots || 0)) * 0.8 
-                                ? COLORS.warning 
-                                : COLORS.success
-                          }
-                        ]} />
-                      </View>
-                    </TouchableOpacity>
+                      showActions={false}
+                    />
                   ))
                 )}
               </View>
@@ -470,24 +449,39 @@ const styles = StyleSheet.create({
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     backgroundColor: COLORS.surface,
+  },
+  dayInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  dayActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   todayHeader: {
     backgroundColor: COLORS.primary + '10',
   },
   dayName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-    minWidth: 60,
+    minWidth: 50,
   },
   dayDate: {
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.textSecondary,
-    marginLeft: SPACING.sm,
+  },
+  dayClassCount: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
   },
   todayText: {
     color: COLORS.primary,

@@ -22,6 +22,8 @@ import ClassCard from '../components/ClassCard';
 import CalendarView from '../components/CalendarView';
 import ClassDetailsModal from '../components/ClassDetailsModal';
 import BookingConfirmationModal from '../components/BookingConfirmationModal';
+import EditClassModal from '../components/schedule/EditClassModal';
+import QuickAddClassModal from '../components/schedule/QuickAddClassModal';
 import FloatingActionButton from '../components/FloatingActionButton';
 import { ClassCardSkeleton } from '../components/SkeletonLoader';
 import { useUserRole } from '../hooks/useUserRole';
@@ -48,6 +50,8 @@ const ScheduleScreen: React.FC = () => {
   const [completedBooking, setCompletedBooking] = useState<any>(null);
   const [bookedClassInstance, setBookedClassInstance] = useState<ClassInstance | null>(null);
   const [bookingInProgressId, setBookingInProgressId] = useState<number | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const { isAdmin, isStudent } = useUserRole();
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
@@ -309,7 +313,9 @@ const ScheduleScreen: React.FC = () => {
   };
 
   const handleEditClass = (classInstance: ClassInstance) => {
-    navigation.navigate('EditClass', { classInstance });
+    setSelectedClass(classInstance);
+    setDetailsModalVisible(false);
+    setShowEditModal(true);
   };
 
   // Booking action handlers
@@ -388,15 +394,15 @@ const ScheduleScreen: React.FC = () => {
   };
 
   const handleAddClass = () => {
-    navigation.navigate('AddClass');
+    setShowQuickAdd(true);
   };
 
   const handleManageTemplates = () => {
-    navigation.navigate('TemplateManagement');
+    Alert.alert('Templates', 'Template management will be available in the next update!');
   };
 
   const handleBulkOperations = () => {
-    navigation.navigate('BulkOperations');
+    Alert.alert('Bulk Operations', 'Bulk operations will be available in the next update!');
   };
 
   const filterClasses = (classes: ClassInstance[]) => {
@@ -690,6 +696,33 @@ const ScheduleScreen: React.FC = () => {
           }}
         />
       )}
+
+      {/* Edit Class Modal */}
+      {selectedClass && (
+        <EditClassModal
+          visible={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedClass(null);
+          }}
+          onSuccess={() => {
+            setShowEditModal(false);
+            setSelectedClass(null);
+            handleRefresh();
+          }}
+          classInstance={selectedClass}
+        />
+      )}
+
+      {/* Quick Add Class Modal */}
+      <QuickAddClassModal
+        visible={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        onSuccess={() => {
+          setShowQuickAdd(false);
+          handleRefresh();
+        }}
+      />
 
       {/* Floating Action Button (Admin Only) */}
       {isAdmin && !showCalendarView && (

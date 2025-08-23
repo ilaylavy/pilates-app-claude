@@ -292,24 +292,31 @@ const ScheduleTab: React.FC = () => {
               disabled={dayClasses.length === 0 && (!isAdmin && !isInstructor)}
             >
               <View style={[styles.dayHeader, isToday && styles.todayHeader]}>
-                <Text style={[styles.dayName, isToday && styles.todayText]}>
-                  {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                </Text>
-                <Text style={[styles.dayDate, isToday && styles.todayText]}>
-                  {day.getDate()}
-                </Text>
-                {(isAdmin || isInstructor) && (
-                  <TouchableOpacity 
-                    style={styles.addClassButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      setSelectedDate(day);
-                      setShowQuickAdd(true);
-                    }}
-                  >
-                    <Ionicons name="add" size={16} color={COLORS.primary} />
-                  </TouchableOpacity>
-                )}
+                <View style={styles.dayInfo}>
+                  <Text style={[styles.dayName, isToday && styles.todayText]}>
+                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                  </Text>
+                  <Text style={[styles.dayDate, isToday && styles.todayText]}>
+                    {day.getDate()}
+                  </Text>
+                </View>
+                <View style={styles.dayActions}>
+                  <Text style={styles.dayClassCount}>
+                    {dayClasses.length} {dayClasses.length === 1 ? 'class' : 'classes'}
+                  </Text>
+                  {(isAdmin || isInstructor) && (
+                    <TouchableOpacity 
+                      style={styles.addClassButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setSelectedDate(day);
+                        setShowQuickAdd(true);
+                      }}
+                    >
+                      <Ionicons name="add" size={14} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
               
               <View style={styles.dayClasses}>
@@ -320,43 +327,22 @@ const ScheduleTab: React.FC = () => {
                 ) : (
                   dayClasses.map((classInstance) => {
                     return (
-                      <TouchableOpacity
+                      <ClassCard
                         key={classInstance.id}
-                        style={styles.classItem}
+                        classInstance={classInstance}
+                        variant="schedule"
+                        showTimeLeft={true}
                         onPress={() => handleClassPress(classInstance)}
-                        onLongPress={() => handleClassLongPress(classInstance)}
-                      >
-                      <View style={styles.classTime}>
-                        <Text style={styles.classTimeText}>
-                          {new Date(classInstance.start_datetime).toLocaleTimeString('en-US', {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true,
-                          })}
-                        </Text>
-                      </View>
-                      <View style={styles.classInfo}>
-                        <Text style={styles.classTitle}>{classInstance.template?.name}</Text>
-                        <Text style={styles.classInstructor}>
-                          {classInstance.instructor?.first_name} {classInstance.instructor?.last_name}
-                        </Text>
-                      </View>
-                      <View style={styles.classCapacity}>
-                        <Text style={styles.capacityText}>
-                          {classInstance.participant_count || 0}/{(classInstance.participant_count || 0) + (classInstance.available_spots || 0)}
-                        </Text>
-                        <View style={[
-                          styles.capacityDot,
-                          {
-                            backgroundColor: classInstance.is_full 
-                              ? COLORS.error 
-                              : (classInstance.participant_count || 0) > ((classInstance.participant_count || 0) + (classInstance.available_spots || 0)) * 0.8 
-                                ? COLORS.warning 
-                                : COLORS.success
-                          }
-                        ]} />
-                      </View>
-                      </TouchableOpacity>
+                        onEdit={isAdmin || isInstructor ? () => {
+                          setSelectedClass(classInstance);
+                          handleEditClass();
+                        } : undefined}
+                        onDelete={isAdmin ? () => {
+                          setSelectedClass(classInstance);
+                          handleDeleteClass(classInstance.id);
+                        } : undefined}
+                        showActions={false}
+                      />
                     );
                   })
                 )}
@@ -391,7 +377,10 @@ const ScheduleTab: React.FC = () => {
                 onPress={() => handleClassPress(classInstance)}
                 showBookingButton={false}
                 showAdminActions={isAdmin}
-                onDelete={() => handleDeleteClass(classInstance.id)}
+                onDelete={() => {
+                  setSelectedClass(classInstance);
+                  handleDeleteClass(classInstance.id);
+                }}
               />
             </TouchableOpacity>
           ))}
@@ -695,32 +684,46 @@ const styles = StyleSheet.create({
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     backgroundColor: COLORS.surface,
+  },
+  dayInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  dayActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
   todayHeader: {
     backgroundColor: COLORS.primary + '10',
   },
   dayName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-    minWidth: 60,
+    minWidth: 50,
   },
   dayDate: {
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.textSecondary,
-    marginLeft: SPACING.sm,
+  },
+  dayClassCount: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
   },
   todayText: {
     color: COLORS.primary,
   },
   addClassButton: {
-    marginLeft: 'auto',
     padding: SPACING.xs,
-    borderRadius: 6,
+    borderRadius: 4,
     backgroundColor: COLORS.primary + '15',
   },
   dayClasses: {
