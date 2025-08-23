@@ -6,50 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Modal,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { COLORS, SPACING } from '../../utils/config';
 import { classesApi } from '../../api/classes';
-import { adminApi } from '../../api/admin';
-import { useUserRole } from '../../hooks/useUserRole';
 import { ClassInstance } from '../../types';
 import ClassCard from '../ClassCard';
-import QuickAddClassModal from './QuickAddClassModal';
-import EditClassModal from './EditClassModal';
 import ClassDetailsModal from '../ClassDetailsModal';
-import StudentScheduleTab from './StudentScheduleTab';
 
 type ViewMode = 'week' | 'month';
 
-interface ScheduleFilter {
-  instructor?: string;
-  template?: string;
-  status?: string;
-}
-
-const ScheduleTab: React.FC = () => {
-  const { isAdmin, isInstructor, isStudent } = useUserRole();
-  
-  // If user is a student, show the student-specific schedule
-  if (isStudent && !isAdmin && !isInstructor) {
-    return <StudentScheduleTab />;
-  }
-  
+const StudentScheduleTab: React.FC = () => {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<ScheduleFilter>({});
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const queryClient = useQueryClient();
-
+  
   // Get start of current week (Monday)
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
@@ -69,43 +43,16 @@ const ScheduleTab: React.FC = () => {
     error,
     refetch
   } = useQuery({
-    queryKey: ['classes', 'week', weekStart.toISOString().split('T')[0]],
+    queryKey: ['student-classes', 'week', weekStart.toISOString().split('T')[0]],
     queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0]),
-  });
-
-  // Fetch instructors for filtering
-  const { data: instructors = [] } = useQuery({
-    queryKey: ['instructors'],
-    queryFn: () => adminApi.getUsers({ role: 'instructor' }),
-    enabled: isAdmin,
-  });
-
-  // Fetch templates for filtering
-  const { data: templates = [] } = useQuery({
-    queryKey: ['classTemplates'],
-    queryFn: () => classesApi.getTemplates(),
-    enabled: isAdmin,
   });
 
   // Fetch month classes for month view
   const { data: monthClasses = [], isLoading: monthLoading } = useQuery({
-    queryKey: ['classes', 'month', currentMonth.getFullYear(), currentMonth.getMonth() + 1],
+    queryKey: ['student-classes', 'month', currentMonth.getFullYear(), currentMonth.getMonth() + 1],
     queryFn: () => classesApi.getMonthClasses(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
     enabled: viewMode === 'month',
   });
-
-  // Delete class mutation
-  const deleteClassMutation = useMutation({
-    mutationFn: (classId: number) => classesApi.deleteClass(classId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] });
-      Alert.alert('Success', 'Class deleted successfully');
-    },
-    onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to delete class');
-    },
-  });
-
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentWeek);
@@ -124,7 +71,6 @@ const ScheduleTab: React.FC = () => {
     for (let i = 0; i < 7; i++) {
       const day = new Date(weekStart);
       day.setDate(weekStart.getDate() + i);
-      // Reset time to midnight to avoid carrying current time
       day.setHours(0, 0, 0, 0);
       days.push(day);
     }
@@ -138,77 +84,15 @@ const ScheduleTab: React.FC = () => {
     });
   };
 
-  const applyFilters = (classList: ClassInstance[]) => {
-    return classList.filter(cls => {
-      if (filters.instructor && cls.instructor_id.toString() !== filters.instructor) return false;
-      if (filters.template && cls.template_id.toString() !== filters.template) return false;
-      if (filters.status && cls.status !== filters.status) return false;
-      return true;
-    });
-  };
-
-  const filteredClasses = applyFilters(classes);
-
   const handleClassPress = (classInstance: ClassInstance) => {
     setSelectedClass(classInstance);
-    // Always show details modal on class press for all users
     setShowDetailsModal(true);
-  };
-
-  const handleClassLongPress = (classInstance: ClassInstance) => {
-    setSelectedClass(classInstance);
-    // Always just show details modal on long press
-    setShowDetailsModal(true);
-  };
-
-
-  const handleDayPress = (day: Date) => {
-    // Regular day press - add class (admin/instructor only)
-    if (isAdmin || isInstructor) {
-      setSelectedDate(day);
-      setShowQuickAdd(true);
-    }
   };
 
   const handleMonthDayPress = (day: Date) => {
     // Switch to week view and navigate to the week containing this day
     setViewMode('week');
     setCurrentWeek(day);
-    
-    // Also allow admin/instructor to add class
-    if (isAdmin || isInstructor) {
-      setSelectedDate(day);
-      setShowQuickAdd(true);
-    }
-  };
-
-  const handleEditClass = () => {
-    setShowDetailsModal(false);
-    setShowEditModal(true);
-  };
-
-  const handleDeleteClass = (classId?: number) => {
-    const idToDelete = classId || selectedClass?.id;
-    if (!idToDelete) return;
-    
-    deleteClassMutation.mutate(idToDelete);
-    setShowDetailsModal(false);
-    setSelectedClass(null);
-  };
-
-  const handleLongPressDelete = (classId: number) => {
-    Alert.alert(
-      'Delete Class',
-      'Are you sure you want to delete this class? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => deleteClassMutation.mutate(classId),
-        },
-      ]
-    );
   };
 
   const renderViewModeToggle = () => (
@@ -279,18 +163,19 @@ const ScheduleTab: React.FC = () => {
     const daysOfWeek = getDaysOfWeek();
     
     return (
-      <ScrollView style={styles.weekView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.weekView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={refetch} />
+        }
+      >
         {daysOfWeek.map((day, index) => {
           const dayClasses = getClassesForDay(day);
           const isToday = day.toDateString() === new Date().toDateString();
           
           return (
-            <TouchableOpacity 
-              key={index} 
-              style={[styles.dayContainer]}
-              onPress={() => handleDayPress(day)}
-              disabled={dayClasses.length === 0 && (!isAdmin && !isInstructor)}
-            >
+            <View key={index} style={[styles.dayContainer]}>
               <View style={[styles.dayHeader, isToday && styles.todayHeader]}>
                 <Text style={[styles.dayName, isToday && styles.todayText]}>
                   {day.toLocaleDateString('en-US', { weekday: 'short' })}
@@ -298,18 +183,6 @@ const ScheduleTab: React.FC = () => {
                 <Text style={[styles.dayDate, isToday && styles.todayText]}>
                   {day.getDate()}
                 </Text>
-                {(isAdmin || isInstructor) && (
-                  <TouchableOpacity 
-                    style={styles.addClassButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      setSelectedDate(day);
-                      setShowQuickAdd(true);
-                    }}
-                  >
-                    <Ionicons name="add" size={16} color={COLORS.primary} />
-                  </TouchableOpacity>
-                )}
               </View>
               
               <View style={styles.dayClasses}>
@@ -318,14 +191,12 @@ const ScheduleTab: React.FC = () => {
                     <Text style={styles.emptyDayText}>No classes</Text>
                   </View>
                 ) : (
-                  dayClasses.map((classInstance) => {
-                    return (
-                      <TouchableOpacity
-                        key={classInstance.id}
-                        style={styles.classItem}
-                        onPress={() => handleClassPress(classInstance)}
-                        onLongPress={() => handleClassLongPress(classInstance)}
-                      >
+                  dayClasses.map((classInstance) => (
+                    <TouchableOpacity
+                      key={classInstance.id}
+                      style={styles.classItem}
+                      onPress={() => handleClassPress(classInstance)}
+                    >
                       <View style={styles.classTime}>
                         <Text style={styles.classTimeText}>
                           {new Date(classInstance.start_datetime).toLocaleTimeString('en-US', {
@@ -356,50 +227,16 @@ const ScheduleTab: React.FC = () => {
                           }
                         ]} />
                       </View>
-                      </TouchableOpacity>
-                    );
-                  })
+                    </TouchableOpacity>
+                  ))
                 )}
               </View>
-            </TouchableOpacity>
+            </View>
           );
         })}
       </ScrollView>
     );
   };
-
-  const renderListView = () => (
-    <ScrollView style={styles.listView} showsVerticalScrollIndicator={false}>
-      {filteredClasses.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="calendar-outline" size={48} color={COLORS.textSecondary} />
-          <Text style={styles.emptyStateTitle}>No classes found</Text>
-          <Text style={styles.emptyStateText}>
-            {classes.length === 0 ? 'No classes scheduled for this week' : 'No classes match your filters'}
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.classesGrid}>
-          {filteredClasses.map((classInstance) => (
-            <TouchableOpacity
-              key={classInstance.id}
-              onPress={() => handleClassPress(classInstance)}
-              onLongPress={() => handleClassLongPress(classInstance)}
-            >
-              <ClassCard
-                classInstance={classInstance}
-                onPress={() => handleClassPress(classInstance)}
-                showBookingButton={false}
-                showAdminActions={isAdmin}
-                onDelete={() => handleDeleteClass(classInstance.id)}
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </ScrollView>
-  );
-
 
   const renderMonthView = () => {
     const getDaysInMonth = () => {
@@ -437,12 +274,6 @@ const ScheduleTab: React.FC = () => {
         // Only show classes for today and future dates
         return classDate.toDateString() === date.toDateString() && classDay >= today;
       });
-    };
-
-    const navigateMonth = (direction: 'prev' | 'next') => {
-      const newDate = new Date(currentMonth);
-      newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-      setCurrentMonth(newDate);
     };
 
     const days = getDaysInMonth();
@@ -505,7 +336,6 @@ const ScheduleTab: React.FC = () => {
                           <Text style={styles.monthClassMore}>+{dayClasses.length - 3}</Text>
                         )}
                       </View>
-
                     </>
                   )}
                 </TouchableOpacity>
@@ -522,27 +352,6 @@ const ScheduleTab: React.FC = () => {
       </View>
     );
   };
-
-  const renderFilters = () => (
-    <Modal visible={showFilters} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.filtersModal}>
-        <View style={styles.filtersHeader}>
-          <TouchableOpacity onPress={() => setShowFilters(false)}>
-            <Ionicons name="close" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.filtersTitle}>Filters</Text>
-          <TouchableOpacity onPress={() => setFilters({})}>
-            <Text style={styles.clearFilters}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Filter options would go here */}
-        <ScrollView style={styles.filtersContent}>
-          <Text style={styles.filterSection}>Filter options coming soon...</Text>
-        </ScrollView>
-      </View>
-    </Modal>
-  );
 
   return (
     <View style={styles.container}>
@@ -569,21 +378,7 @@ const ScheduleTab: React.FC = () => {
         )}
       </View>
 
-      {/* Modals */}
-      <QuickAddClassModal
-        visible={showQuickAdd}
-        onClose={() => {
-          setShowQuickAdd(false);
-          setSelectedDate(undefined);
-        }}
-        onSuccess={() => {
-          setShowQuickAdd(false);
-          setSelectedDate(undefined);
-          refetch();
-        }}
-        preselectedDate={selectedDate}
-      />
-
+      {/* Class Details Modal */}
       {selectedClass && (
         <ClassDetailsModal
           visible={showDetailsModal}
@@ -592,29 +387,9 @@ const ScheduleTab: React.FC = () => {
             setShowDetailsModal(false);
             setSelectedClass(null);
           }}
-          onEdit={handleEditClass}
-          onDelete={handleDeleteClass}
-          showAdminActions={isAdmin}
+          showAdminActions={false}
         />
       )}
-
-      {selectedClass && (
-        <EditClassModal
-          visible={showEditModal}
-          onClose={() => {
-            setShowEditModal(false);
-            setSelectedClass(null);
-          }}
-          onSuccess={() => {
-            setShowEditModal(false);
-            setSelectedClass(null);
-            refetch();
-          }}
-          classInstance={selectedClass}
-        />
-      )}
-
-      {renderFilters()}
     </View>
   );
 };
@@ -717,12 +492,6 @@ const styles = StyleSheet.create({
   todayText: {
     color: COLORS.primary,
   },
-  addClassButton: {
-    marginLeft: 'auto',
-    padding: SPACING.xs,
-    borderRadius: 6,
-    backgroundColor: COLORS.primary + '15',
-  },
   dayClasses: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
@@ -784,32 +553,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  listView: {
-    flex: 1,
-    padding: SPACING.lg,
-  },
-  classesGrid: {
-    gap: SPACING.md,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: SPACING.xl * 2,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
   errorState: {
     flex: 1,
     justifyContent: 'center',
@@ -832,41 +575,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '600',
   },
-  filtersModal: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  filtersHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  filtersTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  clearFilters: {
-    fontSize: 16,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  filtersContent: {
-    flex: 1,
-    padding: SPACING.lg,
-  },
-  filterSection: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACING.xl,
-  },
   
-
   // Month View Styles
   monthView: {
     flex: 1,
@@ -955,8 +664,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
-
-
 });
 
-export default ScheduleTab;
+export default StudentScheduleTab;

@@ -10,19 +10,19 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, SPACING } from '../../utils/config';
 import { classesApi, ClassTemplate } from '../../api/classes';
 import { adminApi } from '../../api/admin';
+import { ClassInstance } from '../../types';
 import Button from '../common/Button';
 
-interface QuickAddClassModalProps {
+interface EditClassModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  preselectedDate?: Date;
-  preselectedTemplate?: ClassTemplate;
+  classInstance: ClassInstance | null;
 }
 
 interface Instructor {
@@ -33,53 +33,42 @@ interface Instructor {
   role: string;
 }
 
-const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
+const EditClassModal: React.FC<EditClassModalProps> = ({
   visible,
   onClose,
   onSuccess,
-  preselectedDate,
-  preselectedTemplate,
+  classInstance,
 }) => {
   const [formData, setFormData] = useState({
-    template_id: preselectedTemplate?.id.toString() || '',
+    template_id: '',
     instructor_id: '',
-    start_datetime: preselectedDate || new Date(),
+    start_datetime: new Date(),
+    end_datetime: new Date(),
     actual_capacity: '',
     notes: '',
+    status: 'scheduled',
   });
-
-  // Update form data when preselectedDate changes
-  useEffect(() => {
-    if (preselectedDate && visible) {
-      const dateToUse = new Date(preselectedDate);
-      
-      // If preselected date has default time (00:00), set to current time rounded up to next hour
-      if (dateToUse.getHours() === 0 && dateToUse.getMinutes() === 0) {
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        
-        // If we're at exactly :00, stay at current hour, otherwise round up to next hour
-        const finalHour = currentMinute === 0 ? currentHour : currentHour + 1;
-        
-        // If it's too late in the day (after 9 PM), set to 9:00 AM
-        if (finalHour >= 21) {
-          dateToUse.setHours(9, 0, 0, 0);
-        } else {
-          dateToUse.setHours(finalHour, 0, 0, 0);
-        }
-      }
-      
-      setFormData(prev => ({
-        ...prev,
-        start_datetime: dateToUse,
-      }));
-    }
-  }, [preselectedDate, visible]);
   
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const queryClient = useQueryClient();
+
+  // Initialize form data when classInstance changes
+  useEffect(() => {
+    if (classInstance && visible) {
+      setFormData({
+        template_id: classInstance.template_id?.toString() || '',
+        instructor_id: classInstance.instructor_id?.toString() || '',
+        start_datetime: new Date(classInstance.start_datetime),
+        end_datetime: new Date(classInstance.end_datetime),
+        actual_capacity: classInstance.actual_capacity?.toString() || '',
+        notes: classInstance.notes || '',
+        status: classInstance.status || 'scheduled',
+      });
+    }
+  }, [classInstance, visible]);
 
   // Fetch class templates
   const { data: templates = [], isLoading: templatesLoading } = useQuery<ClassTemplate[]>({
@@ -105,30 +94,23 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
   // Combine instructors and admins
   const instructors: Instructor[] = [...instructorsData, ...adminsData];
 
-  // Create class mutation
-  const createClassMutation = useMutation({
-    mutationFn: (classData: any) => classesApi.createClass(classData),
+  // Update class mutation
+  const updateClassMutation = useMutation({
+    mutationFn: (classData: any) => {
+      if (!classInstance) throw new Error('No class instance');
+      return classesApi.updateClass(classInstance.id, classData);
+    },
     onSuccess: () => {
-      Alert.alert('Success', 'Class created successfully');
+      Alert.alert('Success', 'Class updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
       onSuccess();
-      resetForm();
+      onClose();
     },
     onError: (error: any) => {
-      const errorMessage = error.response?.data?.detail || 'Failed to create class';
+      const errorMessage = error.response?.data?.detail || 'Failed to update class';
       Alert.alert('Error', errorMessage);
     },
   });
-
-  const resetForm = () => {
-    setFormData({
-      template_id: preselectedTemplate?.id.toString() || '',
-      instructor_id: '',
-      start_datetime: preselectedDate || new Date(),
-      actual_capacity: '',
-      notes: '',
-    });
-    setErrors({});
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -141,8 +123,8 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
       newErrors.instructor_id = 'Please select an instructor';
     }
 
-    if (formData.start_datetime < new Date()) {
-      newErrors.start_datetime = 'Class time must be in the future';
+    if (formData.start_datetime >= formData.end_datetime) {
+      newErrors.datetime = 'End time must be after start time';
     }
 
     if (formData.actual_capacity && parseInt(formData.actual_capacity) <= 0) {
@@ -159,67 +141,74 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
     const selectedTemplate = templates.find(t => t.id.toString() === formData.template_id);
     if (!selectedTemplate) return;
 
-    const endDateTime = new Date(formData.start_datetime);
-    endDateTime.setMinutes(endDateTime.getMinutes() + selectedTemplate.duration_minutes);
-
     const classData = {
       template_id: parseInt(formData.template_id),
       instructor_id: parseInt(formData.instructor_id),
       start_datetime: formData.start_datetime.toISOString(),
-      end_datetime: endDateTime.toISOString(),
+      end_datetime: formData.end_datetime.toISOString(),
       actual_capacity: formData.actual_capacity ? parseInt(formData.actual_capacity) : undefined,
       notes: formData.notes || undefined,
+      status: formData.status,
     };
 
-    createClassMutation.mutate(classData);
+    updateClassMutation.mutate(classData);
   };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      const newDateTime = new Date(formData.start_datetime);
-      newDateTime.setFullYear(selectedDate.getFullYear());
-      newDateTime.setMonth(selectedDate.getMonth());
-      newDateTime.setDate(selectedDate.getDate());
-      setFormData({ ...formData, start_datetime: newDateTime });
+      const newStartDate = new Date(selectedDate);
+      newStartDate.setHours(formData.start_datetime.getHours());
+      newStartDate.setMinutes(formData.start_datetime.getMinutes());
+      
+      const duration = formData.end_datetime.getTime() - formData.start_datetime.getTime();
+      const newEndDate = new Date(newStartDate.getTime() + duration);
+      
+      setFormData({ 
+        ...formData, 
+        start_datetime: newStartDate,
+        end_datetime: newEndDate
+      });
     }
   };
 
   const handleTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(false);
     if (selectedTime) {
-      const newDateTime = new Date(formData.start_datetime);
-      newDateTime.setHours(selectedTime.getHours());
-      newDateTime.setMinutes(selectedTime.getMinutes());
-      setFormData({ ...formData, start_datetime: newDateTime });
+      const newStartDate = new Date(formData.start_datetime);
+      newStartDate.setHours(selectedTime.getHours());
+      newStartDate.setMinutes(selectedTime.getMinutes());
+      
+      const duration = formData.end_datetime.getTime() - formData.start_datetime.getTime();
+      const newEndDate = new Date(newStartDate.getTime() + duration);
+      
+      setFormData({ 
+        ...formData, 
+        start_datetime: newStartDate,
+        end_datetime: newEndDate
+      });
     }
   };
 
   const selectedTemplate = templates.find(t => t.id.toString() === formData.template_id);
 
-  if (!visible) return null;
+  if (!classInstance) return null;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Add Class</Text>
-          <View style={styles.placeholder} />
+          <Text style={styles.title}>Edit Class</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {/* Template Selection */}
           <View style={styles.section}>
-            <Text style={styles.label}>Class Template *</Text>
+            <Text style={styles.sectionTitle}>Class Template *</Text>
             {templatesLoading ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading templates...</Text>
@@ -230,7 +219,7 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.templatesContainer}
               >
-                {templates.map((template) => (
+                {templates.filter(t => t.is_active).map((template) => (
                   <TouchableOpacity
                     key={template.id}
                     style={[
@@ -251,12 +240,6 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
                     ]}>
                       {template.duration_minutes}min • {template.capacity} spots
                     </Text>
-                    <Text style={[
-                      styles.templateLevel,
-                      formData.template_id === template.id.toString() && styles.selectedTemplateText,
-                    ]}>
-                      {template.level.replace('_', ' ')}
-                    </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -266,41 +249,33 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
 
           {/* Instructor Selection */}
           <View style={styles.section}>
-            <Text style={styles.label}>Instructor *</Text>
+            <Text style={styles.sectionTitle}>Instructor *</Text>
             {(instructorsLoading || adminsLoading) ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading instructors and admins...</Text>
               </View>
             ) : (
-              <View style={styles.instructorsContainer}>
+              <View style={styles.instructorsGrid}>
                 {instructors.map((instructor) => (
                   <TouchableOpacity
                     key={instructor.id}
                     style={[
-                      styles.instructorItem,
+                      styles.instructorCard,
                       formData.instructor_id === instructor.id.toString() && styles.selectedInstructor,
                     ]}
                     onPress={() => setFormData({ ...formData, instructor_id: instructor.id.toString() })}
                   >
-                    <View style={styles.instructorInfo}>
-                      <Text style={[
-                        styles.instructorName,
-                        formData.instructor_id === instructor.id.toString() && styles.selectedInstructorText,
-                      ]}>
-                        {instructor.first_name} {instructor.last_name}
-                        {instructor.role === 'admin' && (
-                          <Text style={styles.roleIndicator}> (Admin)</Text>
-                        )}
-                      </Text>
-                      <Text style={[
-                        styles.instructorEmail,
-                        formData.instructor_id === instructor.id.toString() && styles.selectedInstructorText,
-                      ]}>
-                        {instructor.email}
-                      </Text>
-                    </View>
+                    <Text style={[
+                      styles.instructorName,
+                      formData.instructor_id === instructor.id.toString() && styles.selectedInstructorText,
+                    ]}>
+                      {instructor.first_name} {instructor.last_name}
+                      {instructor.role === 'admin' && (
+                        <Text style={styles.roleIndicator}> (Admin)</Text>
+                      )}
+                    </Text>
                     {formData.instructor_id === instructor.id.toString() && (
-                      <Ionicons name="checkmark" size={20} color={COLORS.primary} />
+                      <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -311,10 +286,10 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
 
           {/* Date & Time */}
           <View style={styles.section}>
-            <Text style={styles.label}>Date & Time *</Text>
+            <Text style={styles.sectionTitle}>Date & Time *</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity
-                style={[styles.dateTimeButton, { flex: 1, marginRight: SPACING.sm }]}
+                style={styles.dateTimeButton}
                 onPress={() => setShowDatePicker(true)}
               >
                 <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
@@ -322,43 +297,23 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
                   {formData.start_datetime.toLocaleDateString()}
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
-                style={[styles.dateTimeButton, { flex: 1 }]}
+                style={styles.dateTimeButton}
                 onPress={() => setShowTimePicker(true)}
               >
                 <Ionicons name="time-outline" size={20} color={COLORS.primary} />
                 <Text style={styles.dateTimeText}>
-                  {formData.start_datetime.toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })}
+                  {formData.start_datetime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </TouchableOpacity>
             </View>
-            {errors.start_datetime && <Text style={styles.errorText}>{errors.start_datetime}</Text>}
+            {errors.datetime && <Text style={styles.errorText}>{errors.datetime}</Text>}
           </View>
 
-          {/* Duration Display */}
-          {selectedTemplate && (
-            <View style={styles.durationDisplay}>
-              <Text style={styles.durationText}>
-                Duration: {selectedTemplate.duration_minutes} minutes
-              </Text>
-              <Text style={styles.endTimeText}>
-                Ends at: {new Date(formData.start_datetime.getTime() + selectedTemplate.duration_minutes * 60000).toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true,
-                })}
-              </Text>
-            </View>
-          )}
-
-          {/* Capacity Override */}
+          {/* Custom Capacity */}
           <View style={styles.section}>
-            <Text style={styles.label}>Custom Capacity (Optional)</Text>
+            <Text style={styles.sectionTitle}>Custom Capacity (Optional)</Text>
             <TextInput
               style={styles.input}
               value={formData.actual_capacity}
@@ -372,28 +327,52 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
 
           {/* Notes */}
           <View style={styles.section}>
-            <Text style={styles.label}>Notes (Optional)</Text>
+            <Text style={styles.sectionTitle}>Notes (Optional)</Text>
             <TextInput
               style={[styles.input, styles.notesInput]}
               value={formData.notes}
               onChangeText={(text) => setFormData({ ...formData, notes: text })}
-              placeholder="Add any special notes for this class"
+              placeholder="Add notes for this class"
               multiline
               numberOfLines={3}
               textAlignVertical="top"
               placeholderTextColor={COLORS.textSecondary}
             />
           </View>
+
+          {/* Status */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Status</Text>
+            <View style={styles.statusContainer}>
+              {['scheduled', 'cancelled', 'completed'].map((status) => (
+                <TouchableOpacity
+                  key={status}
+                  style={[
+                    styles.statusButton,
+                    formData.status === status && styles.selectedStatus,
+                  ]}
+                  onPress={() => setFormData({ ...formData, status })}
+                >
+                  <Text style={[
+                    styles.statusText,
+                    formData.status === status && styles.selectedStatusText,
+                  ]}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </ScrollView>
 
-        {/* Footer */}
-        <View style={styles.footer}>
+        {/* Actions */}
+        <View style={styles.actions}>
           <Button
-            title="Create Class"
+            title="Update Class"
             onPress={handleSubmit}
-            loading={createClassMutation.isPending}
-            disabled={createClassMutation.isPending}
-            style={styles.createButton}
+            loading={updateClassMutation.isPending}
+            disabled={updateClassMutation.isPending}
+            style={styles.updateButton}
           />
         </View>
 
@@ -403,7 +382,6 @@ const QuickAddClassModal: React.FC<QuickAddClassModalProps> = ({
             value={formData.start_datetime}
             mode="date"
             display="default"
-            minimumDate={new Date()}
             onChange={handleDateChange}
           />
         )}
@@ -432,29 +410,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerTitle: {
+  title: {
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
   },
-  placeholder: {
-    width: 24,
-  },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 2,
   },
   section: {
     marginBottom: SPACING.xl,
   },
-  label: {
+  sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
   },
   loadingContainer: {
     padding: SPACING.lg,
@@ -491,19 +470,14 @@ const styles = StyleSheet.create({
   templateDetails: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
   },
-  templateLevel: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textTransform: 'capitalize',
-  },
-  instructorsContainer: {
+  instructorsGrid: {
     gap: SPACING.sm,
   },
-  instructorItem: {
+  instructorCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     padding: SPACING.md,
@@ -514,31 +488,26 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + '10',
   },
-  instructorInfo: {
-    flex: 1,
-  },
   instructorName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
   },
   selectedInstructorText: {
     color: COLORS.primary,
-  },
-  instructorEmail: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    fontWeight: '600',
   },
   roleIndicator: {
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.primary,
     fontWeight: '600',
   },
   dateTimeContainer: {
     flexDirection: 'row',
+    gap: SPACING.sm,
   },
   dateTimeButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
@@ -553,22 +522,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: '500',
   },
-  durationDisplay: {
-    backgroundColor: COLORS.primary + '10',
-    borderRadius: 8,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  durationText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginBottom: SPACING.xs,
-  },
-  endTimeText: {
-    fontSize: 14,
-    color: COLORS.primary,
-  },
   input: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
@@ -582,20 +535,46 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  statusContainer: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  statusButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  selectedStatus: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '10',
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  selectedStatusText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  actions: {
+    padding: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  updateButton: {
+    backgroundColor: COLORS.primary,
+  },
   errorText: {
     fontSize: 14,
     color: COLORS.error,
     marginTop: SPACING.xs,
   },
-  footer: {
-    padding: SPACING.lg,
-    paddingTop: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  createButton: {
-    backgroundColor: COLORS.primary,
-  },
 });
 
-export default QuickAddClassModal;
+export default EditClassModal;

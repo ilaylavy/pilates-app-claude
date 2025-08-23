@@ -559,13 +559,44 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
           {/* Admin Actions */}
           {isAdmin && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.secondaryButton]}
-              onPress={handleSendNotification}
-            >
-              <Ionicons name="notifications" size={20} color={COLORS.primary} />
-              <Text style={styles.secondaryButtonText}>Notify Participants</Text>
-            </TouchableOpacity>
+            <View style={styles.adminActionsRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.secondaryButton, { flex: 1, marginRight: SPACING.sm }]}
+                onPress={onEdit}
+              >
+                <Ionicons name="create" size={20} color={COLORS.primary} />
+                <Text style={styles.secondaryButtonText}>Edit</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.actionButton, styles.dangerButton, { flex: 1, marginRight: SPACING.sm }]}
+                onPress={() => {
+                  Alert.alert(
+                    'Delete Class',
+                    'Are you sure you want to delete this class? This action cannot be undone.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Delete', 
+                        style: 'destructive',
+                        onPress: onDelete 
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="trash" size={20} color={COLORS.white} />
+                <Text style={styles.actionButtonText}>Delete</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.actionButton, styles.secondaryButton, { flex: 1 }]}
+                onPress={handleSendNotification}
+              >
+                <Ionicons name="notifications" size={20} color={COLORS.primary} />
+                <Text style={styles.secondaryButtonText}>Notify</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -775,6 +806,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.lightGray,
     gap: SPACING.md,
+  },
+  adminActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
   },
   actionButton: {
     flexDirection: 'row',

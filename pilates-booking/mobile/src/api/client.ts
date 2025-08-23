@@ -583,6 +583,13 @@ class ApiClient {
         SecureStore.deleteItemAsync(STORAGE_KEYS.REFRESH_TOKEN),
         SecureStore.deleteItemAsync(STORAGE_KEYS.USER_DATA),
       ]);
+      
+      // Clear internal cache and pending requests
+      this.requestCache = {};
+      this.pendingRequests = {};
+      this.isRefreshing = false;
+      this.refreshPromise = null;
+      this.failedQueue = [];
     } catch (error) {
       console.warn('Failed to clear tokens from secure store:', error);
     }

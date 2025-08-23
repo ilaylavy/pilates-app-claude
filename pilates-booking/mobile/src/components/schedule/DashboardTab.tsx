@@ -245,14 +245,14 @@ const DashboardTab: React.FC = () => {
                 </View>
                 <View style={styles.classStats}>
                   <Text style={styles.classCapacity}>
-                    {classInstance.participant_count || 0}/{classInstance.capacity || 12}
+                    {classInstance.participant_count || 0}/{(classInstance.participant_count || 0) + (classInstance.available_spots || 0)}
                   </Text>
                   <View style={[
                     styles.statusDot,
                     {
                       backgroundColor: classInstance.is_full 
                         ? COLORS.error 
-                        : (classInstance.participant_count || 0) > (classInstance.capacity || 12) * 0.8 
+                        : (classInstance.participant_count || 0) > ((classInstance.participant_count || 0) + (classInstance.available_spots || 0)) * 0.8 
                           ? COLORS.warning 
                           : COLORS.success
                     }

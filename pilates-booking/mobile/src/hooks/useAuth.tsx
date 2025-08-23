@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { authApi } from '../api/auth';
+import { apiClient } from '../api/client';
 import { User, AuthTokens, LoginRequest, RegisterRequest } from '../types';
 import { STORAGE_KEYS } from '../utils/config';
 import { secureStorage } from '../utils/secureStorage';
@@ -98,13 +99,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const clearAuthData = async () => {
-    await Promise.all([
-      secureStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN),
-      secureStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN),
-      secureStorage.removeItem(STORAGE_KEYS.USER_DATA),
-    ]);
+    // Clear user state immediately to prevent UI inconsistency
     setUser(null);
+    
+    // Clear all caches first to prevent stale data
     queryClient.clear();
+    
+    // Clear API client internal state and storage
+    await apiClient.clearTokens();
   };
 
   const clearSensitiveData = async () => {
@@ -153,18 +155,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
-    // Logout from server if possible
-    try {
-      const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      if (refreshToken) {
-        await authApi.logout(refreshToken);
-      }
-    } catch (error) {
-      console.warn('Failed to logout from server:', error);
-    }
+    // Clear user state immediately to prevent showing wrong user
+    setUser(null);
     
+    // Get refresh token before clearing storage
+    const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    
+    // Clear all local data first
     await clearAuthData();
     securityManager.cleanup();
+    
+    // Then logout from server (don't await to prevent blocking)
+    if (refreshToken) {
+      try {
+        await authApi.logout(refreshToken);
+      } catch (error) {
+        console.warn('Failed to logout from server:', error);
+      }
+    }
   };
 
   const enableBiometric = async () => {
