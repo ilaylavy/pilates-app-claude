@@ -572,6 +572,12 @@ const ScheduleScreen: React.FC = () => {
           onClassPress={handleClassPress}
           onEditClass={handleEditClass}
           onDeleteClass={handleDeleteClass}
+          onBook={handleBookClass}
+          onJoinWaitlist={handleJoinWaitlist}
+          onCancel={handleCancelBooking}
+          bookedClassIds={bookedClassIds}
+          hasAvailableCredits={!!activePackage?.credits_remaining}
+          isBookingInProgress={(classId) => bookingInProgressId === classId}
         />
       ) : (
         <ScrollView
@@ -635,10 +641,14 @@ const ScheduleScreen: React.FC = () => {
                             classInstance={classInstance}
                             variant="list"
                             isBooked={bookedClassIds.has(classInstance.id)}
+                            availableSpots={classInstance.available_spots}
                             showActions={isStudent}
                             hasAvailableCredits={!!activePackage?.credits_remaining}
                             isBookingInProgress={bookingInProgressId === classInstance.id}
-                            onPress={() => handleClassPress(classInstance)}
+                            onPress={() => {
+                              setSelectedClass(classInstance);
+                              setDetailsModalVisible(true);
+                            }}
                             onEdit={() => handleEditClass(classInstance)}
                             onDelete={() => handleDeleteClass(classInstance)}
                             onBook={() => handleBookClass(classInstance)}

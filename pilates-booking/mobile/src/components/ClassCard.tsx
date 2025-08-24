@@ -147,7 +147,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
         </View>
         <View style={styles.listRightInfo}>
           {/* Student booking actions */}
-          {isStudent && showActions && classInstance.status === 'scheduled' && (
+          {(isStudent || isAdmin) && showActions && classInstance.status === 'scheduled' && (
             <View style={styles.studentActions}>
               {isBooked ? (
                 // Show booked status when booked
@@ -161,12 +161,12 @@ const ClassCard: React.FC<ClassCardProps> = ({
                   {classInstance.is_full ? (
                     onJoinWaitlist && (
                       <TouchableOpacity 
-                        style={[styles.actionButton, styles.waitlistButton]}
+                        style={[styles.actionButton, styles.studentWaitlistButton]}
                         onPress={onJoinWaitlist}
                         disabled={isBookingInProgress || !hasAvailableCredits}
                       >
                         <Ionicons name="hourglass" size={16} color={COLORS.warning} />
-                        <Text style={styles.waitlistButtonText}>
+                        <Text style={styles.studentWaitlistButtonText}>
                           {isBookingInProgress ? 'Joining...' : 'Join Waitlist'}
                         </Text>
                       </TouchableOpacity>
@@ -176,15 +176,15 @@ const ClassCard: React.FC<ClassCardProps> = ({
                       <TouchableOpacity 
                         style={[
                           styles.actionButton, 
-                          styles.bookButton,
+                          styles.studentBookButton,
                           !hasAvailableCredits && styles.disabledActionButton
                         ]}
                         onPress={onBook}
                         disabled={isBookingInProgress || !hasAvailableCredits}
                       >
                         <Ionicons name="add" size={16} color={COLORS.white} />
-                        <Text style={styles.bookButtonText}>
-                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : 'Book Class'}
+                        <Text style={styles.studentBookButtonText}>
+                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : '+ Book Class'}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -195,7 +195,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
           )}
 
           {/* Capacity info for non-students or when no actions */}
-          {(!isStudent || !showActions) && (
+          {(!(isStudent || isAdmin) || !showActions) && (
             <View style={styles.capacityInfo}>
               {isBooked && (
                 <View style={styles.bookedBadge}>
@@ -325,7 +325,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
         {/* Right side - Actions and capacity */}
         <View style={styles.scheduleRightContent}>
           {/* Student booking actions */}
-          {isStudent && showActions && classInstance.status === 'scheduled' && (
+          {(isStudent || isAdmin) && showActions && classInstance.status === 'scheduled' && (
             <View style={styles.scheduleStudentActions}>
               {isBooked ? (
                 <View style={styles.scheduleBookedBadge}>
@@ -761,15 +761,15 @@ const styles = StyleSheet.create({
     minWidth: 100,
     justifyContent: 'center',
   },
-  bookButton: {
+  studentBookButton: {
     backgroundColor: COLORS.primary,
   },
-  waitlistButton: {
+  studentWaitlistButton: {
     backgroundColor: '#fff3cd',
     borderWidth: 1,
     borderColor: COLORS.warning,
   },
-  cancelButton: {
+  studentCancelButton: {
     backgroundColor: '#ffebee',
     borderWidth: 1,
     borderColor: COLORS.error,
@@ -777,17 +777,17 @@ const styles = StyleSheet.create({
   disabledActionButton: {
     backgroundColor: COLORS.textSecondary,
   },
-  bookButtonText: {
+  studentBookButtonText: {
     color: COLORS.white,
     fontSize: 12,
     fontWeight: '600',
   },
-  waitlistButtonText: {
+  studentWaitlistButtonText: {
     color: COLORS.warning,
     fontSize: 12,
     fontWeight: '600',
   },
-  cancelButtonText: {
+  studentCancelButtonText: {
     color: COLORS.error,
     fontSize: 12,
     fontWeight: '600',
