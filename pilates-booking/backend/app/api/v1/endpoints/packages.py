@@ -70,46 +70,34 @@ async def handle_cash_purchase(
     current_user: User,
     db: AsyncSession,
 ):
-    """Handle cash package purchase by creating a pending approval package."""
-    from ....models.package import ApprovalStatus
+    """Handle cash package purchase - credits are immediately available, payment confirmation comes later."""
     
-    # Create UserPackage with RESERVED status for cash payments
-    # This will require admin approval before credits become available
+    # Create UserPackage as ACTIVE - user can use credits immediately
+    # Admin will confirm payment later
     expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
-    reservation_expires_at = datetime.now(timezone.utc) + timedelta(hours=48)  # 48 hour window to pay cash
-    approval_deadline = datetime.now(timezone.utc) + timedelta(hours=72)  # 72 hour approval deadline
     
     user_package = UserPackage(
         user_id=current_user.id,
         package_id=package.id,
         credits_remaining=package.credits,
         expiry_date=expiry_date,
-        status=UserPackageStatus.RESERVED,  # Pending approval
-        reservation_expires_at=reservation_expires_at,
+        status=UserPackageStatus.ACTIVE,  # Active immediately
         is_active=True,
-        payment_status=PaymentStatus.PENDING_APPROVAL,
+        payment_status=PaymentStatus.PENDING,  # Admin needs to confirm payment
         payment_method=ModelPaymentMethod.CASH,
         payment_reference=purchase_data.payment_reference,
-        approval_status=ApprovalStatus.PENDING,
-        approval_deadline=approval_deadline,
-        version=1,
-        approval_attempt_count=0,
     )
     
     db.add(user_package)
     await db.commit()
     await db.refresh(user_package)
     
-    # Generate idempotency key after we have the ID
-    user_package.generate_idempotency_key()
-    await db.commit()
-    
     # Generate a unique reference code for the cash payment
     reference_code = f"CASH-{user_package.id}-{current_user.id}"
     
     return {
-        "message": "Cash payment package created. Please pay at reception and show this reference.",
-        "status": "pending_approval",
+        "message": "Package created successfully! Credits are immediately available for booking. Please pay cash at reception.",
+        "status": "active",
         "package_id": package.id,
         "package_name": package.name,
         "user_package_id": user_package.id,
@@ -117,15 +105,14 @@ async def handle_cash_purchase(
         "currency": "ILS",
         "payment_method": "cash",
         "reference_code": reference_code,
+        "credits_available": package.credits,
         "payment_instructions": [
-            "Please pay cash at the reception desk",
+            "Your credits are ready to use for booking classes!",
+            "Please pay cash at the reception desk when convenient",
             "Show this reference code to the staff: " + reference_code,
-            "Your package will be activated after admin confirms payment",
-            "You will receive a notification when approved",
-            f"Payment must be completed within 48 hours (expires: {reservation_expires_at.isoformat()})"
+            "Payment confirmation will be updated in your account after payment"
         ],
-        "reservation_expires_at": reservation_expires_at.isoformat(),
-        "estimated_approval_time": "Usually approved within 2 hours during business hours"
+        "expires_at": expiry_date.isoformat()
     }
 
 
@@ -168,6 +155,7 @@ async def get_user_packages(
             'is_expired': pkg.is_expired,
             'is_valid': pkg.is_valid,
             'days_until_expiry': pkg.days_until_expiry,
+            'status': pkg.status,
             'payment_status': pkg.payment_status,
             'payment_method': pkg.payment_method,
             'approved_by': pkg.approved_by,
@@ -178,25 +166,7 @@ async def get_user_packages(
             'is_pending_approval': pkg.is_pending_approval,
             'is_approved': pkg.is_approved,
             'is_rejected': pkg.is_rejected,
-            'version': pkg.version,
-            'approval_deadline': pkg.approval_deadline,
-            'approval_status': pkg.approval_status,
-            'idempotency_key': pkg.idempotency_key,
-            'last_approval_attempt_at': pkg.last_approval_attempt_at,
-            'approval_attempt_count': pkg.approval_attempt_count,
-            'can_be_approved': pkg.can_be_approved,
-            'approval_timeout_hours': pkg.approval_timeout_hours,
-            # Two-step approval fields
-            'authorized_by': pkg.authorized_by,
-            'authorized_at': pkg.authorized_at,
-            'payment_confirmed_by': pkg.payment_confirmed_by,
-            'payment_confirmed_at': pkg.payment_confirmed_at,
-            'payment_confirmation_reference': pkg.payment_confirmation_reference,
             'is_payment_pending': pkg.is_payment_pending,
-            'is_fully_confirmed': pkg.is_fully_confirmed,
-            'can_be_authorized': pkg.can_be_authorized,
-            'can_confirm_payment': pkg.can_confirm_payment,
-            'can_be_revoked': pkg.can_be_revoked,
             'is_historical': pkg.is_historical,
             # Priority indicators
             'is_primary': pkg.id == (primary_package.id if primary_package else None),

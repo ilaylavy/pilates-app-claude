@@ -80,31 +80,22 @@ export interface UserPackage {
   is_expired: boolean;
   is_valid: boolean;
   days_until_expiry: number;
-  status: 'active' | 'reserved' | 'expired' | 'cancelled';
-  reservation_expires_at?: string;
-  // Payment approval fields
-  payment_status?: 'pending_approval' | 'authorized' | 'payment_confirmed' | 'rejected';
-  payment_method?: 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
+  status: 'active' | 'expired' | 'cancelled';
+  // Simple payment fields
+  payment_status: 'pending' | 'confirmed' | 'rejected';
+  payment_method: 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
   approved_by?: number;
   approved_at?: string;
   rejection_reason?: string;
   payment_reference?: string;
   admin_notes?: string;
-  is_pending_approval?: boolean;
-  is_approved?: boolean;
-  is_rejected?: boolean;
-  
-  // Two-step approval fields
-  authorized_by?: number;
-  authorized_at?: string;
-  payment_confirmed_by?: number;
-  payment_confirmed_at?: string;
-  payment_confirmation_reference?: string;
-  is_payment_pending?: boolean;
-  is_fully_confirmed?: boolean;
+  is_pending_approval: boolean;
+  is_approved: boolean;
+  is_rejected: boolean;
+  is_payment_pending: boolean;
   
   // Package history and priority fields
-  is_historical?: boolean;
+  is_historical: boolean;
   is_primary?: boolean;
   usage_priority?: number;
   
@@ -345,8 +336,8 @@ export interface Invoice {
 
 // Payment Approval Types
 export type PaymentMethodType = 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
-export type PaymentStatusType = 'pending_approval' | 'authorized' | 'payment_confirmed' | 'rejected';
-export type ApprovalStatusType = 'pending' | 'in_review' | 'authorized' | 'payment_confirmed' | 'rejected' | 'expired';
+export type PaymentStatusType = 'pending' | 'confirmed' | 'rejected';
+export type UserPackageStatusType = 'active' | 'expired' | 'cancelled';
 
 export interface PendingApproval {
   id: number;
@@ -362,38 +353,17 @@ export interface PendingApproval {
   purchase_date: string;
   hours_waiting: number;
   
-  // Security-related fields
-  version: number;
-  approval_status: ApprovalStatusType;
   payment_status: PaymentStatusType;
-  approval_deadline?: string;
-  approval_timeout_hours: number;
-  can_be_approved: boolean;
-  can_be_authorized: boolean;
-  can_confirm_payment: boolean;
-  can_be_revoked: boolean;
-  approval_attempt_count: number;
-  
-  // Two-step approval fields
-  authorized_by?: number;
-  authorized_at?: string;
-  payment_confirmed_by?: number;
-  payment_confirmed_at?: string;
-  payment_confirmation_reference?: string;
-  is_payment_pending: boolean;
-  is_fully_confirmed: boolean;
 }
 
 export interface PaymentApprovalRequest {
   payment_reference?: string;
   admin_notes?: string;
-  expected_version?: number; // For optimistic locking
 }
 
 export interface PaymentRejectionRequest {
   rejection_reason: string;
   admin_notes?: string;
-  expected_version?: number; // For optimistic locking
 }
 
 export interface ApprovalStats {

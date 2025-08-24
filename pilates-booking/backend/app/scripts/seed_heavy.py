@@ -24,8 +24,8 @@ from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
 from app.models.friendship import Friendship, FriendshipStatus
 from app.models.package import (Package, UserPackage,
-                                 UserPackageStatus, ApprovalStatus)
-from app.models.package import PaymentStatus as PackagePaymentStatus  
+                                 UserPackageStatus, PaymentStatus as PackagePaymentStatus,
+                                 PaymentMethod as PackagePaymentMethod)  
 from app.models.payment import Payment, PaymentMethod, PaymentType, PaymentStatus
 from app.models.user import User, UserRole
 
@@ -477,30 +477,25 @@ async def create_user_packages_bulk(session: AsyncSession, students: List[User],
                     # Active packages have varying usage
                     credits_remaining = int(package.credits * (1 - usage_percent))
             
-            # Determine status and payment status
+            # Determine status and payment status (simplified model)
             if expiry_date < datetime.now():
                 status = UserPackageStatus.EXPIRED
-                payment_status = PackagePaymentStatus.PAYMENT_CONFIRMED
-                approval_status = ApprovalStatus.PAYMENT_CONFIRMED
+                payment_status = PackagePaymentStatus.CONFIRMED
             else:
-                # Active packages with various approval states
+                # Active packages with simplified payment states
                 rand = random()
-                if rand < 0.7:  # 70% fully approved
+                if rand < 0.8:  # 80% confirmed payments
                     status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.PAYMENT_CONFIRMED
-                    approval_status = ApprovalStatus.PAYMENT_CONFIRMED
-                elif rand < 0.85:  # 15% authorized but not confirmed
+                    payment_status = PackagePaymentStatus.CONFIRMED
+                elif rand < 0.95:  # 15% pending payments (cash)
                     status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.AUTHORIZED
-                    approval_status = ApprovalStatus.AUTHORIZED
-                elif rand < 0.95:  # 10% pending approval
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.PENDING_APPROVAL
-                    approval_status = ApprovalStatus.PENDING
+                    payment_status = PackagePaymentStatus.PENDING
                 else:  # 5% rejected
                     status = UserPackageStatus.CANCELLED
                     payment_status = PackagePaymentStatus.REJECTED
-                    approval_status = ApprovalStatus.REJECTED
+            
+            # Choose payment method
+            payment_method = choice([PackagePaymentMethod.CASH, PackagePaymentMethod.CREDIT_CARD, PackagePaymentMethod.STRIPE])
             
             user_package = UserPackage(
                 user_id=student.id,
@@ -510,18 +505,20 @@ async def create_user_packages_bulk(session: AsyncSession, students: List[User],
                 expiry_date=expiry_date,
                 status=status,
                 payment_status=payment_status,
-                approval_status=approval_status,
+                payment_method=payment_method,
+                payment_reference=f"SEED-{randint(1000, 9999)}-{student.id}",
             )
             
             # Add approval details for processed packages
-            if payment_status != PackagePaymentStatus.PENDING_APPROVAL:
+            if payment_status != PackagePaymentStatus.PENDING:
                 admin = choice(admins)
-                user_package.authorized_by = admin.id
-                user_package.authorized_at = purchase_date + timedelta(hours=randint(1, 24))
+                user_package.approved_by = admin.id
+                user_package.approved_at = purchase_date + timedelta(hours=randint(1, 24))
                 
-                if payment_status == PackagePaymentStatus.PAYMENT_CONFIRMED:
-                    user_package.payment_confirmed_by = admin.id
-                    user_package.payment_confirmed_at = user_package.authorized_at + timedelta(hours=randint(1, 48))
+                if payment_status == PackagePaymentStatus.CONFIRMED:
+                    # Set payment reference for confirmed payments
+                    user_package.payment_reference = f"CONFIRMED-{randint(1000, 9999)}"
+                    user_package.admin_notes = "Heavy seed payment confirmation"
             
             user_packages.append(user_package)
             session.add(user_package)

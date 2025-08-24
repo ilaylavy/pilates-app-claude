@@ -391,25 +391,11 @@ class BookingService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Package not found"
             )
 
-        # Check if package is pending payment approval
-        if hasattr(user_package, 'status') and user_package.status.value == 'reserved':
+        if not user_package.is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Package is pending payment approval. Please contact reception to complete your cash payment."
+                detail="Package is expired or has no remaining credits",
             )
-
-        if not user_package.is_valid:
-            # Check if it's due to pending approval (once migration is complete)
-            if hasattr(user_package, 'is_pending_approval') and user_package.is_pending_approval:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Package is pending payment approval. Please contact reception to complete your cash payment."
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Package is expired or has no remaining credits",
-                )
 
         # Use credit
         if not user_package.use_credit():

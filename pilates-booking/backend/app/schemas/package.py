@@ -15,16 +15,15 @@ class PaymentMethod(str, Enum):
 
 
 class PaymentStatus(str, Enum):
-    PENDING_APPROVAL = "pending_approval"
-    AUTHORIZED = "authorized"
-    PAYMENT_CONFIRMED = "payment_confirmed"
-    APPROVED = "approved"  # Keep for backward compatibility
-    REJECTED = "rejected"
+    PENDING = "pending"        # Cash payment not yet confirmed by admin
+    CONFIRMED = "confirmed"    # Payment received and confirmed
+    REJECTED = "rejected"      # Payment rejected/refunded
 
 
-class PaymentApprovalAction(str, Enum):
-    APPROVED = "approved"
-    REJECTED = "rejected"
+class UserPackageStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
 
 
 class PackageBase(BaseModel):
@@ -65,16 +64,6 @@ class PackageResponse(PackageBase):
     model_config = {"from_attributes": True}
 
 
-class ApprovalStatus(str, Enum):
-    PENDING = "pending"
-    IN_REVIEW = "in_review"
-    AUTHORIZED = "authorized"
-    PAYMENT_CONFIRMED = "payment_confirmed"
-    APPROVED = "approved"  # Keep for backward compatibility
-    REJECTED = "rejected"
-    EXPIRED = "expired"
-
-
 class UserPackageResponse(BaseModel):
     id: int
     user_id: int
@@ -87,6 +76,7 @@ class UserPackageResponse(BaseModel):
     is_expired: bool
     is_valid: bool
     days_until_expiry: int
+    status: UserPackageStatus
     payment_status: PaymentStatus
     payment_method: PaymentMethod
     approved_by: Optional[int] = None
@@ -97,28 +87,8 @@ class UserPackageResponse(BaseModel):
     is_pending_approval: bool
     is_approved: bool
     is_rejected: bool
-    
-    # New approval system fields
-    version: int
-    approval_deadline: Optional[datetime] = None
-    approval_status: ApprovalStatus
-    idempotency_key: Optional[str] = None
-    last_approval_attempt_at: Optional[datetime] = None
-    approval_attempt_count: int
-    can_be_approved: bool
-    approval_timeout_hours: int
-    
-    # Two-step approval fields
-    authorized_by: Optional[int] = None
-    authorized_at: Optional[datetime] = None
-    payment_confirmed_by: Optional[int] = None
-    payment_confirmed_at: Optional[datetime] = None
-    payment_confirmation_reference: Optional[str] = None
     is_payment_pending: bool
-    is_fully_confirmed: bool
-    can_be_authorized: bool
-    can_confirm_payment: bool
-    can_be_revoked: bool
+    is_historical: bool
     
     created_at: datetime
     updated_at: datetime
@@ -129,13 +99,11 @@ class UserPackageResponse(BaseModel):
 class PaymentApprovalRequest(BaseModel):
     payment_reference: Optional[str] = None
     admin_notes: Optional[str] = None
-    expected_version: Optional[int] = None  # For optimistic locking
 
 
 class PaymentRejectionRequest(BaseModel):
     rejection_reason: str
     admin_notes: Optional[str] = None
-    expected_version: Optional[int] = None  # For optimistic locking
 
 
 class PendingApprovalResponse(BaseModel):
@@ -151,42 +119,8 @@ class PendingApprovalResponse(BaseModel):
     payment_reference: Optional[str] = None
     purchase_date: datetime
     hours_waiting: int
-    
-    # New approval system fields
-    version: int
-    approval_status: ApprovalStatus
     payment_status: PaymentStatus
-    approval_deadline: Optional[datetime] = None
-    approval_timeout_hours: int
-    can_be_approved: bool
-    can_be_authorized: bool
-    can_confirm_payment: bool
-    can_be_revoked: bool
-    approval_attempt_count: int
     
-    # Two-step approval fields
-    authorized_by: Optional[int] = None
-    authorized_at: Optional[datetime] = None
-    payment_confirmed_by: Optional[int] = None
-    payment_confirmed_at: Optional[datetime] = None
-    payment_confirmation_reference: Optional[str] = None
-    is_payment_pending: bool
-    is_fully_confirmed: bool
-    
-    model_config = {"from_attributes": True}
-
-
-class PaymentApprovalResponse(BaseModel):
-    id: int
-    user_package_id: int
-    requested_at: datetime
-    admin_id: int
-    admin_name: str
-    action: PaymentApprovalAction
-    action_at: datetime
-    notes: Optional[str] = None
-    created_at: datetime
-
     model_config = {"from_attributes": True}
 
 

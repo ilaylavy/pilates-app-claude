@@ -4,9 +4,9 @@ from .class_schedule import (ClassInstanceCreate, ClassInstanceResponse,
                              ClassTemplateResponse, ClassTemplateUpdate)
 from .package import (PackageCreate, PackageResponse, PackageUpdate,
                       UserPackageResponse, PackagePurchase, PaymentMethod,
-                      PaymentStatus, PaymentApprovalAction, PaymentApprovalRequest,
+                      PaymentStatus, UserPackageStatus, PaymentApprovalRequest,
                       PaymentRejectionRequest, PendingApprovalResponse,
-                      PaymentApprovalResponse, ApprovalStatsResponse)
+                      ApprovalStatsResponse)
 from .payment import PaymentCreate, PaymentResponse
 from .user import (Token, TokenData, UserCreate, UserLogin, UserResponse,
                    UserUpdate)
@@ -31,11 +31,10 @@ __all__ = [
     "PackagePurchase",
     "PaymentMethod",
     "PaymentStatus",
-    "PaymentApprovalAction",
+    "UserPackageStatus",
     "PaymentApprovalRequest",
     "PaymentRejectionRequest",
     "PendingApprovalResponse",
-    "PaymentApprovalResponse",
     "ApprovalStatsResponse",
     "BookingCreate",
     "BookingResponse",
