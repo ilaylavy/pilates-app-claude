@@ -46,9 +46,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const initializeSecurity = async () => {
     await securityManager.initialize({
-      autoLogoutMinutes: 15,
+      autoLogoutMinutes: 999999, // Effectively disable auto-logout (999999 minutes = ~694 days)
       enableBiometric: false,
-      clearDataOnBackground: true,
+      clearDataOnBackground: false, // Don't clear data when app goes to background
       enableJailbreakDetection: true,
     });
     
@@ -65,12 +65,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
-        // Validate token with server - if it fails, clear all auth data
+        // Try to validate token with server, but don't clear auth data on network errors
         try {
           await fetchCurrentUser();
-        } catch (error) {
-          console.log('Stored token is invalid, clearing auth data');
-          await clearAuthData();
+        } catch (error: any) {
+          console.log('Token validation failed:', error.message);
+          
+          // Only clear auth data if it's a 401/403 (invalid token), not on network errors
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            console.log('Token is invalid, clearing auth data');
+            await clearAuthData();
+          } else {
+            // Network error or other issue - keep user logged in, they can try again
+            console.log('Network error during token validation, keeping user logged in');
+          }
         }
       }
     } catch (error) {
@@ -92,9 +100,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const currentUser = await authApi.getCurrentUser();
       setUser(currentUser);
       await secureStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(currentUser));
-    } catch (error) {
-      // Token might be invalid, clear storage
-      await clearAuthData();
+    } catch (error: any) {
+      // Only clear auth data if it's a 401/403 (invalid token), not on network errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log('Token is invalid in fetchCurrentUser, clearing auth data');
+        await clearAuthData();
+      } else {
+        // Network error or other issue - don't clear auth, just log it
+        console.log('Network error in fetchCurrentUser, keeping user logged in:', error.message);
+      }
     }
   };
 

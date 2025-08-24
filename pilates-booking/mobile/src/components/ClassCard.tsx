@@ -11,18 +11,11 @@ import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
 import { ClassInstance, Booking } from '../types';
 
-export type ClassCardVariant = 'list' | 'booking' | 'schedule';
-
 interface ClassCardProps {
   classInstance: ClassInstance;
-  booking?: Booking;
-  variant?: ClassCardVariant;
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onCancel?: () => void;
-  onShare?: () => void;
-  onReschedule?: () => void;
   onBook?: () => void;
   onJoinWaitlist?: () => void;
   showActions?: boolean;
@@ -30,19 +23,13 @@ interface ClassCardProps {
   availableSpots?: number;
   hasAvailableCredits?: boolean;
   isBookingInProgress?: boolean;
-  showTimeLeft?: boolean;
 }
 
 const ClassCard: React.FC<ClassCardProps> = ({
   classInstance,
-  booking,
-  variant = 'list',
   onPress,
   onEdit,
   onDelete,
-  onCancel: _onCancel,
-  onShare: _onShare,
-  onReschedule,
   onBook,
   onJoinWaitlist,
   showActions = true,
@@ -50,7 +37,6 @@ const ClassCard: React.FC<ClassCardProps> = ({
   availableSpots,
   hasAvailableCredits = true,
   isBookingInProgress = false,
-  showTimeLeft = false,
 }) => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
 
@@ -102,30 +88,6 @@ const ClassCard: React.FC<ClassCardProps> = ({
 
   const capacityInfo = getCapacityInfo();
 
-  // Get styles based on variant
-  const getCardStyle = () => {
-    switch (variant) {
-      case 'booking':
-        return [styles.card, styles.bookingCard];
-      case 'schedule':
-        return [styles.card, styles.scheduleCard];
-      default:
-        return styles.card;
-    }
-  };
-
-  // Show different content based on variant
-  const renderContent = () => {
-    switch (variant) {
-      case 'booking':
-        return renderBookingContent();
-      case 'schedule':
-        return renderScheduleContent();
-      default:
-        return renderListContent();
-    }
-  };
-
   const renderListContent = () => (
     <>
       <View style={styles.listHeader}>
@@ -146,9 +108,23 @@ const ClassCard: React.FC<ClassCardProps> = ({
           </View>
         </View>
         <View style={styles.listRightInfo}>
-          {/* Student booking actions */}
+          {/* Always show capacity info */}
+          <View style={styles.listCapacityContainer}>
+            <View style={styles.listCapacityDisplay}>
+              <Ionicons name="people" size={14} color={capacityInfo.color} />
+              <Text style={[styles.listCapacityText, { color: capacityInfo.color }]}>
+                {capacityInfo.current}/{capacityInfo.total}
+              </Text>
+              <View style={[styles.listCapacityDot, { backgroundColor: capacityInfo.color }]} />
+            </View>
+            {capacityInfo.isFull && (
+              <Text style={styles.listFullText}>FULL</Text>
+            )}
+          </View>
+
+          {/* Student booking actions positioned like capacity */}
           {(isStudent || isAdmin) && showActions && classInstance.status === 'scheduled' && (
-            <View style={styles.studentActions}>
+            <View style={styles.listStudentActions}>
               {isBooked ? (
                 // Show booked status when booked
                 <View style={styles.bookedBadge}>
@@ -184,7 +160,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
                       >
                         <Ionicons name="add" size={16} color={COLORS.white} />
                         <Text style={styles.studentBookButtonText}>
-                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : '+ Book Class'}
+                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : 'Book Class'}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -194,24 +170,11 @@ const ClassCard: React.FC<ClassCardProps> = ({
             </View>
           )}
 
-          {/* Capacity info for non-students or when no actions */}
-          {(!(isStudent || isAdmin) || !showActions) && (
-            <View style={styles.capacityInfo}>
-              {isBooked && (
-                <View style={styles.bookedBadge}>
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                  <Text style={styles.bookedText}>Booked</Text>
-                </View>
-              )}
-              <View style={styles.capacityDisplay}>
-                <Ionicons name="people" size={16} color={capacityInfo.color} />
-                <Text style={[styles.capacityText, { color: capacityInfo.color }]}>
-                  {capacityInfo.current}/{capacityInfo.total}
-                </Text>
-                {capacityInfo.isFull && (
-                  <Text style={styles.fullText}>FULL</Text>
-                )}
-              </View>
+          {/* Show booked badge for non-student views */}
+          {(!(isStudent || isAdmin) || !showActions) && isBooked && (
+            <View style={styles.bookedBadge}>
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+              <Text style={styles.bookedText}>Booked</Text>
             </View>
           )}
           
@@ -235,212 +198,14 @@ const ClassCard: React.FC<ClassCardProps> = ({
     </>
   );
 
-  const renderBookingContent = () => (
-    <>
-      <View style={styles.bookingHeader}>
-        <View style={styles.classInfo}>
-          <Text style={styles.className} numberOfLines={1}>
-            {classInstance.template?.name || 'Unknown Class'}
-          </Text>
-          <Text style={styles.instructor}>
-            with {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
-          </Text>
-        </View>
-        {booking && (
-          <View style={[styles.statusBadge, { backgroundColor: getBookingStatusColor(booking.status) }]}>
-            <Text style={styles.statusText}>{getBookingStatusText(booking.status)}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.bookingDetails}>
-        <View style={styles.dateTimeContainer}>
-          <View style={styles.dateTime}>
-            <Ionicons name="calendar" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.dateText}>{formatDate(classInstance.start_datetime)}</Text>
-          </View>
-          <View style={styles.dateTime}>
-            <Ionicons name="time" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.timeText}>{formatTime(classInstance.start_datetime)}</Text>
-          </View>
-        </View>
-
-        {booking && (
-          <View style={styles.bookingFooter}>
-            <Text style={styles.bookingDate}>
-              Booked: {new Date(booking.booking_date).toLocaleDateString()}
-            </Text>
-            
-            {booking.status === 'confirmed' && (
-              <View style={styles.quickActions}>
-                {onReschedule && (
-                  <TouchableOpacity style={styles.quickAction} onPress={onReschedule}>
-                    <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
-                    <Text style={styles.quickActionText}>Reschedule</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-    </>
-  );
-
-  const renderScheduleContent = () => (
-    <>
-      <View style={styles.scheduleLayout}>
-        {/* Time column */}
-        {showTimeLeft && (
-          <View style={styles.scheduleTimeColumn}>
-            <Text style={styles.scheduleTime}>
-              {formatTime(classInstance.start_datetime)}
-            </Text>
-            <Text style={styles.scheduleEndTime}>
-              {formatTime(classInstance.end_datetime)}
-            </Text>
-          </View>
-        )}
-        
-        {/* Main content */}
-        <View style={styles.scheduleMainContent}>
-          <View style={styles.scheduleHeader}>
-            <View style={styles.classInfo}>
-              <Text style={styles.className}>{classInstance.template?.name || 'Unknown Class'}</Text>
-              <Text style={styles.instructor}>
-                {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
-              </Text>
-              {!showTimeLeft && (
-                <View style={styles.scheduleTimeInfo}>
-                  <Ionicons name="time" size={14} color={COLORS.textSecondary} />
-                  <Text style={styles.scheduleTimeText}>
-                    {formatTime(classInstance.start_datetime)} - {formatTime(classInstance.end_datetime)}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-        
-        {/* Right side - Actions and capacity */}
-        <View style={styles.scheduleRightContent}>
-          {/* Student booking actions */}
-          {(isStudent || isAdmin) && showActions && classInstance.status === 'scheduled' && (
-            <View style={styles.scheduleStudentActions}>
-              {isBooked ? (
-                <View style={styles.scheduleBookedBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                  <Text style={styles.scheduleBookedText}>Booked</Text>
-                </View>
-              ) : (
-                <>
-                  {classInstance.is_full ? (
-                    onJoinWaitlist && (
-                      <TouchableOpacity 
-                        style={[styles.scheduleActionButton, styles.scheduleWaitlistButton]}
-                        onPress={onJoinWaitlist}
-                        disabled={isBookingInProgress || !hasAvailableCredits}
-                      >
-                        <Ionicons name="hourglass" size={14} color={COLORS.warning} />
-                        <Text style={styles.scheduleWaitlistButtonText}>
-                          {isBookingInProgress ? 'Joining...' : 'Join Waitlist'}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  ) : (
-                    onBook && (
-                      <TouchableOpacity 
-                        style={[
-                          styles.scheduleActionButton,
-                          styles.scheduleBookButton,
-                          !hasAvailableCredits && styles.scheduleDisabledActionButton
-                        ]}
-                        onPress={onBook}
-                        disabled={isBookingInProgress || !hasAvailableCredits}
-                      >
-                        <Ionicons name="add" size={14} color={COLORS.white} />
-                        <Text style={styles.scheduleBookButtonText}>
-                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : '+ Book Class'}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  )}
-                </>
-              )}
-            </View>
-          )}
-          
-          {/* Capacity display */}
-          <View style={styles.scheduleCapacityContainer}>
-            <View style={styles.scheduleCapacityDisplay}>
-              <Ionicons name="people" size={14} color={capacityInfo.color} />
-              <Text style={[styles.scheduleCapacityText, { color: capacityInfo.color }]}>
-                {capacityInfo.current}/{capacityInfo.total}
-              </Text>
-              <View style={[styles.scheduleCapacityDot, { backgroundColor: capacityInfo.color }]} />
-            </View>
-            {capacityInfo.isFull && (
-              <Text style={styles.scheduleFullText}>FULL</Text>
-            )}
-          </View>
-          
-          {/* Admin/Instructor actions */}
-          {(isAdmin || isInstructor) && (
-            <View style={styles.scheduleAdminActions}>
-              {onEdit && (
-                <TouchableOpacity style={styles.scheduleEditButton} onPress={onEdit}>
-                  <Ionicons name="pencil" size={16} color={COLORS.primary} />
-                </TouchableOpacity>
-              )}
-              {isAdmin && onDelete && (
-                <TouchableOpacity style={styles.scheduleDeleteButton} onPress={onDelete}>
-                  <Ionicons name="trash" size={16} color={COLORS.error} />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
-      </View>
-    </>
-  );
-
-  const getBookingStatusColor = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return COLORS.success;
-      case 'cancelled':
-        return COLORS.error;
-      case 'completed':
-        return COLORS.primary;
-      case 'no_show':
-        return COLORS.warning;
-      default:
-        return COLORS.textSecondary;
-    }
-  };
-
-  const getBookingStatusText = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return 'Confirmed';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'completed':
-        return 'Completed';
-      case 'no_show':
-        return 'No Show';
-      default:
-        return status;
-    }
-  };
 
   return (
     <TouchableOpacity
-      style={getCardStyle()}
+      style={styles.card}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      {renderContent()}
+      {renderListContent()}
     </TouchableOpacity>
   );
 };
@@ -456,14 +221,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
-  },
-  bookingCard: {
-    marginHorizontal: SPACING.lg,
-    marginVertical: SPACING.sm,
-  },
-  scheduleCard: {
-    marginBottom: SPACING.sm,
-    padding: SPACING.md,
   },
   header: {
     marginBottom: SPACING.md,
@@ -648,6 +405,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  listTimeInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: SPACING.xs,
+  },
   listTimeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,6 +559,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
+  },
+  // List variant capacity styles
+  listCapacityContainer: {
+    alignItems: 'flex-end',
+    gap: 2,
+    marginBottom: SPACING.xs,
+  },
+  listStudentActions: {
+    alignItems: 'flex-end',
+    marginBottom: SPACING.xs,
+  },
+  listCapacityDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  listCapacityText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  listCapacityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  listFullText: {
+    fontSize: 10,
+    color: COLORS.error,
+    fontWeight: 'bold',
+    backgroundColor: '#ffebee',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
   },
   // Schedule variant styles
   scheduleLayout: {

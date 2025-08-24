@@ -223,7 +223,7 @@ async def create_class_schedule_custom(session: AsyncSession, instructors: List[
             name, desc, duration, capacity, level, day, start_time = template_data
             
             template = ClassTemplate(
-                name=f"{name} (with {instructor.first_name})",
+                name=name,
                 description=desc,
                 duration_minutes=duration,
                 capacity=capacity,

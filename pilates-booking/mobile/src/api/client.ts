@@ -58,12 +58,10 @@ class ApiClient {
   private setupNetworkMonitoring(): void {
     NetInfo.addEventListener(state => {
       this.isOnline = state.isConnected ?? false;
-      
-      Logger.trackEvent('network.state_changed', {
-        isConnected: this.isOnline,
-        type: state.type,
-        isInternetReachable: state.isInternetReachable,
-      });
+      // Only log significant network changes
+      if (__DEV__) {
+        console.log(`📡 Network: ${this.isOnline ? 'Online' : 'Offline'} (${state.type})`);
+      }
     });
   }
 
@@ -139,10 +137,19 @@ class ApiClient {
 
   private async tryBackupUrls(): Promise<void> {
     console.log('🔄 Trying backup URLs...');
+    const originalBaseURL = this.currentBaseURL;
+    
     for (const backupUrl of BACKUP_API_URLS) {
       try {
         const response = await axios.get(`${backupUrl}/health`, { timeout: 3000 });
         console.log(`✅ Found working backup URL: ${backupUrl}`, response.data);
+        
+        // If we're switching to a different URL, clear tokens as they may not be valid
+        if (backupUrl !== originalBaseURL) {
+          console.warn('⚠️ API URL changed - clearing tokens to prevent auth issues');
+          await this.clearTokens();
+        }
+        
         this.currentBaseURL = backupUrl;
         this.instance.defaults.baseURL = backupUrl;
         return;
@@ -203,19 +210,15 @@ class ApiClient {
           delete config.headers['Content-Type'];
         }
         
-        // Request deduplication
+        // Request deduplication (no logging for performance)
         if (this.shouldDeduplicateRequest(config) && this.pendingRequests[requestKey]) {
-          Logger.debug('Request deduplicated', { requestKey });
-          Logger.trackEvent('api.request_deduplicated', { requestKey });
           return this.pendingRequests[requestKey];
         }
         
-        // Cache lookup for GET requests
+        // Cache lookup for GET requests (no logging for performance)
         if (this.shouldCacheRequest(config)) {
           const cachedResponse = this.requestCache[requestKey];
           if (cachedResponse && (Date.now() - cachedResponse.timestamp) < 300000) { // 5 min cache
-            Logger.debug('Request served from cache', { requestKey });
-            Logger.trackEvent('api.request_cached', { requestKey });
             return Promise.resolve(cachedResponse.response.config);
           }
         }
@@ -239,26 +242,10 @@ class ApiClient {
           throw new Error('Request queued - device is offline');
         }
         
-        // Comprehensive request logging
-        const fullUrl = new URL(config.url ?? '', config.baseURL).toString();
-        Logger.debug('API request started', {
-          method: config.method?.toUpperCase(),
-          url: fullUrl,
-          baseURL: config.baseURL,
-          timeout: config.timeout,
-          hasAuth: !!config.headers.Authorization,
-          contentType: config.headers['Content-Type'],
-          requestSize: config.data ? JSON.stringify(config.data).length : 0,
-          isOnline: this.isOnline,
-        });
-        
-        Logger.trackEvent('api.request_started', {
-          method: config.method?.toUpperCase(),
-          endpoint: config.url,
-          baseURL: config.baseURL,
-          timestamp: new Date().toISOString(),
-          isOnline: this.isOnline,
-        });
+        // Only log important requests (errors will still be logged)
+        if (__DEV__ && config.url?.includes('/auth/')) {
+          console.log(`🔐 Auth request: ${config.method?.toUpperCase()} ${config.url}`);
+        }
         
         return config;
       },
@@ -290,40 +277,13 @@ class ApiClient {
           };
         }
         
-        // Log successful response
-        Logger.debug('API request completed', {
-          method: response.config.method?.toUpperCase(),
-          url: response.config.url,
-          status: response.status,
-          statusText: response.statusText,
-          duration,
-          responseSize: JSON.stringify(response.data).length,
-          fromCache: false,
-        });
+        // Only log slow requests and auth responses
+        if (duration > 5000) {
+          console.warn(`⏱️ Slow request: ${response.config.method?.toUpperCase()} ${response.config.url} (${duration}ms)`);
+        }
         
-        // Track successful API call
-        Logger.trackApiCall(
-          response.config.url || 'unknown',
-          response.config.method?.toUpperCase() || 'GET',
-          response.status,
-          duration / 1000
-        );
-        
-        // Log slow requests
-        if (duration > 3000) {
-          Logger.warn('Slow API request detected', {
-            method: response.config.method?.toUpperCase(),
-            url: response.config.url,
-            duration,
-            status: response.status
-          });
-          
-          Logger.trackEvent('api.slow_request', {
-            method: response.config.method?.toUpperCase(),
-            url: response.config.url,
-            duration,
-            status: response.status,
-          });
+        if (__DEV__ && response.config.url?.includes('/auth/')) {
+          console.log(`✅ Auth response: ${response.status} ${response.config.url}`);
         }
         
         return response;
@@ -345,20 +305,7 @@ class ApiClient {
           const retryCount = (originalRequest._retryCount || 0) + 1;
           const delay = this.calculateRetryDelay(retryCount);
           
-          Logger.info('Retrying request with exponential backoff', {
-            url: originalRequest?.url,
-            retryCount,
-            delay,
-            error: error.message,
-          });
-          
-          Logger.trackEvent('api.request_retry', {
-            url: originalRequest?.url,
-            retryCount,
-            delay,
-            errorStatus: error.response?.status,
-            errorCode: error.code,
-          });
+          console.log(`🔄 Retrying request ${retryCount}/${this.retryConfig.retries}: ${originalRequest?.url}`);
           
           // Set retry metadata
           originalRequest._retryCount = retryCount;
@@ -391,42 +338,17 @@ class ApiClient {
           errorType: 'api_request_error'
         };
         
-        if (error.code === 'ECONNABORTED') {
-          Logger.warn('API request timeout', errorDetails);
-          Logger.trackEvent('api.timeout', {
-            url: originalRequest?.url,
-            duration,
-            timeout: originalRequest?.timeout
-          });
-        } else if (error.code === 'ERR_NETWORK' || error.code === 'NETWORK_ERROR' || !error.response) {
-          Logger.error('Network error', error, errorDetails);
-          Logger.trackEvent('api.network_error', {
-            url: originalRequest?.url,
-            code: error.code,
-            message: error.message
-          });
-        } else {
-          Logger.error('API request failed', error, errorDetails);
-          // Also console log for immediate debugging
-          console.error('[ERROR] API request failed', {
-            fullUrl,
-            method: errorDetails.method,
-            status: errorDetails.status,
-            code: errorDetails.code,
-            message: errorDetails.message,
-            requestData: errorDetails.requestData,
-            responseData: errorDetails.responseData
-          });
+        // Only log errors (not every successful request)
+        if (error.response?.status >= 400) {
+          console.error(`❌ API Error: ${errorDetails.method} ${originalRequest?.url} - ${errorDetails.status} ${errorDetails.message}`);
+          if (errorDetails.responseData) {
+            console.error('Response:', errorDetails.responseData);
+          }
+        } else if (error.code === 'ECONNABORTED') {
+          console.warn(`⏱️ Timeout: ${originalRequest?.url}`);
+        } else if (error.code === 'ERR_NETWORK' || !error.response) {
+          console.warn(`🌐 Network error: ${originalRequest?.url} - ${error.message}`);
         }
-        
-        // Track failed API call
-        Logger.trackApiCall(
-          originalRequest?.url || 'unknown',
-          originalRequest?.method?.toUpperCase() || 'GET',
-          error.response?.status || 0,
-          duration / 1000,
-          error.message
-        );
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;

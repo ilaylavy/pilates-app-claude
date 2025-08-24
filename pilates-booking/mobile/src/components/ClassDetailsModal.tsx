@@ -72,7 +72,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
   // Check if user has available credits
   const activePackage = userPackages.find(pkg => pkg.is_valid);
-  const hasAvailableCredits = activePackage && activePackage.credits_remaining > 0;
+  const hasAvailableCredits = !!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited);
 
   // Cancel booking mutation with immediate updates
   const cancelBookingMutation = useMutation({
@@ -94,7 +94,9 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
       // Invalidate all related queries to refetch updated data from server
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['student-classes'] });
         queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
         queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
         queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
         // Force another userPackages refetch after delay to catch any delayed server updates
@@ -103,6 +105,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           refetchType: 'all' 
         });
       }, 300);
+      
+      // Immediately invalidate queries (no timeout)
+      queryClient.invalidateQueries({ queryKey: ['student-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
       
       // Close modal after successful cancellation
       onClose();
@@ -176,7 +182,9 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
       // Invalidate all related queries to refetch updated data from server
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['student-classes'] });
         queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
         queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
         queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
         // Force another userPackages refetch after delay to catch any delayed server updates
@@ -185,6 +193,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           refetchType: 'all' 
         });
       }, 300);
+      
+      // Immediately invalidate queries (no timeout)
+      queryClient.invalidateQueries({ queryKey: ['student-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
       
       if (result.booking && classInstance) {
         // Call parent callback to show booking confirmation modal

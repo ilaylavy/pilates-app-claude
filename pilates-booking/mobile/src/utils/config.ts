@@ -6,12 +6,13 @@
 
 const getDevApiUrl = () => {
   // For physical device, use actual IP
-  const LOCAL_IP = '10.0.0.22'; // Updated to current IP from ipconfig
+  const LOCAL_IP = '10.100.102.16'; // Use working backup IP as primary
   return `http://${LOCAL_IP}:8000`;
 };
 
 // Backup URLs to try if primary fails
 export const BACKUP_API_URLS = [
+  'http://10.100.102.16:8000',
   'http://172.31.208.1:8000',
   'http://10.100.102.24:8000',  // WSL/Docker host IP
   'http://127.0.0.1:8000',     // localhost

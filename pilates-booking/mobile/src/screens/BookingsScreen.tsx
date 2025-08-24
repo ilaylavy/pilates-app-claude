@@ -202,6 +202,7 @@ const BookingsScreen: React.FC = () => {
       onPress={() => handleBookingPress(item)}
       onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
       isBooked={item.status === 'confirmed'}
+      availableSpots={item.class_instance.available_spots}
       showActions={true}
     />
   );

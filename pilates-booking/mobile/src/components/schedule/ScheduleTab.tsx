@@ -330,8 +330,7 @@ const ScheduleTab: React.FC = () => {
                       <ClassCard
                         key={classInstance.id}
                         classInstance={classInstance}
-                        variant="schedule"
-                        showTimeLeft={true}
+                        variant="list"
                         onPress={() => handleClassPress(classInstance)}
                         onEdit={isAdmin || isInstructor ? () => {
                           setSelectedClass(classInstance);

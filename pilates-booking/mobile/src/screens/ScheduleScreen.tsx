@@ -107,10 +107,12 @@ const ScheduleScreen: React.FC = () => {
     : [];
 
   // Create a set of booked class IDs for quick lookup
-  const bookedClassIds = new Set(
-    userBookings?.filter(booking => booking.status === 'confirmed')
-      .map(booking => booking.class_instance_id) || []
-  );
+  const bookedClassIds = React.useMemo(() => {
+    return new Set(
+      userBookings?.filter(booking => booking.status === 'confirmed')
+        .map(booking => booking.class_instance_id) || []
+    );
+  }, [userBookings]);
 
   const activePackage = userPackages?.find(pkg => pkg.is_valid);
 
@@ -144,6 +146,7 @@ const ScheduleScreen: React.FC = () => {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['classes'] });
         queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
         queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
         // Force another userPackages refetch after delay to catch any delayed server updates
         queryClient.invalidateQueries({ 
@@ -211,6 +214,7 @@ const ScheduleScreen: React.FC = () => {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['classes'] });
         queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
         queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
         // Force another userPackages refetch after delay to catch any delayed server updates
         queryClient.invalidateQueries({ 
@@ -576,7 +580,7 @@ const ScheduleScreen: React.FC = () => {
           onJoinWaitlist={handleJoinWaitlist}
           onCancel={handleCancelBooking}
           bookedClassIds={bookedClassIds}
-          hasAvailableCredits={!!activePackage?.credits_remaining}
+          hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
           isBookingInProgress={(classId) => bookingInProgressId === classId}
         />
       ) : (
@@ -643,7 +647,7 @@ const ScheduleScreen: React.FC = () => {
                             isBooked={bookedClassIds.has(classInstance.id)}
                             availableSpots={classInstance.available_spots}
                             showActions={isStudent}
-                            hasAvailableCredits={!!activePackage?.credits_remaining}
+                            hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
                             isBookingInProgress={bookingInProgressId === classInstance.id}
                             onPress={() => {
                               setSelectedClass(classInstance);

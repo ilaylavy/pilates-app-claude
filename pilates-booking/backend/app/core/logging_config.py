@@ -350,8 +350,8 @@ def setup_logging() -> None:
         log_level = "INFO"
         console_level = "INFO"
     else:  # development
-        log_level = "DEBUG"
-        console_level = "DEBUG"
+        log_level = "INFO"  # Changed from DEBUG to reduce noise
+        console_level = "INFO"
 
     # Base configuration with console-only logging
     logging_config: Dict[str, Any] = {
@@ -405,12 +405,12 @@ def setup_logging() -> None:
                 "propagate": False,
             },
             "app.access": {
-                "level": "INFO",
+                "level": "WARNING",
                 "handlers": ["console"],
                 "propagate": False,
             },
             "app.database": {
-                "level": "INFO",
+                "level": "WARNING",
                 "handlers": ["console"],
                 "propagate": False,
             },
@@ -446,18 +446,18 @@ def setup_logging() -> None:
                 "propagate": False,
             },
             "uvicorn.access": {
-                "level": "INFO",
-                "handlers": ["console"],
+                "level": "CRITICAL",  # Disable HTTP access logging  
+                "handlers": [],  # No handlers = no output
                 "propagate": False,
             },
             "sqlalchemy.engine": {
-                "level": "WARNING",
-                "handlers": ["console"],
+                "level": "CRITICAL",  # Completely disable SQLAlchemy query logging
+                "handlers": [],  # No handlers = no output
                 "propagate": False,
             },
             "sqlalchemy.dialects": {
-                "level": "WARNING",
-                "handlers": ["console"],
+                "level": "CRITICAL",  # Completely disable SQLAlchemy dialect logging
+                "handlers": [],  # No handlers = no output
                 "propagate": False,
             },
             "stripe": {

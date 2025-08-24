@@ -112,7 +112,8 @@ async def safe_get_user_bookings(session: AsyncSession, user_id: int, include_pa
         selectinload(Booking.user),
         selectinload(Booking.user_package),
         selectinload(Booking.class_instance).selectinload(ClassInstance.template),
-        selectinload(Booking.class_instance).selectinload(ClassInstance.instructor)
+        selectinload(Booking.class_instance).selectinload(ClassInstance.instructor),
+        selectinload(Booking.class_instance).selectinload(ClassInstance.bookings)
     ).where(Booking.user_id == user_id)
     
     # Add join for filtering and ordering by class start time

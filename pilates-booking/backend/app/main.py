@@ -24,8 +24,8 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger = get_logger("app")
 
-    # Setup database logging
-    setup_database_logging(engine)
+    # Database logging disabled for performance
+    # setup_database_logging(engine)
 
     # Log system startup
     logger.info("Starting Pilates Booking System API")

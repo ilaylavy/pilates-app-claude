@@ -355,11 +355,9 @@ async def create_diverse_class_templates(session: AsyncSession, instructors: Lis
             
             # Pick class details
             class_name = choice(CLASS_NAMES)
-            # Make name unique for this time slot
-            unique_name = f"{class_name} ({class_time.strftime('%H:%M')})"
             
             template = ClassTemplate(
-                name=unique_name,
+                name=class_name,
                 description=choice(CLASS_DESCRIPTIONS),
                 duration_minutes=choice([30, 45, 60, 75]),
                 capacity=randint(8, 20),
