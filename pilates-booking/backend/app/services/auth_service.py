@@ -140,8 +140,15 @@ class AuthService:
         return result.scalar_one_or_none()
 
     async def get_user_by_id(self, user_id: int) -> Optional[User]:
-        """Get user by ID."""
-        stmt = select(User).where(User.id == user_id)
+        """Get user by ID with user_packages relationship loaded."""
+        from sqlalchemy.orm import selectinload
+        from app.models.package import UserPackage
+        
+        stmt = (
+            select(User)
+            .options(selectinload(User.user_packages))
+            .where(User.id == user_id)
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 

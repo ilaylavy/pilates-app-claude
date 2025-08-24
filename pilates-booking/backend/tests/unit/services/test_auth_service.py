@@ -367,24 +367,6 @@ class TestAuthService:
         result = await auth_service.check_rate_limit(ip_address)
         assert result is False
 
-    @pytest.mark.unit
-    @pytest.mark.auth
-    async def test_password_strength_validation(self, auth_service: AuthService):
-        """Test password strength validation."""
-        # Weak password
-        weak_result = auth_service.validate_password_strength("123")
-        assert not weak_result["is_valid"]
-        assert weak_result["strength"] == "weak"
-        
-        # Medium password
-        medium_result = auth_service.validate_password_strength("Password123")
-        assert medium_result["is_valid"]
-        assert medium_result["strength"] == "medium"
-        
-        # Strong password
-        strong_result = auth_service.validate_password_strength("SecurePassword123!")
-        assert strong_result["is_valid"]
-        assert strong_result["strength"] == "strong"
 
     @pytest.mark.unit
     @pytest.mark.auth

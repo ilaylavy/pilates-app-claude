@@ -74,6 +74,60 @@ class User(Base):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
+        
+    def get_usable_packages(self):
+        """Get packages that can be used for booking, sorted by priority."""
+        from .package import PaymentStatus, ApprovalStatus
+        
+        usable_packages = [
+            pkg for pkg in self.user_packages 
+            if pkg.is_valid  # Uses existing is_valid logic
+        ]
+        
+        # Sort by priority: expiry date first, then payment status, then purchase date
+        def package_priority(pkg):
+            # Priority 1: Days until expiry (lower = higher priority)
+            days_to_expiry = pkg.days_until_expiry
+            
+            # Priority 2: Payment status (authorized before payment_confirmed to use them first)
+            status_priority = 0 if pkg.payment_status == PaymentStatus.AUTHORIZED else 1
+            
+            # Priority 3: Purchase date (older first - FIFO)
+            purchase_date = pkg.purchase_date
+            
+            return (days_to_expiry, status_priority, purchase_date)
+        
+        return sorted(usable_packages, key=package_priority)
+    
+    def get_primary_package(self):
+        """Get the primary package that should be used next."""
+        usable = self.get_usable_packages()
+        return usable[0] if usable else None
+    
+    def get_total_credits(self) -> int:
+        """Get total available credits across all usable packages."""
+        total = 0
+        for pkg in self.get_usable_packages():
+            if pkg.package.is_unlimited:
+                return float('inf')  # Unlimited credits
+            total += pkg.credits_remaining
+        return total
+    
+    def use_credit_smartly(self) -> tuple[bool, str, int]:
+        """Use one credit with priority logic. Returns (success, message, package_id_used)."""
+        usable_packages = self.get_usable_packages()
+        
+        if not usable_packages:
+            return False, "No usable packages available", 0
+        
+        # Use credit from highest priority package
+        primary_package = usable_packages[0]
+        success = primary_package.use_credit()
+        
+        if success:
+            return True, f"Credit used from {primary_package.package.name}", primary_package.id
+        else:
+            return False, f"Could not use credit from {primary_package.package.name}", primary_package.id
 
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"

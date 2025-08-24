@@ -129,12 +129,12 @@ async def handle_cash_purchase(
     }
 
 
-@router.get("/my-packages", response_model=List[UserPackageResponse])
+@router.get("/my-packages")
 async def get_user_packages(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Get current user's packages with payment status information."""
+    """Get current user's packages separated by active, pending, and historical."""
     stmt = (
         select(UserPackage)
         .options(selectinload(UserPackage.package))
@@ -144,8 +144,16 @@ async def get_user_packages(
     result = await db.execute(stmt)
     user_packages = result.scalars().all()
 
+    # Calculate metrics using the loaded packages instead of triggering lazy loading
+    usable_packages = [pkg for pkg in user_packages if pkg.is_valid]
+    primary_package = next((pkg for pkg in usable_packages if pkg.days_until_expiry is not None), None)
+    total_credits = sum(pkg.credits_remaining for pkg in usable_packages)
+    
     # Pre-load all properties while session is active to avoid detached instance issues
-    response_data = []
+    active_packages = []
+    pending_packages = []
+    historical_packages = []
+    
     for pkg in user_packages:
         # Access all properties while the session is still active
         pkg_data = {
@@ -189,12 +197,33 @@ async def get_user_packages(
             'can_be_authorized': pkg.can_be_authorized,
             'can_confirm_payment': pkg.can_confirm_payment,
             'can_be_revoked': pkg.can_be_revoked,
+            'is_historical': pkg.is_historical,
+            # Priority indicators
+            'is_primary': pkg.id == (primary_package.id if primary_package else None),
+            'usage_priority': next((i for i, p in enumerate(usable_packages) if p.id == pkg.id), None),
             'created_at': pkg.created_at,
             'updated_at': pkg.updated_at,
         }
-        response_data.append(pkg_data)
+        
+        # Categorize packages
+        if pkg.is_historical:
+            historical_packages.append(pkg_data)
+        elif pkg.is_pending_approval:
+            pending_packages.append(pkg_data)
+        else:
+            active_packages.append(pkg_data)
 
-    return response_data
+    return {
+        "active_packages": active_packages,
+        "pending_packages": pending_packages,
+        "historical_packages": historical_packages,
+        "total_active": len(active_packages),
+        "total_pending": len(pending_packages), 
+        "total_historical": len(historical_packages),
+        "total_credits": total_credits if total_credits != float('inf') else -1,
+        "has_unlimited": total_credits == float('inf'),
+        "primary_package_id": primary_package.id if primary_package else None
+    }
 
 
 # Admin endpoints

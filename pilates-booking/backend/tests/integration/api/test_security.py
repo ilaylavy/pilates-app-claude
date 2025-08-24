@@ -544,9 +544,6 @@ class TestSecurityPerformance:
         response = make_login_request(client)
         
         # Check if login was successful first
-        print(f"Login response status: {response.status_code}")
-        print(f"Login response body: {response.json()}")
-        
         assert response.status_code == 200, f"Login failed: {response.json()}"
         token = response.json()["access_token"]
 

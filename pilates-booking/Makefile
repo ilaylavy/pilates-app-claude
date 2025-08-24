@@ -59,7 +59,9 @@ migrate: ## Run database migrations
 	docker-compose exec backend python -m alembic upgrade head
 
 seed: ## Seed database with initial data
-	docker-compose exec backend python -m app.scripts.seed_data
+	docker-compose exec backend python -m app.scripts.seed_manager seed --type heavy
+seed-list: ## List available seed scripts
+	docker-compose exec backend python -m app.scripts.seed_manager list
 
 clean: ## Clean up containers and volumes
 	docker-compose down -v

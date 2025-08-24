@@ -102,8 +102,26 @@ export interface UserPackage {
   payment_confirmation_reference?: string;
   is_payment_pending?: boolean;
   is_fully_confirmed?: boolean;
+  
+  // Package history and priority fields
+  is_historical?: boolean;
+  is_primary?: boolean;
+  usage_priority?: number;
+  
   created_at: string;
   updated_at: string;
+}
+
+export interface UserPackagesResponse {
+  active_packages: UserPackage[];
+  pending_packages: UserPackage[];
+  historical_packages: UserPackage[];
+  total_active: number;
+  total_pending: number;
+  total_historical: number;
+  total_credits: number;
+  has_unlimited: boolean;
+  primary_package_id?: number;
 }
 
 export interface Booking {

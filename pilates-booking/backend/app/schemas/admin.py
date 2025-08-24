@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 
 from ..models.user import UserRole
 from .user import UserResponse
@@ -29,8 +29,7 @@ class UserListResponse(BaseModel):
     total_bookings: Optional[int] = 0
     active_packages: Optional[int] = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PackageCreate(BaseModel):
@@ -107,5 +106,4 @@ class AuditLogRead(BaseModel):
     user_agent: Optional[str]
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

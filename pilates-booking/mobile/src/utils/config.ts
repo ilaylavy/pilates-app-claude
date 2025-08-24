@@ -12,6 +12,7 @@ const getDevApiUrl = () => {
 
 // Backup URLs to try if primary fails
 export const BACKUP_API_URLS = [
+  'http://172.31.208.1:8000',
   'http://10.100.102.24:8000',  // WSL/Docker host IP
   'http://127.0.0.1:8000',     // localhost
   'http://10.0.0.19:8000',      // Another local IP

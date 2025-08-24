@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.API_V1_STR.startswith("/") else f"/{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
 
@@ -107,7 +107,7 @@ if cors_origins:
         expose_headers=["X-Request-ID", "API-Version"],
     )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix=settings.API_V1_STR if settings.API_V1_STR.startswith("/") else f"/{settings.API_V1_STR}")
 
 
 @app.get("/")

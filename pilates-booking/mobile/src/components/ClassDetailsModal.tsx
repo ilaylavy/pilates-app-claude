@@ -53,12 +53,17 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
   // Get user packages to check credit availability
   const {
-    data: userPackages = [],
+    data: userPackagesResponse,
   } = useQuery({
     queryKey: ['userPackages'],
     queryFn: () => packagesApi.getUserPackages(),
     enabled: isStudent,
   });
+
+  // Flatten all packages into a single array for backwards compatibility
+  const userPackages = userPackagesResponse 
+    ? [...userPackagesResponse.active_packages, ...userPackagesResponse.pending_packages, ...userPackagesResponse.historical_packages]
+    : [];
 
   // Find user's booking for this class
   const userBooking = userBookings.find(

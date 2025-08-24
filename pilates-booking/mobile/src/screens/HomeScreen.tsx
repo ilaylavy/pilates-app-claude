@@ -69,7 +69,7 @@ const HomeScreen: React.FC = () => {
   );
 
   const {
-    data: userPackages,
+    data: userPackagesResponse,
     isLoading: packagesLoading,
     refetch: refetchPackages,
   } = useQuery({
@@ -78,6 +78,11 @@ const HomeScreen: React.FC = () => {
     staleTime: 30000, // Cache for 30 seconds only for packages due to cash payment updates
     enabled: isAuthenticated,
   });
+
+  // Flatten all packages into a single array for backwards compatibility
+  const userPackages = userPackagesResponse 
+    ? [...userPackagesResponse.active_packages, ...userPackagesResponse.pending_packages, ...userPackagesResponse.historical_packages]
+    : undefined;
 
   const isLoading = classesLoading || bookingsLoading || packagesLoading;
 

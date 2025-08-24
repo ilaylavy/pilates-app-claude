@@ -173,6 +173,27 @@ class UserPackage(Base):
             self.payment_status == PaymentStatus.PAYMENT_CONFIRMED
             and self.approval_status == ApprovalStatus.PAYMENT_CONFIRMED
         )
+        
+    @property
+    def is_historical(self) -> bool:
+        """Check if package should be shown in history (completed lifecycle)."""
+        # Rejected packages go to history
+        if self.payment_status == PaymentStatus.REJECTED:
+            return True
+            
+        # Expired packages go to history regardless of credits
+        if self.is_expired:
+            return True
+            
+        # Fully used packages (no credits left) go to history if they're not unlimited
+        if not self.package.is_unlimited and self.credits_remaining <= 0:
+            return True
+            
+        # Cancelled packages go to history
+        if self.status == UserPackageStatus.CANCELLED:
+            return True
+            
+        return False
 
     @property
     def is_reserved(self) -> bool:

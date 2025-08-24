@@ -22,7 +22,7 @@ const PendingApprovalsScreen: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<UserPackage | null>(null);
 
   const {
-    data: userPackages = [],
+    data: userPackagesResponse,
     isLoading,
     error,
     refetch,
@@ -30,6 +30,11 @@ const PendingApprovalsScreen: React.FC = () => {
     queryKey: ['userPackages'],
     queryFn: packagesApi.getUserPackages,
   });
+
+  // Flatten all packages into a single array for backwards compatibility
+  const userPackages = userPackagesResponse 
+    ? [...userPackagesResponse.active_packages, ...userPackagesResponse.pending_packages, ...userPackagesResponse.historical_packages]
+    : [];
 
   // Filter packages that are pending approval or authorized (payment pending)
   const pendingPackages = userPackages.filter(

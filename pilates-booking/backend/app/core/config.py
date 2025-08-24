@@ -134,7 +134,7 @@ class Settings(BaseSettings):
             if "*" in str(self.CORS_ORIGINS):
                 raise ValueError("CORS_ORIGINS cannot contain '*' in production")
 
-    model_config = {"case_sensitive": True, "env_file": ".env"}
+    model_config = {"case_sensitive": True, "env_file": ".env", "extra": "ignore"}
 
 
 # Initialize settings and validate
@@ -142,12 +142,12 @@ try:
     settings = Settings()
     settings.validate_environment_config()
 except ValidationError as e:
-    print(f"❌ Configuration validation failed: {e}")
+    print(f"[ERROR] Configuration validation failed: {e}")
     if os.getenv("ENVIRONMENT") == "production":
         sys.exit(1)
     else:
-        print("⚠️  Continuing with development defaults...")
+        print("[WARNING] Continuing with development defaults...")
         settings = Settings()
 except Exception as e:
-    print(f"❌ Configuration initialization failed: {e}")
+    print(f"[ERROR] Configuration initialization failed: {e}")
     sys.exit(1)

@@ -2,6 +2,7 @@ import { apiClient } from './client';
 import { 
   Package, 
   UserPackage, 
+  UserPackagesResponse,
   PaymentMethodType, 
   PendingApproval, 
   PaymentApprovalRequest, 
@@ -25,8 +26,8 @@ export const packagesApi = {
     return response.data;
   },
 
-  getUserPackages: async (): Promise<UserPackage[]> => {
-    const response = await apiClient.get<UserPackage[]>('/api/v1/packages/my-packages');
+  getUserPackages: async (): Promise<UserPackagesResponse> => {
+    const response = await apiClient.get<UserPackagesResponse>('/api/v1/packages/my-packages');
     return response.data;
   },
 

@@ -95,11 +95,16 @@ const ScheduleScreen: React.FC = () => {
   });
 
   // Fetch user packages to check credit availability
-  const { data: userPackages = [] } = useQuery({
+  const { data: userPackagesResponse } = useQuery({
     queryKey: ['userPackages'],
     queryFn: () => packagesApi.getUserPackages(),
     enabled: isAuthenticated && isStudent,
   });
+
+  // Flatten all packages into a single array for backwards compatibility
+  const userPackages = userPackagesResponse 
+    ? [...userPackagesResponse.active_packages, ...userPackagesResponse.pending_packages, ...userPackagesResponse.historical_packages]
+    : [];
 
   // Create a set of booked class IDs for quick lookup
   const bookedClassIds = new Set(

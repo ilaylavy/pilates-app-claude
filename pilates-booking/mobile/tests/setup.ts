@@ -4,7 +4,8 @@
  */
 
 import 'react-native-gesture-handler/jestSetup';
-import '@testing-library/jest-native/extend-expect';
+// Use built-in matchers from @testing-library/react-native instead of deprecated jest-native
+// See: https://callstack.github.io/react-native-testing-library/docs/migration/jest-matchers
 
 // Mock React Native modules that don't work well in Jest
 // jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');

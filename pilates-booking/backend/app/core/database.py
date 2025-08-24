@@ -16,20 +16,25 @@ if "postgresql" in db_url:
 elif "sqlite" in db_url:
     connect_args = {"check_same_thread": False}
 
-engine = create_async_engine(
-    db_url,
-    echo=settings.DEBUG,
-    future=True,
-    connect_args=connect_args,
-    # Connection pooling configuration for performance and stability
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_timeout=settings.DB_POOL_TIMEOUT,
-    pool_recycle=settings.DB_POOL_RECYCLE,
-    pool_pre_ping=True,  # Verify connections before use
-    # Connection pool logging for debugging
-    echo_pool=settings.DEBUG and settings.ENVIRONMENT == "development",
-)
+# Create engine with database-specific configuration
+engine_kwargs = {
+    "echo": settings.DEBUG,
+    "future": True,
+    "connect_args": connect_args,
+}
+
+# Only apply connection pooling for PostgreSQL, not SQLite
+if "postgresql" in db_url:
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": True,  # Verify connections before use
+        "echo_pool": settings.DEBUG and settings.ENVIRONMENT == "development",
+    })
+
+engine = create_async_engine(db_url, **engine_kwargs)
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(

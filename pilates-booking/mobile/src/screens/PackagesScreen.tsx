@@ -25,7 +25,7 @@ import Button from '../components/common/Button';
 import PurchaseModal from '../components/PurchaseModal';
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import PendingApprovalCard from '../components/PendingApprovalCard';
-import type { Package, UserPackage } from '../types';
+import type { Package, UserPackage, UserPackagesResponse } from '../types';
 
 
 type RootStackParamList = {
@@ -64,21 +64,19 @@ const PackagesScreen: React.FC = () => {
     enabled: isAuthenticated,
   });
 
-  const { data: userPackages, isLoading: userPackagesLoading } = useQuery<UserPackage[]>({
+  const { data: userPackagesData, isLoading: userPackagesLoading } = useQuery<UserPackagesResponse>({
     queryKey: ['userPackages'],
     queryFn: () => packagesApi.getUserPackages(),
     enabled: isAuthenticated,
   });
 
-  // Get current active package with credits
-  const activePackage = userPackages?.find(
-    (up) => up.is_active && up.credits_remaining > 0 && new Date(up.expiry_date) > new Date()
-  );
-
-  // Get pending approval packages
-  const pendingPackages = userPackages?.filter(
-    (up) => up.is_pending_approval || up.payment_status === 'pending_approval'
-  ) || [];
+  // Extract organized data from the new response structure
+  const activePackages = userPackagesData?.active_packages || [];
+  const pendingPackages = userPackagesData?.pending_packages || [];
+  const historicalPackages = userPackagesData?.historical_packages || [];
+  const primaryPackage = activePackages.find(pkg => pkg.is_primary);
+  const totalCredits = userPackagesData?.total_credits || 0;
+  const hasUnlimited = userPackagesData?.has_unlimited || false;
 
   // Mutations
   const togglePackageMutation = useMutation({
@@ -150,13 +148,20 @@ const PackagesScreen: React.FC = () => {
     return `Expires in ${diffDays} days`;
   };
 
+  const getHistoryStatusText = (userPackage: UserPackage) => {
+    if (userPackage.payment_status === 'rejected') return 'Rejected';
+    if (userPackage.credits_remaining === 0) return 'Completed';
+    if (userPackage.is_expired) return 'Expired';
+    return 'Inactive';
+  };
+
   const renderCurrentBalance = () => {
-    if (!activePackage) {
+    if (activePackages.length === 0) {
       return (
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
             <Ionicons name="card" size={24} color={COLORS.textSecondary} />
-            <Text style={styles.balanceTitle}>No Active Package</Text>
+            <Text style={styles.balanceTitle}>No Active Packages</Text>
           </View>
           <Text style={styles.balanceSubtitle}>
             Purchase a package to start booking classes
@@ -169,27 +174,30 @@ const PackagesScreen: React.FC = () => {
       <View style={styles.balanceCard}>
         <View style={styles.balanceHeader}>
           <Ionicons name="card" size={24} color={COLORS.primary} />
-          <Text style={styles.balanceTitle}>Current Balance</Text>
+          <Text style={styles.balanceTitle}>Total Balance</Text>
         </View>
         
         <View style={styles.balanceContent}>
-          <Text style={styles.creditsNumber}>{activePackage.credits_remaining}</Text>
-          <Text style={styles.creditsLabel}>Credits Remaining</Text>
+          <Text style={styles.creditsNumber}>
+            {hasUnlimited ? '∞' : totalCredits}
+          </Text>
+          <Text style={styles.creditsLabel}>Credits Available</Text>
         </View>
         
-        <View style={styles.balanceFooter}>
-          <Text style={styles.expiryText}>{formatExpiry(activePackage.expiry_date)}</Text>
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBar,
-                {
-                  width: `${(activePackage.credits_remaining / activePackage.package.credits) * 100}%`
-                }
-              ]}
-            />
+        {primaryPackage && (
+          <View style={styles.balanceFooter}>
+            <Text style={styles.primaryPackageText}>
+              Primary: {primaryPackage.package.name}
+            </Text>
+            <Text style={styles.expiryText}>{formatExpiry(primaryPackage.expiry_date)}</Text>
           </View>
-        </View>
+        )}
+        
+        {activePackages.length > 1 && (
+          <Text style={styles.multiplePackagesText}>
+            +{activePackages.length - 1} more package{activePackages.length > 2 ? 's' : ''}
+          </Text>
+        )}
       </View>
     );
   };
@@ -224,21 +232,16 @@ const PackagesScreen: React.FC = () => {
   };
 
   const renderPackageHistory = () => {
-    const expiredPackages = userPackages?.filter(
-      (up) => (!up.is_active || up.credits_remaining === 0 || new Date(up.expiry_date) <= new Date()) 
-            && !up.is_pending_approval && up.payment_status !== 'pending_approval'
-    );
-
-    if (!expiredPackages || expiredPackages.length === 0) return null;
+    if (historicalPackages.length === 0) return null;
 
     return (
       <View style={styles.section}>
         <TouchableOpacity style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Package History</Text>
+          <Text style={styles.sectionTitle}>Package History ({historicalPackages.length})</Text>
           <Ionicons name="chevron-down" size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
         
-        {expiredPackages.slice(0, 3).map((userPackage) => (
+        {historicalPackages.slice(0, 3).map((userPackage) => (
           <View key={userPackage.id} style={styles.historyItem}>
             <View style={styles.historyContent}>
               <Text style={styles.historyName}>{userPackage.package.name}</Text>
@@ -254,11 +257,19 @@ const PackagesScreen: React.FC = () => {
                 />
               )}
               <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
-                {userPackage.credits_remaining === 0 ? 'Used' : 'Expired'}
+                {getHistoryStatusText(userPackage)}
               </Text>
             </View>
           </View>
         ))}
+        
+        {historicalPackages.length > 3 && (
+          <TouchableOpacity style={styles.viewAllButton}>
+            <Text style={styles.viewAllText}>
+              View all {historicalPackages.length} packages
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -561,6 +572,30 @@ const styles = StyleSheet.create({
   },
   adminPackageCard: {
     marginBottom: SPACING.md,
+  },
+  primaryPackageText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  multiplePackagesText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+  },
+  viewAllButton: {
+    padding: SPACING.sm,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: SPACING.sm,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
   },
 });
 

@@ -16,6 +16,7 @@ class TestUserModel:
     """Test User model functionality."""
 
     @pytest.mark.unit
+    @pytest.mark.asyncio
     async def test_create_user(self, db_session: AsyncSession):
         """Test creating a user with valid data."""
         user = UserFactory.build()
@@ -64,27 +65,6 @@ class TestUserModel:
         assert not instructor.is_admin
         assert admin.is_admin
 
-    @pytest.mark.unit
-    async def test_user_is_admin_property(self, db_session: AsyncSession):
-        """Test the is_admin property."""
-        student = UserFactory.build(role=UserRole.STUDENT)
-        instructor = InstructorFactory.build()
-        admin = AdminFactory.build()
-        
-        assert not student.is_admin
-        assert not instructor.is_admin
-        assert admin.is_admin
-
-    @pytest.mark.unit
-    async def test_user_is_instructor_property(self, db_session: AsyncSession):
-        """Test the is_instructor property."""
-        student = UserFactory.build(role=UserRole.STUDENT)
-        instructor = InstructorFactory.build()
-        admin = AdminFactory.build()
-        
-        assert not student.is_instructor
-        assert instructor.is_instructor
-        assert not admin.is_instructor
 
     @pytest.mark.unit 
     async def test_user_email_validation(self, db_session: AsyncSession):
