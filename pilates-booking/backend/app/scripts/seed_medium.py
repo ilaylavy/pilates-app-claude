@@ -18,12 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
+from app.models.announcement import Announcement
 from app.models.booking import Booking, BookingStatus
 from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
 from app.models.friendship import Friendship, FriendshipStatus
 from app.models.package import (Package, UserPackage,
-                                 UserPackageStatus, ApprovalStatus)
+                                 UserPackageStatus)
 from app.models.package import PaymentStatus as PackagePaymentStatus
 from app.models.payment import Payment, PaymentMethod, PaymentType, PaymentStatus
 from app.models.user import User, UserRole
@@ -280,8 +281,7 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
         purchase_date=datetime.now() - timedelta(days=10),
         expiry_date=datetime.now() + timedelta(days=80),
         status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.PAYMENT_CONFIRMED,
-        approval_status=ApprovalStatus.PAYMENT_CONFIRMED,
+        payment_status=PackagePaymentStatus.CONFIRMED,
     ))
     
     # Bob has a pending approval package
@@ -292,7 +292,7 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
         purchase_date=datetime.now() - timedelta(days=1),
         expiry_date=datetime.now() + timedelta(days=59),
         status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.PENDING_APPROVAL,
+        payment_status=PackagePaymentStatus.PENDING,
         approval_status=ApprovalStatus.PENDING,
     ))
     
@@ -318,8 +318,7 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
         purchase_date=datetime.now() - timedelta(days=20),
         expiry_date=datetime.now() - timedelta(days=5),
         status=UserPackageStatus.EXPIRED,
-        payment_status=PackagePaymentStatus.PAYMENT_CONFIRMED,
-        approval_status=ApprovalStatus.PAYMENT_CONFIRMED,
+        payment_status=PackagePaymentStatus.CONFIRMED,
     ))
     
     # Emma has multiple packages
@@ -331,8 +330,7 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
             purchase_date=datetime.now() - timedelta(days=5),
             expiry_date=datetime.now() + timedelta(days=25),
             status=UserPackageStatus.ACTIVE,
-            payment_status=PackagePaymentStatus.PAYMENT_CONFIRMED,
-            approval_status=ApprovalStatus.PAYMENT_CONFIRMED,
+            payment_status=PackagePaymentStatus.CONFIRMED,
         ),
         UserPackage(
             user_id=students[4].id,  # Emma
@@ -341,8 +339,7 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
             purchase_date=datetime.now() - timedelta(days=15),
             expiry_date=datetime.now() + timedelta(days=30),
             status=UserPackageStatus.ACTIVE,
-            payment_status=PackagePaymentStatus.PAYMENT_CONFIRMED,
-            approval_status=ApprovalStatus.PAYMENT_CONFIRMED,
+            payment_status=PackagePaymentStatus.CONFIRMED,
         ),
     ])
 
@@ -531,6 +528,7 @@ async def clear_existing_data(session: AsyncSession):
     await session.execute(text("DELETE FROM class_templates"))
     await session.execute(text("DELETE FROM user_packages"))
     await session.execute(text("DELETE FROM packages"))
+    await session.execute(text("DELETE FROM announcements"))
     await session.execute(text("DELETE FROM users"))
     await session.commit()
     print("[INFO] Existing data cleared.")
@@ -571,6 +569,48 @@ async def seed_medium():
         
         print("[INFO] Creating payments...")
         await create_payments(session, users, packages)
+        
+        print("[INFO] Creating announcements...")
+        admin = next(u for u in users if u.role == UserRole.ADMIN)
+        
+        medium_announcements = [
+            {
+                "title": "Welcome to Our Studio Community!",
+                "message": "Thank you for joining our Pilates family! We're here to support your fitness journey with expert instruction and a welcoming community.",
+                "type": "success",
+                "target_roles": ["student"],
+                "expires_at": datetime.now() + timedelta(days=45),
+            },
+            {
+                "title": "Class Schedule Update",
+                "message": "We've added more class times to accommodate your busy schedules. Check out our new evening and weekend options!",
+                "type": "info",
+                "target_roles": None,  # All roles
+                "expires_at": datetime.now() + timedelta(days=21),
+            },
+            {
+                "title": "Reminder: Booking Policy",
+                "message": "Please cancel classes at least 2 hours in advance to avoid fees and help others get off the waitlist.",
+                "type": "warning",
+                "target_roles": ["student"],
+                "expires_at": datetime.now() + timedelta(days=60),
+            },
+        ]
+        
+        for data in medium_announcements:
+            announcement = Announcement(
+                title=data["title"],
+                message=data["message"],
+                type=data["type"],
+                target_roles=data["target_roles"],
+                expires_at=data["expires_at"],
+                created_by=admin.id,
+                is_active=True,
+                is_dismissible=True,
+            )
+            session.add(announcement)
+        
+        await session.commit()
 
     print("[SUCCESS] Medium seeding completed!")
     print("[STATS] Created:")
@@ -580,6 +620,7 @@ async def seed_medium():
     print("  - 24 class instances (4 weeks)")
     print("  - Multiple bookings and user packages")
     print("  - Social connections and payment records")
+    print("  - 3 system announcements")
 
 
 if __name__ == "__main__":

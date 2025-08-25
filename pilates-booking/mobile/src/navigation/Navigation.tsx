@@ -73,7 +73,6 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Schedule: undefined;
-  Bookings: undefined;
   Profile: undefined;
   Users?: undefined; // Only for admin/instructor
   Packages?: undefined; // Only for admin
@@ -106,7 +105,6 @@ const MainNavigator = () => {
     const iconMap: Record<string, [string, string]> = {
       'Home': ['home', 'home-outline'],
       'Schedule': ['calendar', 'calendar-outline'],
-      'Bookings': ['list', 'list-outline'],
       'Profile': ['person', 'person-outline'],
       'Users': ['people', 'people-outline'],
       'Packages': ['cube', 'cube-outline'],
@@ -130,12 +128,13 @@ const MainNavigator = () => {
         headerShown: false,
       })}
     >
-      {/* Common screens for all users */}
+      {/* Home screen for all users */}
+      <MainTab.Screen name="Home" component={HomeScreen} />
+
+      {/* Role-specific screens */}
       {isStudent && (
         <>
-          <MainTab.Screen name="Home" component={HomeScreen} />
           <MainTab.Screen name="Schedule" component={NewScheduleScreen} />
-          <MainTab.Screen name="Bookings" component={BookingsScreen} />
         </>
       )}
 

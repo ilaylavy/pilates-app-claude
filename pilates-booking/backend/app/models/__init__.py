@@ -1,3 +1,4 @@
+from .announcement import Announcement
 from .audit_log import AuditLog
 from .booking import Booking, WaitlistEntry
 from .class_schedule import ClassInstance, ClassTemplate
@@ -23,4 +24,5 @@ __all__ = [
     "AuditLog",
     "Friendship",
     "ClassInvitation",
+    "Announcement",
 ]

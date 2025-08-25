@@ -13,6 +13,8 @@ from ....models.user import User, UserRole
 from ....schemas.admin import (AttendanceReport, DashboardAnalytics,
                                PackageCreate, PackageUpdate, RevenueReport,
                                UserListResponse, UserUpdate)
+from ....schemas.user import (CreateAnnouncementRequest, Announcement,
+                              DashboardMetrics)
 from ....schemas.package import (PackageResponse, PaymentApprovalRequest,
                                 PaymentRejectionRequest,
                                 PaymentStatus as SchemaPaymentStatus, 
@@ -557,6 +559,210 @@ async def reject_package_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to reject package payment: {str(e)}"
+        )
+
+
+@router.post("/announcements", response_model=Announcement)
+async def create_announcement(
+    announcement_data: CreateAnnouncementRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Create a new system announcement."""
+    from ....models.announcement import Announcement as AnnouncementModel
+    
+    try:
+        # Create the announcement
+        announcement = AnnouncementModel(
+            title=announcement_data.title,
+            message=announcement_data.message,
+            type=announcement_data.type,
+            expires_at=announcement_data.expires_at,
+            target_roles=announcement_data.target_roles,
+            is_dismissible=announcement_data.is_dismissible,
+            created_by=current_user.id,
+        )
+        
+        db.add(announcement)
+        await db.commit()
+        await db.refresh(announcement)
+        
+        # Log the admin action
+        admin_service = AdminService(db)
+        await admin_service.log_action(
+            current_user,
+            "CREATE_ANNOUNCEMENT",
+            "Announcement",
+            announcement.id,
+            {
+                "title": announcement.title,
+                "type": announcement.type,
+                "target_roles": announcement.target_roles,
+            },
+            request,
+        )
+        
+        return announcement
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create announcement: {str(e)}"
+        )
+
+
+@router.get("/dashboard/metrics", response_model=DashboardMetrics)
+async def get_dashboard_metrics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get admin dashboard metrics."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_, desc, extract, func
+    from ....models.booking import Booking
+    from ....models.class_schedule import ClassInstance, ClassTemplate
+    from ....models.booking import WaitlistEntry
+    
+    try:
+        # Calculate weekly capacity utilization
+        one_week_ago = datetime.now() - timedelta(days=7)
+        
+        # Get total capacity and bookings for the past week
+        capacity_stmt = (
+            select(
+                func.sum(ClassInstance.actual_capacity).label('total_capacity'),
+                func.count(Booking.id).label('total_bookings')
+            )
+            .select_from(ClassInstance)
+            .outerjoin(Booking)
+            .where(
+                and_(
+                    ClassInstance.start_datetime >= one_week_ago,
+                    ClassInstance.start_datetime <= datetime.now(),
+                    ClassInstance.status == 'scheduled'
+                )
+            )
+        )
+        
+        capacity_result = await db.execute(capacity_stmt)
+        capacity_data = capacity_result.first()
+        
+        total_capacity = capacity_data.total_capacity or 0
+        total_bookings = capacity_data.total_bookings or 0
+        
+        weekly_utilization = (total_bookings / total_capacity * 100) if total_capacity > 0 else 0
+        
+        # Get active users count (users with bookings in last 30 days)
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        
+        active_users_stmt = (
+            select(func.count(func.distinct(Booking.user_id)))
+            .where(
+                and_(
+                    Booking.created_at >= thirty_days_ago,
+                    Booking.status == 'confirmed'
+                )
+            )
+        )
+        
+        active_users_result = await db.execute(active_users_stmt)
+        active_users_count = active_users_result.scalar() or 0
+        
+        # Calculate growth (compare to previous 30 days)
+        sixty_days_ago = datetime.now() - timedelta(days=60)
+        
+        prev_active_users_stmt = (
+            select(func.count(func.distinct(Booking.user_id)))
+            .where(
+                and_(
+                    Booking.created_at >= sixty_days_ago,
+                    Booking.created_at < thirty_days_ago,
+                    Booking.status == 'confirmed'
+                )
+            )
+        )
+        
+        prev_active_users_result = await db.execute(prev_active_users_stmt)
+        prev_active_users_count = prev_active_users_result.scalar() or 0
+        
+        user_growth = active_users_count - prev_active_users_count
+        
+        # Get today's classes
+        today = datetime.now().date()
+        today_classes_stmt = (
+            select(ClassInstance, ClassTemplate)
+            .join(ClassTemplate)
+            .where(
+                and_(
+                    func.date(ClassInstance.start_datetime) == today,
+                    ClassInstance.status == 'scheduled'
+                )
+            )
+            .order_by(ClassInstance.start_datetime)
+        )
+        
+        today_classes_result = await db.execute(today_classes_stmt)
+        today_classes_data = today_classes_result.all()
+        
+        today_classes = []
+        for class_instance, template in today_classes_data:
+            # Count current bookings for this class
+            bookings_count_stmt = (
+                select(func.count(Booking.id))
+                .where(
+                    and_(
+                        Booking.class_instance_id == class_instance.id,
+                        Booking.status == 'confirmed'
+                    )
+                )
+            )
+            bookings_count_result = await db.execute(bookings_count_stmt)
+            current_bookings = bookings_count_result.scalar() or 0
+            
+            # Count waitlist
+            waitlist_count_stmt = (
+                select(func.count(WaitlistEntry.id))
+                .where(WaitlistEntry.class_instance_id == class_instance.id)
+            )
+            waitlist_count_result = await db.execute(waitlist_count_stmt)
+            waitlist_count = waitlist_count_result.scalar() or 0
+            
+            today_classes.append({
+                "id": class_instance.id,
+                "class_name": template.name,
+                "start_time": class_instance.start_datetime.strftime("%H:%M"),
+                "end_time": class_instance.end_datetime.strftime("%H:%M"),
+                "current_bookings": current_bookings,
+                "capacity": class_instance.actual_capacity or template.capacity,
+                "waitlist_count": waitlist_count,
+                "status": class_instance.status,
+            })
+        
+        # Get waitlist notifications (classes with waitlists)
+        waitlist_notifications = []
+        for class_data in today_classes:
+            if class_data["waitlist_count"] > 0:
+                waitlist_notifications.append({
+                    "class_id": class_data["id"],
+                    "class_name": class_data["class_name"],
+                    "start_time": class_data["start_time"],
+                    "waitlist_count": class_data["waitlist_count"],
+                })
+        
+        return DashboardMetrics(
+            weekly_capacity_utilization=round(weekly_utilization, 1),
+            active_users_count=active_users_count,
+            active_users_growth=user_growth,
+            today_classes=today_classes,
+            waitlist_notifications=waitlist_notifications,
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get dashboard metrics: {str(e)}"
         )
 
 

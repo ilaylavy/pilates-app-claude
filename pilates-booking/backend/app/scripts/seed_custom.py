@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
+from app.models.announcement import Announcement
 from app.models.booking import Booking, BookingStatus, WaitlistEntry
 from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)

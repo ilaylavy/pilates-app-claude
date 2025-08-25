@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
+from app.models.announcement import Announcement
 from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
 from app.models.package import Package
@@ -243,8 +244,23 @@ async def seed_database():
 
         # Create class instances
         await create_class_instances(session, instructor, templates)
+        
+        # Create basic announcement
+        announcement = Announcement(
+            title="Studio Opening!",
+            message="Welcome to our new Pilates studio! We're excited to begin this fitness journey with you.",
+            type="info",
+            target_roles=["student"],
+            expires_at=datetime.now() + timedelta(days=30),
+            created_by=admin.id,
+            is_active=True,
+            is_dismissible=True,
+        )
+        session.add(announcement)
+        await session.commit()
 
     print("Database seeding completed successfully!")
+    print("Created: 3 users, packages, class templates, instances, and 1 announcement")
 
 
 if __name__ == "__main__":

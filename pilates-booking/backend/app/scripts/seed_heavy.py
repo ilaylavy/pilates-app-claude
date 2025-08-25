@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
+from app.models.announcement import Announcement
 from app.models.booking import Booking, BookingStatus, WaitlistEntry
 from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
@@ -722,6 +723,92 @@ async def create_payment_history(session: AsyncSession, students: List[User], pa
     return payments
 
 
+async def create_announcements(session: AsyncSession, admins: List[User]) -> List[Announcement]:
+    """Create sample announcements from admin users."""
+    announcements_data = [
+        {
+            "title": "Welcome to Our New Studio!",
+            "message": "We're excited to have you join our Pilates community! Check out our beginner classes and don't hesitate to ask our instructors any questions.",
+            "type": "success",
+            "target_roles": ["student"],
+            "expires_at": datetime.now() + timedelta(days=30),
+        },
+        {
+            "title": "Holiday Schedule Changes",
+            "message": "Please note that our schedule will be modified during the holiday period. Check the updated schedule for class times and availability.",
+            "type": "info",
+            "target_roles": None,  # All roles
+            "expires_at": datetime.now() + timedelta(days=14),
+        },
+        {
+            "title": "New Advanced Classes Available",
+            "message": "We've added new advanced level classes to challenge experienced practitioners. These classes focus on complex movements and increased intensity.",
+            "type": "info",
+            "target_roles": ["student"],
+            "expires_at": datetime.now() + timedelta(days=21),
+        },
+        {
+            "title": "Studio Policy Reminder",
+            "message": "Please remember to cancel classes at least 2 hours in advance to avoid fees. Late cancellations affect our community and waitlisted members.",
+            "type": "warning",
+            "target_roles": ["student"],
+            "expires_at": datetime.now() + timedelta(days=60),
+        },
+        {
+            "title": "Equipment Maintenance Update",
+            "message": "Studio equipment will be serviced this weekend. Some classes may be moved to different rooms. Check your email for specific updates.",
+            "type": "urgent",
+            "target_roles": ["student", "instructor"],
+            "expires_at": datetime.now() + timedelta(days=7),
+        },
+        {
+            "title": "Instructor Meeting Reminder",
+            "message": "Monthly instructor meeting scheduled for next Friday at 3 PM. We'll discuss new class formats and student feedback.",
+            "type": "info",
+            "target_roles": ["instructor", "admin"],
+            "expires_at": datetime.now() + timedelta(days=10),
+        },
+        {
+            "title": "New Package Options Available",
+            "message": "We've introduced flexible package options including drop-in rates and unlimited monthly passes. Perfect for different schedules and commitments!",
+            "type": "success",
+            "target_roles": ["student"],
+            "expires_at": datetime.now() + timedelta(days=45),
+        },
+        {
+            "title": "System Maintenance Tonight",
+            "message": "The booking system will be briefly offline tonight from 2-3 AM for routine maintenance. Plan your bookings accordingly.",
+            "type": "warning",
+            "target_roles": None,  # All roles
+            "expires_at": datetime.now() + timedelta(days=1),
+        },
+    ]
+    
+    announcements = []
+    admin = choice(admins)  # Random admin creates announcements
+    
+    for data in announcements_data:
+        announcement = Announcement(
+            title=data["title"],
+            message=data["message"],
+            type=data["type"],
+            target_roles=data["target_roles"],
+            expires_at=data["expires_at"],
+            created_by=admin.id,
+            is_active=True,
+            is_dismissible=True,
+        )
+        announcements.append(announcement)
+        session.add(announcement)
+    
+    await session.commit()
+    
+    for announcement in announcements:
+        await session.refresh(announcement)
+    
+    return announcements
+
+
 async def clear_existing_data(session: AsyncSession):
     """Clear existing data to avoid conflicts."""
     print("[INFO] Clearing existing data...")
@@ -736,6 +823,7 @@ async def clear_existing_data(session: AsyncSession):
     await session.execute(text("DELETE FROM class_templates"))
     await session.execute(text("DELETE FROM user_packages"))
     await session.execute(text("DELETE FROM packages"))
+    await session.execute(text("DELETE FROM announcements"))
     await session.execute(text("DELETE FROM users"))
     await session.commit()
     print("[INFO] Existing data cleared.")
@@ -781,6 +869,9 @@ async def seed_heavy():
         
         print("[INFO] Creating payment history...")
         await create_payment_history(session, students, packages)
+        
+        print("[INFO] Creating announcements...")
+        announcements = await create_announcements(session, admins)
 
     print("[SUCCESS] Heavy seeding completed!")
     print("[STATS] Final Statistics:")
@@ -790,6 +881,7 @@ async def seed_heavy():
     print(f"  - {len(packages)} packages")
     print(f"  - {len(templates)} class templates")
     print(f"  - {len(instances)} class instances (8 weeks)")
+    print(f"  - {len(announcements)} system announcements")
     print("  - Hundreds of user packages with various statuses")
     print("  - Thousands of bookings across all classes")
     print("  - Complex social networks and friendships")

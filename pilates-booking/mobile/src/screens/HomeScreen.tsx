@@ -28,10 +28,12 @@ import { ClassInstance, Booking, UserPackage } from '../types';
 import ClassCard from '../components/ClassCard';
 import ClassDetailsModal from '../components/ClassDetailsModal';
 import BookingConfirmationModal from '../components/BookingConfirmationModal';
+import StudentDashboard from '../components/StudentDashboard';
+import InstructorAdminDashboard from '../components/InstructorAdminDashboard';
 
 const HomeScreen: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
-  const { isStudent } = useUserRole();
+  const { isStudent, isInstructor, isAdmin } = useUserRole();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
@@ -49,7 +51,7 @@ const HomeScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['upcomingClasses'],
     queryFn: () => classesApi.getUpcomingClasses(7), // Next 7 days to get more classes
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isStudent, // Only fetch for students
   });
 
   const {
@@ -59,7 +61,7 @@ const HomeScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['userBookings'],
     queryFn: () => bookingsApi.getUserBookings(true), // Include past bookings for accurate count
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isStudent, // Only fetch for students
   });
 
   // Create a set of booked class IDs for quick lookup
@@ -78,7 +80,7 @@ const HomeScreen: React.FC = () => {
     queryKey: ['userPackages'],
     queryFn: () => packagesApi.getUserPackages(),
     staleTime: 30000, // Cache for 30 seconds only for packages due to cash payment updates
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isStudent, // Only fetch for students
   });
 
   // Flatten all packages into a single array for backwards compatibility
@@ -89,11 +91,19 @@ const HomeScreen: React.FC = () => {
   const isLoading = classesLoading || bookingsLoading || packagesLoading;
 
   const onRefresh = async () => {
-    await Promise.all([
-      refetchClasses(),
-      refetchBookings(),
-      refetchPackages(),
-    ]);
+    const promises = [];
+    
+    if (isStudent) {
+      promises.push(
+        refetchClasses(),
+        refetchBookings(),
+        refetchPackages()
+      );
+    }
+    
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
   };
 
   // Cancel booking mutation with immediate updates after server confirmation
@@ -370,6 +380,14 @@ const HomeScreen: React.FC = () => {
     );
   };
 
+  // Get role-specific subtitle
+  const getSubtitle = () => {
+    if (isStudent) return "Welcome to your pilates journey";
+    if (isInstructor) return "Ready to inspire your students today";
+    if (isAdmin) return "Studio management dashboard";
+    return "Welcome back";
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -380,159 +398,94 @@ const HomeScreen: React.FC = () => {
       >
         <View style={styles.header}>
           <Text style={styles.greeting}>Hello, {user?.first_name}!</Text>
-          <Text style={styles.subtitle}>Welcome to your pilates journey</Text>
+          <Text style={styles.subtitle}>{getSubtitle()}</Text>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Ionicons name="card" size={24} color={COLORS.primary} />
-            <Text style={styles.statNumber}>
-              {activePackage?.credits_remaining || 0}
-            </Text>
-            <Text style={styles.statLabel}>Credits Left</Text>
-            {reservedPackages && reservedPackages.length > 0 && (
-              <View style={styles.pendingIndicator}>
-                <Ionicons name="time" size={12} color={COLORS.warning} />
-                <Text style={styles.pendingText}>{reservedPackages.length} pending</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.statCard}>
-            <Ionicons name="calendar" size={24} color={COLORS.secondary} />
-            <Text style={styles.statNumber}>
-              {upcomingBookings?.length || 0}
-            </Text>
-            <Text style={styles.statLabel}>Upcoming Classes</Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.statCard}
-            onPress={() => navigation.navigate('Packages' as never)}
-          >
-            <Ionicons name="add-circle" size={24} color={COLORS.success} />
-            <Text style={styles.statNumber}>+</Text>
-            <Text style={styles.statLabel}>Buy Credits</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Next Class */}
-        {nextBooking && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Next Class</Text>
-            <TouchableOpacity
-              style={styles.nextClassCard}
-              onPress={() => {
-                setSelectedClass(nextBooking.class_instance);
-                setDetailsModalVisible(true);
-              }}
-            >
-              <View style={styles.nextClassInfo}>
-                <Text style={styles.nextClassName}>
-                  {nextBooking.class_instance?.template?.name || 'Unknown Class'}
-                </Text>
-                <Text style={styles.nextClassInstructor}>
-                  with {nextBooking.class_instance?.instructor?.first_name || 'Unknown'}{' '}
-                  {nextBooking.class_instance?.instructor?.last_name || 'Instructor'}
-                </Text>
-                <View style={styles.nextClassTime}>
-                  <Ionicons name="time" size={16} color={COLORS.textSecondary} />
-                  <Text style={styles.nextClassTimeText}>
-                    {formatDateTime(nextBooking.class_instance?.start_datetime || new Date().toISOString()).date}{' '}
-                    at {formatDateTime(nextBooking.class_instance?.start_datetime || new Date().toISOString()).time}
-                  </Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
+        {/* Role-based Dashboard Content */}
+        {isStudent && (
+          <StudentDashboard
+            userPackages={userPackages || []}
+            activePackage={activePackage}
+            reservedPackages={reservedPackages}
+          />
         )}
 
-        {/* Upcoming Classes */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Available Classes</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Schedule' as never)}>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
+        {(isInstructor || isAdmin) && (
+          <InstructorAdminDashboard
+            userRole={isAdmin ? 'admin' : 'instructor'}
+          />
+        )}
 
-          {upcomingClasses?.slice(0, 3).map((classInstance: ClassInstance) => (
-            <ClassCard
-              key={classInstance.id}
-              classInstance={classInstance}
-              variant="list"
-              isBooked={bookedClassIds.has(classInstance.id)}
-              availableSpots={classInstance.available_spots}
-              showActions={isStudent}
-              hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
-              isBookingInProgress={bookingInProgressId === classInstance.id}
-              onPress={() => {
-                setSelectedClass(classInstance);
-                setDetailsModalVisible(true);
-              }}
-              onBook={() => handleBookClass(classInstance)}
-              onJoinWaitlist={() => handleJoinWaitlist(classInstance)}
-              onCancel={() => handleCancelBooking(classInstance)}
-            />
-          ))}
-        </View>
-
-        {/* Package Status */}
-        {activePackage && (
+        {/* Student-only: Quick Class Browse */}
+        {isStudent && upcomingClasses && upcomingClasses.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Package</Text>
-            <View style={styles.packageCard}>
-              <View style={styles.packageInfo}>
-                <Text style={styles.packageName}>{activePackage.package.name}</Text>
-                <Text style={styles.packageCredits}>
-                  {activePackage.credits_remaining} credits remaining
-                </Text>
-                <Text style={styles.packageExpiry}>
-                  Expires in {activePackage.days_until_expiry} days
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => navigation.navigate('Packages' as never)}>
-                <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Quick Book</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Schedule' as never)}>
+                <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
+
+            {upcomingClasses?.slice(0, 2).map((classInstance: ClassInstance) => (
+              <ClassCard
+                key={classInstance.id}
+                classInstance={classInstance}
+                variant="list"
+                isBooked={bookedClassIds.has(classInstance.id)}
+                availableSpots={classInstance.available_spots}
+                showActions={isStudent}
+                hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
+                isBookingInProgress={bookingInProgressId === classInstance.id}
+                onPress={() => {
+                  setSelectedClass(classInstance);
+                  setDetailsModalVisible(true);
+                }}
+                onBook={() => handleBookClass(classInstance)}
+                onJoinWaitlist={() => handleJoinWaitlist(classInstance)}
+                onCancel={() => handleCancelBooking(classInstance)}
+              />
+            ))}
           </View>
         )}
       </ScrollView>
 
-      <ClassDetailsModal
-        visible={detailsModalVisible}
-        classInstance={selectedClass}
-        onClose={() => {
-          setDetailsModalVisible(false);
-          setSelectedClass(null);
-        }}
-        onBookingSuccess={(booking, classInstance) => {
-          setCompletedBooking(booking);
-          setBookedClassInstance(classInstance);
-          setShowBookingModal(true);
-        }}
-      />
+      {/* Student-only modals */}
+      {isStudent && (
+        <>
+          <ClassDetailsModal
+            visible={detailsModalVisible}
+            classInstance={selectedClass}
+            onClose={() => {
+              setDetailsModalVisible(false);
+              setSelectedClass(null);
+            }}
+            onBookingSuccess={(booking, classInstance) => {
+              setCompletedBooking(booking);
+              setBookedClassInstance(classInstance);
+              setShowBookingModal(true);
+            }}
+          />
 
-      {/* Booking Confirmation Modal */}
-      {completedBooking && bookedClassInstance && (
-        <BookingConfirmationModal
-          visible={showBookingModal}
-          onClose={() => {
-            setShowBookingModal(false);
-            setCompletedBooking(null);
-            setBookedClassInstance(null);
-          }}
-          booking={completedBooking}
-          classInstance={bookedClassInstance}
-          onViewSchedule={() => {
-            setShowBookingModal(false);
-            setCompletedBooking(null);
-            setBookedClassInstance(null);
-            navigation.navigate('Schedule');
-          }}
-        />
+          {/* Booking Confirmation Modal */}
+          {completedBooking && bookedClassInstance && (
+            <BookingConfirmationModal
+              visible={showBookingModal}
+              onClose={() => {
+                setShowBookingModal(false);
+                setCompletedBooking(null);
+                setBookedClassInstance(null);
+              }}
+              booking={completedBooking}
+              classInstance={bookedClassInstance}
+              onViewSchedule={() => {
+                setShowBookingModal(false);
+                setCompletedBooking(null);
+                setBookedClassInstance(null);
+                navigation.navigate('Schedule' as never);
+              }}
+            />
+          )}
+        </>
       )}
     </SafeAreaView>
   );

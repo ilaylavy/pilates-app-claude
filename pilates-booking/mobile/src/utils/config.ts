@@ -12,6 +12,7 @@ const getDevApiUrl = () => {
 
 // Backup URLs to try if primary fails
 export const BACKUP_API_URLS = [
+  'http://192.168.71.110:8000',
   'http://10.100.102.16:8000',
   'http://172.31.208.1:8000',
   'http://10.100.102.24:8000',  // WSL/Docker host IP
@@ -57,6 +58,8 @@ export const API_ENDPOINTS = {
     ME: '/api/v1/users/me',
     AVATAR: '/api/v1/users/me/avatar',
     STATS: '/api/v1/users/me/stats',
+    STATS_EXTENDED: '/api/v1/users/me/stats/extended',
+    ANNOUNCEMENTS: '/api/v1/users/me/announcements',
     PREFERENCES: '/api/v1/users/me/preferences',
     BOOKING_HISTORY: '/api/v1/users/me/booking-history',
   },

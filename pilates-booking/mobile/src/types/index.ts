@@ -389,3 +389,59 @@ export interface CashPaymentInstructions {
   reservation_expires_at: string;
   estimated_approval_time: string;
 }
+
+// Enhanced Home Page Types
+export interface ExtendedUserStats {
+  total_bookings: number;
+  bookings_this_month: number;
+  monthly_goal: number;
+  attendance_rate: number;
+  member_since: string;
+  week_streak: number;
+  last_class_date?: string;
+  days_since_last_class: number;
+}
+
+export interface Announcement {
+  id: number;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'urgent';
+  created_at: string;
+  expires_at?: string;
+  is_dismissible: boolean;
+  target_roles?: ('student' | 'instructor' | 'admin')[];
+}
+
+export interface TodaySchedule {
+  id: number;
+  class_name: string;
+  start_time: string;
+  end_time: string;
+  current_bookings: number;
+  capacity: number;
+  waitlist_count: number;
+  status: 'scheduled' | 'cancelled' | 'completed';
+}
+
+export interface DashboardMetrics {
+  weekly_capacity_utilization: number;
+  active_users_count: number;
+  active_users_growth: number;
+  today_classes: TodaySchedule[];
+  waitlist_notifications: Array<{
+    class_id: number;
+    class_name: string;
+    start_time: string;
+    waitlist_count: number;
+  }>;
+}
+
+export interface CreateAnnouncementRequest {
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'urgent';
+  expires_at?: string;
+  target_roles?: ('student' | 'instructor' | 'admin')[];
+  is_dismissible?: boolean;
+}

@@ -11,7 +11,7 @@ from ....models.booking import Booking, BookingStatus
 from ....models.class_schedule import ClassInstance
 from ....models.user import User
 from ....schemas.user import (UserPreferences, UserResponse, UserStats,
-                              UserUpdate)
+                              UserUpdate, ExtendedUserStats, Announcement)
 from ..deps import get_admin_user, get_current_active_user, get_db
 
 router = APIRouter()
@@ -175,6 +175,172 @@ async def get_user_stats(
         attendance_rate=round(attendance_rate, 1),
         member_since=member_since,
     )
+
+
+@router.get("/me/stats/extended", response_model=ExtendedUserStats)
+async def get_extended_user_stats(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get extended user statistics with streaks and detailed metrics."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_, desc, extract, func, select
+    
+    # Get basic stats first
+    total_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id, Booking.status == "confirmed"
+    )
+    total_result = await db.execute(total_stmt)
+    total_bookings = total_result.scalar() or 0
+
+    # Get this month's bookings
+    current_month = datetime.now().month
+    current_year = datetime.now().year
+
+    month_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id,
+        Booking.status == "confirmed",
+        extract("month", Booking.created_at) == current_month,
+        extract("year", Booking.created_at) == current_year,
+    )
+    month_result = await db.execute(month_stmt)
+    month_bookings = month_result.scalar() or 0
+
+    # Calculate attendance rate
+    attended_stmt = select(func.count(Booking.id)).where(
+        Booking.user_id == current_user.id, Booking.status == BookingStatus.COMPLETED
+    )
+    attended_result = await db.execute(attended_stmt)
+    attended_bookings = attended_result.scalar() or 0
+
+    attendance_rate = (
+        (attended_bookings / total_bookings * 100) if total_bookings > 0 else 0
+    )
+
+    # Get last class date
+    last_class_stmt = (
+        select(ClassInstance.start_datetime)
+        .join(Booking)
+        .where(
+            Booking.user_id == current_user.id,
+            Booking.status.in_(["confirmed", "completed"])
+        )
+        .order_by(desc(ClassInstance.start_datetime))
+        .limit(1)
+    )
+    last_class_result = await db.execute(last_class_stmt)
+    last_class_date = last_class_result.scalar()
+    
+    # Calculate days since last class
+    days_since_last_class = 0
+    if last_class_date:
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        days_since_last_class = (now - last_class_date).days
+
+    # Calculate weekly streak (simplified version)
+    # This is a basic implementation - you might want to make it more sophisticated
+    week_streak = await calculate_weekly_streak(db, current_user.id)
+
+    # Monthly goal (could be user-configurable in the future)
+    monthly_goal = 12
+
+    return ExtendedUserStats(
+        total_bookings=total_bookings,
+        bookings_this_month=month_bookings,
+        monthly_goal=monthly_goal,
+        attendance_rate=round(attendance_rate, 1),
+        member_since=current_user.created_at,
+        week_streak=week_streak,
+        last_class_date=last_class_date,
+        days_since_last_class=days_since_last_class,
+    )
+
+
+@router.get("/me/announcements", response_model=List[Announcement])
+async def get_user_announcements(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get active announcements for the current user."""
+    from datetime import datetime
+    from sqlalchemy import and_, desc, or_
+    from ....models.announcement import Announcement as AnnouncementModel
+    
+    # Get announcements that are:
+    # 1. Active and not deleted
+    # 2. Not expired
+    # 3. Target the user's role or are for all roles
+    now = datetime.utcnow()
+    
+    stmt = select(AnnouncementModel).where(
+        and_(
+            AnnouncementModel.is_active == True,
+            AnnouncementModel.deleted_at.is_(None),
+            # Not expired (either no expiry or expiry is in future)
+            or_(
+                AnnouncementModel.expires_at.is_(None),
+                AnnouncementModel.expires_at > now
+            )
+        )
+    ).order_by(desc(AnnouncementModel.created_at))
+    
+    result = await db.execute(stmt)
+    announcements = result.scalars().all()
+    
+    # Filter by role
+    user_role = current_user.role.value
+    filtered_announcements = [
+        ann for ann in announcements 
+        if ann.is_for_role(user_role)
+    ]
+    
+    return filtered_announcements
+
+
+async def calculate_weekly_streak(db: AsyncSession, user_id: int) -> int:
+    """Calculate consecutive weekly streak for user."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import and_, extract, select, func
+    
+    # Get all weeks where user had at least one confirmed booking
+    # Starting from current week going backwards
+    
+    current_date = datetime.now(timezone.utc)
+    current_week = current_date.isocalendar()[1]
+    current_year = current_date.year
+    
+    streak = 0
+    week_offset = 0
+    
+    # Check up to 52 weeks back (1 year)
+    while week_offset < 52:
+        check_date = current_date - timedelta(weeks=week_offset)
+        check_week = check_date.isocalendar()[1]
+        check_year = check_date.year
+        
+        # Count bookings in this week
+        week_stmt = select(func.count(Booking.id)).where(
+            and_(
+                Booking.user_id == user_id,
+                Booking.status == "confirmed",
+                extract("week", Booking.created_at) == check_week,
+                extract("year", Booking.created_at) == check_year,
+            )
+        )
+        
+        result = await db.execute(week_stmt)
+        week_bookings = result.scalar() or 0
+        
+        if week_bookings > 0:
+            streak += 1
+        else:
+            # Streak is broken
+            break
+            
+        week_offset += 1
+    
+    return streak
 
 
 @router.patch("/me/preferences", response_model=UserPreferences)

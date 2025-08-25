@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, init_db
 from app.core.security import get_password_hash
+from app.models.announcement import Announcement
 from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
 from app.models.package import Package
@@ -37,6 +38,7 @@ async def clear_existing_data(session: AsyncSession):
     await session.execute(text("DELETE FROM class_templates"))
     await session.execute(text("DELETE FROM user_packages"))
     await session.execute(text("DELETE FROM packages"))
+    await session.execute(text("DELETE FROM announcements"))
     await session.execute(text("DELETE FROM users"))
     await session.commit()
     print("[INFO] Existing data cleared.")
@@ -151,8 +153,25 @@ async def seed_light():
 
         await session.commit()
 
+        # Create a basic announcement
+        admin = next(u for u in users if u.role == UserRole.ADMIN)
+        await session.refresh(admin)
+        
+        announcement = Announcement(
+            title="Welcome to the Studio!",
+            message="Welcome to our Pilates studio! We're excited to have you join our community. Feel free to ask our instructors any questions.",
+            type="info",
+            target_roles=["student"],
+            expires_at=datetime.now() + timedelta(days=30),
+            created_by=admin.id,
+            is_active=True,
+            is_dismissible=True,
+        )
+        session.add(announcement)
+        await session.commit()
+
     print("[SUCCESS] Light seeding completed!")
-    print("[STATS] Created: 3 users, 2 packages, 1 template, 1 class instance")
+    print("[STATS] Created: 3 users, 2 packages, 1 template, 1 class instance, 1 announcement")
 
 
 if __name__ == "__main__":
