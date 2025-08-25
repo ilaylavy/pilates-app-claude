@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
 } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { COLORS, SPACING } from '../utils/config';
 import Button from '../components/common/Button';
@@ -46,6 +49,7 @@ interface Props {
 }
 
 const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
+  const queryClient = useQueryClient();
   const {
     paymentMethod,
     packageName,
@@ -56,6 +60,14 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
     credits,
     expiryDate,
   } = route.params;
+
+  // Invalidate cache when screen is focused to ensure data is up to date
+  useFocusEffect(
+    React.useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+    }, [queryClient])
+  );
 
   const isCardPayment = paymentMethod === 'card';
   const isCashReservation = paymentMethod === 'cash';
@@ -82,7 +94,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
   const handleShare = async () => {
     try {
       const message = isCardPayment
-        ? `I just purchased ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nCredits: ${credits}\nAmount: ${currency === 'ils' ? '₪' : currency.toUpperCase()}${price.toFixed(2)}\n\nReady to get stronger! 🧘‍♀️`
+        ? `I just purchased ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nCredits: ${credits}\nAmount: ${currency === 'ils' ? '₪' : currency.toUpperCase()}${Number(price || 0).toFixed(2)}\n\nReady to get stronger! 🧘‍♀️`
         : `I reserved ${packageName} at the Pilates Studio! 💪\n\nPackage: ${packageName}\nReservation: ${getReceiptNumber()}\n\nCan't wait to start my Pilates journey! 🧘‍♀️`;
 
       await Share.share({
@@ -128,7 +140,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Amount:</Text>
         <Text style={styles.detailValue}>
-          {currency === 'ils' ? '₪' : currency.toUpperCase()}{price.toFixed(2)}
+          {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)}
         </Text>
       </View>
 
@@ -184,7 +196,7 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
         <View style={styles.instructionItem}>
           <Text style={styles.instructionNumber}>2</Text>
           <Text style={styles.instructionText}>
-            Pay {currency === 'ils' ? '₪' : currency.toUpperCase()}{price.toFixed(2)} in cash and show this confirmation
+            Pay {currency === 'ils' ? '₪' : currency.toUpperCase()}{Number(price || 0).toFixed(2)} in cash and show this confirmation
           </Text>
         </View>
 
@@ -209,14 +221,14 @@ const PurchaseConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
       <Button
         title="Book Your First Class"
         onPress={() => navigation.navigate('BookClass')}
-        style={[styles.actionButton, styles.primaryButton]}
+        style={[styles.actionButton, styles.primaryButton] as any}
         disabled={isCashReservation}
       />
 
       <Button
         title="View My Packages"
         onPress={() => navigation.navigate('Profile')}
-        style={[styles.actionButton, styles.secondaryButton]}
+        style={[styles.actionButton, styles.secondaryButton] as any}
         variant="outline"
       />
 

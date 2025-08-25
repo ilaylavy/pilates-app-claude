@@ -10,41 +10,42 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import { COLORS, SPACING } from '../utils/config';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { packagesApi } from '../api/packages';
 import { useUserRole } from '../hooks/useUserRole';
+import { useAuth } from '../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import PackageCard from '../components/PackageCard';
 import PackageEditModal from '../components/PackageEditModal';
 import Button from '../components/common/Button';
 import PurchaseModal from '../components/PurchaseModal';
+import PaymentStatusBadge from '../components/PaymentStatusBadge';
+import PendingApprovalCard from '../components/PendingApprovalCard';
+import type { Package, UserPackage, UserPackagesResponse } from '../types';
 
-interface Package {
-  id: number;
-  name: string;
-  description: string;
-  credits: number;
-  price: number;
-  validity_days: number;
-  is_active: boolean;
-  is_unlimited: boolean;
-  is_featured: boolean;
-  order_index: number;
-}
 
-interface UserPackage {
-  id: number;
-  credits_remaining: number;
-  expiry_date: string;
-  is_active: boolean;
-  package: Package;
-  purchase_date: string;
-}
+type RootStackParamList = {
+  Payment: {
+    packageId: number;
+    packageName: string;
+    price: number;
+    currency: string;
+  };
+  Profile: undefined;
+  BookClass: undefined;
+};
+
+type PackagesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const PackagesScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
+  const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
+  const navigation = useNavigation<PackagesScreenNavigationProp>();
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
@@ -60,20 +61,22 @@ const PackagesScreen: React.FC = () => {
       const response = await apiClient.get(endpoint);
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
-  const { data: userPackages, isLoading: userPackagesLoading } = useQuery<UserPackage[]>({
-    queryKey: ['user-packages'],
-    queryFn: async () => {
-      const response = await apiClient.get('/api/v1/packages/my-packages');
-      return response.data;
-    },
+  const { data: userPackagesData, isLoading: userPackagesLoading } = useQuery<UserPackagesResponse>({
+    queryKey: ['userPackages'],
+    queryFn: () => packagesApi.getUserPackages(),
+    enabled: isAuthenticated,
   });
 
-  // Get current active package with credits
-  const activePackage = userPackages?.find(
-    (up) => up.is_active && up.credits_remaining > 0 && new Date(up.expiry_date) > new Date()
-  );
+  // Extract organized data from the new response structure
+  const activePackages = userPackagesData?.active_packages || [];
+  const pendingPackages = userPackagesData?.pending_packages || [];
+  const historicalPackages = userPackagesData?.historical_packages || [];
+  const primaryPackage = activePackages.find(pkg => pkg.is_primary);
+  const totalCredits = userPackagesData?.total_credits || 0;
+  const hasUnlimited = userPackagesData?.has_unlimited || false;
 
   // Mutations
   const togglePackageMutation = useMutation({
@@ -97,7 +100,7 @@ const PackagesScreen: React.FC = () => {
   const onRefresh = async () => {
     setRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ['packages'] });
-    await queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+    await queryClient.invalidateQueries({ queryKey: ['userPackages'] });
     setRefreshing(false);
   };
 
@@ -109,6 +112,10 @@ const PackagesScreen: React.FC = () => {
   const handlePurchasePackage = (pkg: Package) => {
     setPackageToPurchase(pkg);
     setShowPurchaseModal(true);
+  };
+
+  const handleNavigateToPayment = (packageData: { packageId: number; packageName: string; price: number; currency: string }) => {
+    navigation.navigate('Payment', packageData);
   };
 
   const handleDeletePackage = (pkg: Package) => {
@@ -141,13 +148,20 @@ const PackagesScreen: React.FC = () => {
     return `Expires in ${diffDays} days`;
   };
 
+  const getHistoryStatusText = (userPackage: UserPackage) => {
+    if (userPackage.payment_status === 'rejected') return 'Rejected';
+    if (userPackage.credits_remaining === 0) return 'Completed';
+    if (userPackage.is_expired) return 'Expired';
+    return 'Inactive';
+  };
+
   const renderCurrentBalance = () => {
-    if (!activePackage) {
+    if (activePackages.length === 0) {
       return (
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
             <Ionicons name="card" size={24} color={COLORS.textSecondary} />
-            <Text style={styles.balanceTitle}>No Active Package</Text>
+            <Text style={styles.balanceTitle}>No Active Packages</Text>
           </View>
           <Text style={styles.balanceSubtitle}>
             Purchase a package to start booking classes
@@ -160,46 +174,74 @@ const PackagesScreen: React.FC = () => {
       <View style={styles.balanceCard}>
         <View style={styles.balanceHeader}>
           <Ionicons name="card" size={24} color={COLORS.primary} />
-          <Text style={styles.balanceTitle}>Current Balance</Text>
+          <Text style={styles.balanceTitle}>Total Balance</Text>
         </View>
         
         <View style={styles.balanceContent}>
-          <Text style={styles.creditsNumber}>{activePackage.credits_remaining}</Text>
-          <Text style={styles.creditsLabel}>Credits Remaining</Text>
+          <Text style={styles.creditsNumber}>
+            {hasUnlimited ? '∞' : totalCredits}
+          </Text>
+          <Text style={styles.creditsLabel}>Credits Available</Text>
         </View>
         
-        <View style={styles.balanceFooter}>
-          <Text style={styles.expiryText}>{formatExpiry(activePackage.expiry_date)}</Text>
-          <View style={styles.progressBarContainer}>
-            <View 
-              style={[
-                styles.progressBar,
-                {
-                  width: `${(activePackage.credits_remaining / activePackage.package.credits) * 100}%`
-                }
-              ]}
-            />
+        {primaryPackage && (
+          <View style={styles.balanceFooter}>
+            <Text style={styles.primaryPackageText}>
+              Primary: {primaryPackage.package.name}
+            </Text>
+            <Text style={styles.expiryText}>{formatExpiry(primaryPackage.expiry_date)}</Text>
           </View>
+        )}
+        
+        {activePackages.length > 1 && (
+          <Text style={styles.multiplePackagesText}>
+            +{activePackages.length - 1} more package{activePackages.length > 2 ? 's' : ''}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderPendingPackages = () => {
+    if (pendingPackages.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Pending Payments</Text>
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={() => navigation.navigate('PendingApprovals' as any)}
+          >
+            <Text style={styles.viewAllText}>View All</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
+        
+        {pendingPackages.slice(0, 2).map((userPackage) => (
+          <PendingApprovalCard
+            key={userPackage.id}
+            userPackage={userPackage}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+            }}
+          />
+        ))}
       </View>
     );
   };
 
   const renderPackageHistory = () => {
-    const expiredPackages = userPackages?.filter(
-      (up) => !up.is_active || up.credits_remaining === 0 || new Date(up.expiry_date) <= new Date()
-    );
-
-    if (!expiredPackages || expiredPackages.length === 0) return null;
+    if (historicalPackages.length === 0) return null;
 
     return (
       <View style={styles.section}>
         <TouchableOpacity style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Package History</Text>
+          <Text style={styles.sectionTitle}>Package History ({historicalPackages.length})</Text>
           <Ionicons name="chevron-down" size={20} color={COLORS.textSecondary} />
         </TouchableOpacity>
         
-        {expiredPackages.slice(0, 3).map((userPackage) => (
+        {historicalPackages.slice(0, 3).map((userPackage) => (
           <View key={userPackage.id} style={styles.historyItem}>
             <View style={styles.historyContent}>
               <Text style={styles.historyName}>{userPackage.package.name}</Text>
@@ -207,11 +249,27 @@ const PackagesScreen: React.FC = () => {
                 Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
               </Text>
             </View>
-            <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
-              {userPackage.credits_remaining === 0 ? 'Used' : 'Expired'}
-            </Text>
+            <View style={styles.historyStatusContainer}>
+              {userPackage.payment_status && (
+                <PaymentStatusBadge 
+                  status={userPackage.payment_status}
+                  size="small"
+                />
+              )}
+              <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
+                {getHistoryStatusText(userPackage)}
+              </Text>
+            </View>
           </View>
         ))}
+        
+        {historicalPackages.length > 3 && (
+          <TouchableOpacity style={styles.viewAllButton}>
+            <Text style={styles.viewAllText}>
+              View all {historicalPackages.length} packages
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -243,6 +301,9 @@ const PackagesScreen: React.FC = () => {
             {/* Current Balance Card */}
             {renderCurrentBalance()}
 
+            {/* Pending Packages */}
+            {renderPendingPackages()}
+
             {/* Available Packages */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Available Packages</Text>
@@ -255,6 +316,7 @@ const PackagesScreen: React.FC = () => {
                   <PackageCard
                     package={item}
                     onPress={() => handlePurchasePackage(item)}
+                    onPurchase={() => handlePurchasePackage(item)}
                     style={styles.packageCardHorizontal}
                   />
                 )}
@@ -328,8 +390,9 @@ const PackagesScreen: React.FC = () => {
           onPurchase={() => {
             setShowPurchaseModal(false);
             setPackageToPurchase(null);
-            queryClient.invalidateQueries({ queryKey: ['user-packages'] });
+            queryClient.invalidateQueries({ queryKey: ['userPackages'] });
           }}
+          onNavigateToPayment={handleNavigateToPayment}
         />
       )}
     </SafeAreaView>
@@ -484,6 +547,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  historyStatusContainer: {
+    alignItems: 'flex-end',
+    gap: SPACING.xs,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
   adminSection: {
     padding: SPACING.lg,
   },
@@ -495,6 +572,30 @@ const styles = StyleSheet.create({
   },
   adminPackageCard: {
     marginBottom: SPACING.md,
+  },
+  primaryPackageText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  multiplePackagesText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.xs,
+  },
+  viewAllButton: {
+    padding: SPACING.sm,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: SPACING.sm,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
   },
 });
 

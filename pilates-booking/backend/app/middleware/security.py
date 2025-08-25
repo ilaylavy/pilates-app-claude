@@ -108,9 +108,9 @@ class InputSanitizationMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        # Regex patterns for common attacks
+        # Regex patterns for common attacks - more precise to avoid false positives
         self.sql_injection_pattern = re.compile(
-            r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|UNION|SCRIPT)\b)",
+            r"(\b(SELECT\s+\*|INSERT\s+INTO|UPDATE\s+SET|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE|EXEC\s+|UNION\s+SELECT|SCRIPT\s+)|'.*OR.*'|;.*--|/\*.*\*/)",
             re.IGNORECASE,
         )
         self.xss_pattern = re.compile(

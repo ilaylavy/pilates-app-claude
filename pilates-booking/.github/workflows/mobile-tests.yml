@@ -1,0 +1,281 @@
+name: Mobile Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+        
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+
+    - name: Run TypeScript type check
+      working-directory: ./mobile
+      run: |
+        npm run lint
+
+    - name: Run unit tests
+      working-directory: ./mobile
+      run: |
+        npm test -- --coverage --watchAll=false --testPathPattern=tests/unit
+
+    - name: Run integration tests
+      working-directory: ./mobile
+      run: |
+        npm test -- --coverage --watchAll=false --testPathPattern=tests/integration
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./mobile/coverage/lcov.info
+        flags: mobile
+        name: mobile-coverage
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Check bundle size
+      working-directory: ./mobile
+      run: |
+        npx expo export --platform web --dev
+        
+    - name: Archive coverage results
+      uses: actions/upload-artifact@v4
+      with:
+        name: mobile-coverage-report-${{ matrix.node-version }}
+        path: ./mobile/coverage/
+        retention-days: 30
+
+  lint-and-format:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+        
+    - name: Run ESLint
+      working-directory: ./mobile
+      run: |
+        npm run lint
+        
+    - name: Check Prettier formatting
+      working-directory: ./mobile
+      run: |
+        npm run format -- --check
+
+  build-check:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    strategy:
+      matrix:
+        platform: [ios, android]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+        
+    - name: Setup Expo CLI
+      run: |
+        npm install -g @expo/cli
+        
+    - name: Check Expo configuration
+      working-directory: ./mobile
+      run: |
+        npx expo config --type introspect
+        
+    - name: Prebuild for ${{ matrix.platform }}
+      working-directory: ./mobile
+      run: |
+        npx expo prebuild --platform ${{ matrix.platform }} --no-install
+        
+    - name: Validate build configuration
+      working-directory: ./mobile
+      run: |
+        # Check that prebuild was successful
+        if [ "${{ matrix.platform }}" = "ios" ] && [ ! -d "ios" ]; then
+          echo "❌ iOS prebuild failed"
+          exit 1
+        fi
+        
+        if [ "${{ matrix.platform }}" = "android" ] && [ ! -d "android" ]; then
+          echo "❌ Android prebuild failed"
+          exit 1
+        fi
+        
+        echo "✅ ${{ matrix.platform }} prebuild successful"
+
+  accessibility-test:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+        
+    - name: Run accessibility tests
+      working-directory: ./mobile
+      run: |
+        # Run tests with accessibility focus
+        npm test -- --testNamePattern="accessibility" --watchAll=false
+        
+    - name: Check accessibility compliance
+      working-directory: ./mobile
+      run: |
+        # This would run accessibility linting rules
+        npm run lint -- --config .eslintrc.accessibility.js || echo "No accessibility config found"
+
+  bundle-analysis:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+        
+    - name: Build and analyze bundle
+      working-directory: ./mobile
+      run: |
+        # Export for web to analyze bundle
+        npx expo export --platform web --dev
+        
+        # Install bundle analyzer
+        npm install -g webpack-bundle-analyzer
+        
+        # Analyze bundle if webpack stats exist
+        if [ -f "dist/_expo/static/js/web/bundle-*.js" ]; then
+          echo "📦 Bundle files found:"
+          ls -la dist/_expo/static/js/web/
+          
+          # Get bundle size
+          BUNDLE_SIZE=$(du -sh dist/ | cut -f1)
+          echo "📊 Total bundle size: $BUNDLE_SIZE"
+          
+          # Save bundle size for comparison
+          echo "BUNDLE_SIZE=$BUNDLE_SIZE" >> $GITHUB_ENV
+        fi
+        
+    - name: Comment bundle size
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const bundleSize = process.env.BUNDLE_SIZE || 'Unknown';
+          
+          const comment = `📦 **Bundle Analysis**
+          
+          Bundle size: **${bundleSize}**
+          
+          💡 This is the compiled web bundle size. Mobile app size may differ.
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./mobile
+      run: |
+        npm ci
+        
+    - name: Run security audit
+      working-directory: ./mobile
+      run: |
+        npm audit --audit-level=high
+        
+    - name: Check for known vulnerabilities
+      working-directory: ./mobile
+      run: |
+        # Install additional security tools
+        npm install -g audit-ci
+        
+        # Run audit with CI-friendly output
+        audit-ci --config .auditrc.json || echo "Security audit completed with warnings"

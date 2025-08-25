@@ -90,9 +90,76 @@ class UserStats(BaseModel):
     member_since: datetime
 
 
+class TokenRefresh(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
 class UserPreferences(BaseModel):
     email_notifications: bool = True
     sms_notifications: bool = False
     booking_reminders: bool = True
     class_updates: bool = True
     marketing_emails: bool = False
+
+
+class ExtendedUserStats(BaseModel):
+    total_bookings: int
+    bookings_this_month: int
+    monthly_goal: int = 12  # Default monthly goal
+    attendance_rate: float
+    member_since: datetime
+    week_streak: int
+    last_class_date: Optional[datetime] = None
+    days_since_last_class: int
+
+
+class Announcement(BaseModel):
+    id: int
+    title: str
+    message: str
+    type: str  # 'info', 'warning', 'success', 'urgent'
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    is_dismissible: bool = True
+    target_roles: Optional[list[str]] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CreateAnnouncementRequest(BaseModel):
+    title: str
+    message: str
+    type: str = 'info'
+    expires_at: Optional[datetime] = None
+    target_roles: Optional[list[str]] = None
+    is_dismissible: bool = True
+
+
+class TodayScheduleItem(BaseModel):
+    id: int
+    class_name: str
+    start_time: str
+    end_time: str
+    current_bookings: int
+    capacity: int
+    waitlist_count: int
+    status: str
+
+
+class WaitlistNotification(BaseModel):
+    class_id: int
+    class_name: str
+    start_time: str
+    waitlist_count: int
+
+
+class DashboardMetrics(BaseModel):
+    weekly_capacity_utilization: float
+    active_users_count: int
+    active_users_growth: int
+    today_classes: list[TodayScheduleItem]
+    waitlist_notifications: list[WaitlistNotification]

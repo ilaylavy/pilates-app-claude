@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from typing import List, Optional
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel
 
 from ..models.class_schedule import ClassLevel, ClassStatus, WeekDay
 
@@ -83,12 +83,12 @@ class ClassInstanceResponse(ClassInstanceBase):
     id: int
     template_id: int
     instructor_id: int
-    template: ClassTemplateResponse
-    instructor: InstructorResponse
-    available_spots: int
-    is_full: bool
-    waitlist_count: int
-    participant_count: int
+    template: Optional[ClassTemplateResponse] = None
+    instructor: Optional[InstructorResponse] = None
+    available_spots: int = 0
+    is_full: bool = False
+    waitlist_count: int = 0
+    participant_count: int = 0
     created_at: datetime
     updated_at: datetime
 

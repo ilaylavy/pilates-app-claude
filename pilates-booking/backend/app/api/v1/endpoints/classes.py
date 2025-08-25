@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ....models.booking import Booking, BookingStatus, WaitlistEntry
+from ....schemas.booking import WaitlistEntryResponse
 from ....models.class_schedule import ClassInstance, ClassStatus, ClassTemplate
 from ....models.user import User, UserRole
 from ....schemas.class_schedule import (ClassInstanceCreate,
@@ -84,33 +85,7 @@ async def get_upcoming_classes(
     return [class_instance_to_response(instance) for instance in class_instances]
 
 
-@router.get("/{class_id}", response_model=ClassInstanceResponse)
-async def get_class_instance(
-    class_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Get specific class instance by ID."""
-    stmt = (
-        select(ClassInstance)
-        .options(
-            selectinload(ClassInstance.template),
-            selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings),
-            selectinload(ClassInstance.waitlist_entries),
-        )
-        .where(ClassInstance.id == class_id)
-    )
-    result = await db.execute(stmt)
-    class_instance = result.scalar_one_or_none()
-
-    if not class_instance:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Class not found"
-        )
-
-    return class_instance_to_response(class_instance)
-
+# Specific routes MUST come before parameterized routes like /{class_id}
 
 # Template management endpoints (admin/instructor only)
 @router.post(
@@ -146,6 +121,169 @@ async def get_class_templates(
     templates = result.scalars().all()
 
     return templates
+
+
+@router.patch("/templates/{template_id}", response_model=ClassTemplateResponse)
+async def update_class_template(
+    template_id: int,
+    template_update: ClassTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Update a class template (admin only)."""
+    # Get existing template
+    stmt = select(ClassTemplate).where(ClassTemplate.id == template_id)
+    result = await db.execute(stmt)
+    template = result.scalar_one_or_none()
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+
+    # Update fields
+    update_data = template_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(template, field, value)
+
+    await db.commit()
+    await db.refresh(template)
+
+    return template
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_class_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Delete a class template (admin only)."""
+    # Get existing template
+    stmt = select(ClassTemplate).where(ClassTemplate.id == template_id)
+    result = await db.execute(stmt)
+    template = result.scalar_one_or_none()
+
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
+        )
+
+    # Check if template is being used by any instances
+    from sqlalchemy import func
+    stmt = select(func.count(ClassInstance.id)).where(ClassInstance.template_id == template_id)
+    result = await db.execute(stmt)
+    instance_count = result.scalar()
+
+    if instance_count > 0:
+        # Instead of deleting, mark as inactive
+        template.is_active = False
+        await db.commit()
+    else:
+        # Safe to delete if no instances
+        await db.delete(template)
+        await db.commit()
+
+
+# Date-based endpoints
+@router.get("/week/{week_date}", response_model=List[ClassInstanceResponse])
+async def get_classes_for_week(
+    week_date: date,
+    include_past: bool = Query(False, description="Include past classes in the response"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get classes for a specific week starting from the given date."""
+    # Calculate the start and end of the week (assuming week starts on Monday)
+    days_since_monday = week_date.weekday()
+    week_start = week_date - timedelta(days=days_since_monday)
+    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+
+    # Build base conditions
+    conditions = [
+        ClassInstance.start_datetime >= datetime.combine(week_start, datetime.min.time()),
+        ClassInstance.start_datetime <= datetime.combine(week_end, datetime.min.time()),
+        ClassInstance.status == ClassStatus.SCHEDULED,
+    ]
+    
+    # Only show future classes unless include_past is True
+    if not include_past:
+        current_time = datetime.now(timezone.utc)
+        conditions.append(ClassInstance.start_datetime > current_time)
+    
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings).selectinload(Booking.user),
+            selectinload(ClassInstance.waitlist_entries),
+        )
+        .where(and_(*conditions))
+        .order_by(ClassInstance.start_datetime)
+    )
+
+    result = await db.execute(stmt)
+    class_instances = result.scalars().all()
+
+    # Convert to response format with computed fields
+    return [class_instance_to_response(instance) for instance in class_instances]
+
+
+@router.get("/month/{year}/{month}", response_model=List[ClassInstanceResponse])
+async def get_classes_for_month(
+    year: int,
+    month: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get classes for a specific month (calendar data)."""
+    if not (1 <= month <= 12):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Month must be between 1 and 12",
+        )
+
+    # Get first and last day of the month
+    first_day = date(year, month, 1)
+    last_day = date(year, month, calendar.monthrange(year, month)[1])
+
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings).selectinload(Booking.user),
+            selectinload(ClassInstance.waitlist_entries),
+        )
+        .where(
+            and_(
+                func.date(ClassInstance.start_datetime) >= first_day,
+                func.date(ClassInstance.start_datetime) <= last_day,
+                ClassInstance.status == ClassStatus.SCHEDULED,
+            )
+        )
+        .order_by(ClassInstance.start_datetime)
+    )
+
+    result = await db.execute(stmt)
+    class_instances = result.scalars().all()
+
+    # Convert to response format with computed fields
+    return [class_instance_to_response(instance) for instance in class_instances]
+
+
+# Class instance management
+@router.post(
+    "/create", response_model=ClassInstanceResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_class(
+    instance_create: ClassInstanceCreate,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(get_admin_user),
+):
+    """Create a new class instance (admin only)."""
+    return await create_class_instance(instance_create, db, admin_user)
 
 
 @router.post(
@@ -209,86 +347,52 @@ async def create_class_instance(
     return class_instance_to_response(loaded_instance)
 
 
-@router.get("/week/{week_date}", response_model=List[ClassInstanceResponse])
-async def get_classes_for_week(
-    week_date: date,
+# Waitlist endpoints  
+@router.post("/{class_id}/waitlist", response_model=WaitlistEntryResponse)
+async def join_waitlist(
+    class_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Get classes for a specific week starting from the given date."""
-    # Calculate the start and end of the week (assuming week starts on Monday)
-    days_since_monday = week_date.weekday()
-    week_start = week_date - timedelta(days=days_since_monday)
-    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
-
-    stmt = (
-        select(ClassInstance)
-        .options(
-            selectinload(ClassInstance.template),
-            selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings).selectinload(Booking.user),
-            selectinload(ClassInstance.waitlist_entries),
+    """Join waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        waitlist_entry = await booking_service.add_to_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
         )
-        .where(
-            and_(
-                ClassInstance.start_datetime
-                >= datetime.combine(week_start, datetime.min.time()),
-                ClassInstance.start_datetime
-                <= datetime.combine(week_end, datetime.min.time()),
-                ClassInstance.status == ClassStatus.SCHEDULED,
-            )
-        )
-        .order_by(ClassInstance.start_datetime)
-    )
-
-    result = await db.execute(stmt)
-    class_instances = result.scalars().all()
-
-    # Convert to response format with computed fields
-    return [class_instance_to_response(instance) for instance in class_instances]
-
-
-@router.get("/month/{year}/{month}", response_model=List[ClassInstanceResponse])
-async def get_classes_for_month(
-    year: int,
-    month: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Get classes for a specific month (calendar data)."""
-    if not (1 <= month <= 12):
+        return waitlist_entry
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Month must be between 1 and 12",
+            detail=str(e)
         )
 
-    # Get first and last day of the month
-    first_day = date(year, month, 1)
-    last_day = date(year, month, calendar.monthrange(year, month)[1])
 
-    stmt = (
-        select(ClassInstance)
-        .options(
-            selectinload(ClassInstance.template),
-            selectinload(ClassInstance.instructor),
-            selectinload(ClassInstance.bookings).selectinload(Booking.user),
-            selectinload(ClassInstance.waitlist_entries),
+@router.delete("/{class_id}/waitlist", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_waitlist(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Leave waitlist for a class."""
+    from ....services.booking_service import BookingService
+    
+    booking_service = BookingService(db)
+    
+    try:
+        await booking_service.remove_from_waitlist(
+            user_id=current_user.id, 
+            class_instance_id=class_id
         )
-        .where(
-            and_(
-                func.date(ClassInstance.start_datetime) >= first_day,
-                func.date(ClassInstance.start_datetime) <= last_day,
-                ClassInstance.status == ClassStatus.SCHEDULED,
-            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
-        .order_by(ClassInstance.start_datetime)
-    )
-
-    result = await db.execute(stmt)
-    class_instances = result.scalars().all()
-
-    # Convert to response format with computed fields
-    return [class_instance_to_response(instance) for instance in class_instances]
 
 
 @router.get("/{class_id}/participants", response_model=List[ParticipantResponse])
@@ -339,16 +443,33 @@ async def get_class_participants(
     return participants
 
 
-@router.post(
-    "/create", response_model=ClassInstanceResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_class(
-    instance_create: ClassInstanceCreate,
+# Class instance by ID - MUST be last since it's a catch-all pattern
+@router.get("/{class_id}", response_model=ClassInstanceResponse)
+async def get_class_instance(
+    class_id: int,
     db: AsyncSession = Depends(get_db),
-    admin_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Create a new class instance (admin only)."""
-    return await create_class_instance(instance_create, db, admin_user)
+    """Get specific class instance by ID."""
+    stmt = (
+        select(ClassInstance)
+        .options(
+            selectinload(ClassInstance.template),
+            selectinload(ClassInstance.instructor),
+            selectinload(ClassInstance.bookings),
+            selectinload(ClassInstance.waitlist_entries),
+        )
+        .where(ClassInstance.id == class_id)
+    )
+    result = await db.execute(stmt)
+    class_instance = result.scalar_one_or_none()
+
+    if not class_instance:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Class not found"
+        )
+
+    return class_instance_to_response(class_instance)
 
 
 @router.patch("/{class_id}", response_model=ClassInstanceResponse)

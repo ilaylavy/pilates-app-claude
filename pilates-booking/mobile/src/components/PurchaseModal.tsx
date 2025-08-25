@@ -11,13 +11,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
-import { apiClient } from '../api/client';
+import { packagesApi } from '../api/packages';
+import { PaymentMethodType, CashPaymentInstructions } from '../types';
+import PaymentMethodSelector from './PaymentMethodSelector';
+import CashPaymentInstructionsModal from './CashPaymentInstructions';
 import Button from './common/Button';
 
 interface Package {
   id: number;
   name: string;
-  description: string;
+  description?: string;
   credits: number;
   price: number;
   validity_days: number;
@@ -42,7 +45,10 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   onNavigateToPayment,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'bank' | 'cash'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('CREDIT_CARD');
+  const [showCashInstructions, setShowCashInstructions] = useState(false);
+  const [cashInstructions, setCashInstructions] = useState<CashPaymentInstructions | null>(null);
+  const [showPaymentInfo, setShowPaymentInfo] = useState(false);
 
   const formatCurrency = (amount: number) => {
     const numAmount = Number(amount) || 0;
@@ -72,7 +78,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   };
 
   const handlePurchase = async () => {
-    if (paymentMethod === 'card') {
+    if (paymentMethod === 'credit_card') {
       // Navigate to payment screen for card payments
       if (onNavigateToPayment) {
         onNavigateToPayment({
@@ -86,39 +92,31 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
       return;
     }
 
-    // Handle non-card payments (legacy flow)
-    Alert.alert(
-      'Confirm Purchase',
-      `Are you sure you want to purchase \"${pkg.name}\" for ${formatCurrency(pkg.price)} via ${paymentMethod === 'bank' ? 'bank transfer' : 'cash payment'}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Purchase',
-          onPress: async () => {
-            setIsLoading(true);
-            try {
-              // For now, we'll simulate payment processing
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              
-              await apiClient.post('/api/v1/packages/purchase', { package_id: pkg.id });
-              
-              Alert.alert(
-                'Purchase Successful!',
-                `You have successfully purchased \"${pkg.name}\". Your credits are now available for booking classes.`,
-                [{ text: 'Great!', onPress: onPurchase }]
-              );
-            } catch (error: any) {
-              Alert.alert(
-                'Purchase Failed',
-                error.response?.data?.detail || 'Unable to complete purchase. Please try again.'
-              );
-            } finally {
-              setIsLoading(false);
-            }
-          },
-        },
-      ]
-    );
+    // Handle cash payment
+    if (paymentMethod === 'CASH') {
+      setIsLoading(true);
+      try {
+        const result = await packagesApi.purchasePackage(pkg.id, 'CASH');
+        
+        // Check if it's cash payment instructions
+        if ('reference_code' in result) {
+          setCashInstructions(result);
+          setShowCashInstructions(true);
+          onPurchase(); // Notify parent that purchase was initiated
+        } else {
+          // Unexpected response format
+          Alert.alert('Error', 'Unexpected response from server. Please try again.');
+        }
+      } catch (error: any) {
+        console.error('Cash purchase error:', error);
+        Alert.alert(
+          'Purchase Failed',
+          error.response?.data?.detail || 'Failed to create cash payment reservation. Please try again.'
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
   const handleClose = () => {
@@ -126,11 +124,11 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
     onClose();
   };
 
-  const paymentMethods = [
-    { id: 'card', name: 'Credit/Debit Card', icon: 'card' },
-    { id: 'bank', name: 'Bank Transfer', icon: 'business' },
-    { id: 'cash', name: 'Cash Payment', icon: 'cash' },
-  ] as const;
+  const handleCashInstructionsClose = () => {
+    setShowCashInstructions(false);
+    setCashInstructions(null);
+    onClose(); // Close the main modal too
+  };
 
   return (
     <Modal
@@ -195,53 +193,20 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
                 <Ionicons name="calculator" size={16} color={COLORS.success} />
                 <Text style={[styles.detailText, styles.valueText]}>
                   {pkg.is_unlimited
-                    ? `₪${(pkg.price / 30).toFixed(2)} per day`
-                    : `₪${(pkg.price / pkg.credits).toFixed(2)} per class`}
+                    ? `₪${(Number(pkg.price) / 30).toFixed(2)} per day`
+                    : `₪${(Number(pkg.price) / Number(pkg.credits)).toFixed(2)} per class`}
                 </Text>
               </View>
             </View>
           </View>
 
           {/* Payment Methods */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
-            {paymentMethods.map((method) => (
-              <TouchableOpacity
-                key={method.id}
-                style={[
-                  styles.paymentMethod,
-                  paymentMethod === method.id && styles.paymentMethodSelected,
-                ]}
-                onPress={() => setPaymentMethod(method.id)}
-              >
-                <View style={styles.paymentMethodContent}>
-                  <Ionicons
-                    name={method.icon}
-                    size={24}
-                    color={paymentMethod === method.id ? COLORS.primary : COLORS.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.paymentMethodText,
-                      paymentMethod === method.id && styles.paymentMethodTextSelected,
-                    ]}
-                  >
-                    {method.name}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.radioButton,
-                    paymentMethod === method.id && styles.radioButtonSelected,
-                  ]}
-                >
-                  {paymentMethod === method.id && (
-                    <View style={styles.radioButtonInner} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <PaymentMethodSelector
+            selectedMethod={paymentMethod}
+            onSelectMethod={setPaymentMethod}
+            showInfoModal={showPaymentInfo}
+            onHideInfoModal={() => setShowPaymentInfo(false)}
+          />
 
           {/* Terms */}
           <View style={styles.section}>
@@ -292,19 +257,23 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
         <View style={styles.footer}>
           <Button
-            title={
-              isLoading ? (
-                <ActivityIndicator color={COLORS.background} size="small" />
-              ) : (
-                `Purchase for ${formatCurrency(pkg.price)}`
-              )
-            }
+            title={isLoading ? "Processing..." : `Purchase for ${formatCurrency(pkg.price)}`}
             onPress={handlePurchase}
             disabled={isLoading}
+            loading={isLoading}
             style={styles.purchaseButton}
           />
         </View>
       </View>
+
+      {/* Cash Payment Instructions Modal */}
+      {cashInstructions && (
+        <CashPaymentInstructionsModal
+          visible={showCashInstructions}
+          instructions={cashInstructions}
+          onClose={handleCashInstructionsClose}
+        />
+      )}
     </Modal>
   );
 };

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ....core.logging_config import get_logger
 from ....models.audit_log import AuditActionType, SecurityLevel
 from ....models.user import User
-from ....schemas.user import Token, UserCreate, UserLogin, UserResponse
+from ....schemas.user import LogoutRequest, Token, TokenRefresh, UserCreate, UserLogin, UserResponse
 from ....services.audit_service import AuditService
 from ....services.auth_service import AuthService
 from ....services.business_logging_service import business_logger
@@ -156,13 +156,20 @@ async def login(
                 failure_reason="invalid_credentials",
             )
 
-            # Also log with audit service
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                error_message="Invalid credentials",
-            )
+            # Also log with audit service (gracefully handle failures)
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    error_message="Invalid credentials",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for failed login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - invalid credentials",
@@ -187,13 +194,20 @@ async def login(
                 failure_reason="account_inactive",
             )
 
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                user=user,
-                error_message="User account is inactive",
-            )
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    user=user,
+                    error_message="User account is inactive",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for inactive user login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - user account inactive",
@@ -217,13 +231,20 @@ async def login(
                 failure_reason="email_not_verified",
             )
 
-            await audit_service.log_login_attempt(
-                request=request,
-                email=user_login.email,
-                success=False,
-                user=user,
-                error_message="Email not verified",
-            )
+            try:
+                await audit_service.log_login_attempt(
+                    request=request,
+                    email=user_login.email,
+                    success=False,
+                    user=user,
+                    error_message="Email not verified",
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log audit event for unverified user login",
+                    email=user_login.email,
+                    error=str(audit_error),
+                )
 
             logger.warning(
                 "Login failed - email not verified",
@@ -259,9 +280,16 @@ async def login(
             user_agent=user_agent,
         )
 
-        await audit_service.log_login_attempt(
-            request=request, email=user_login.email, success=True, user=user
-        )
+        try:
+            await audit_service.log_login_attempt(
+                request=request, email=user_login.email, success=True, user=user
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Failed to log audit event for successful login",
+                email=user_login.email,
+                error=str(audit_error),
+            )
 
         logger.info(
             "Login successful",
@@ -277,12 +305,19 @@ async def login(
         raise
     except Exception as e:
         # Log unexpected error
-        await audit_service.log_login_attempt(
-            request=request,
-            email=user_login.email,
-            success=False,
-            error_message=f"Unexpected error: {str(e)}",
-        )
+        try:
+            await audit_service.log_login_attempt(
+                request=request,
+                email=user_login.email,
+                success=False,
+                error_message=f"Unexpected error: {str(e)}",
+            )
+        except Exception as audit_error:
+            logger.warning(
+                "Failed to log audit event for unexpected login error",
+                email=user_login.email,
+                error=str(audit_error),
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed due to server error",
@@ -291,7 +326,7 @@ async def login(
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    request: Request, refresh_token: str, db: AsyncSession = Depends(get_db)
+    request: Request, token_refresh: TokenRefresh, db: AsyncSession = Depends(get_db)
 ):
     """Refresh access token using refresh token with rotation."""
     auth_service = AuthService(db)
@@ -299,7 +334,7 @@ async def refresh_token(
 
     try:
         device_info = _get_device_info(request)
-        tokens = await auth_service.refresh_access_token(refresh_token, device_info)
+        tokens = await auth_service.refresh_access_token(token_refresh.refresh_token, device_info)
 
         # Log successful token refresh
         await audit_service.log_from_request(
@@ -325,13 +360,13 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    request: Request, refresh_token: str, db: AsyncSession = Depends(get_db)
+    request: Request, logout_request: LogoutRequest, db: AsyncSession = Depends(get_db)
 ):
     """Logout user by invalidating refresh token."""
     auth_service = AuthService(db)
     audit_service = AuditService(db)
 
-    success = await auth_service.logout_user(refresh_token)
+    success = await auth_service.logout_user(logout_request.refresh_token)
 
     # Log logout attempt
     await audit_service.log_from_request(

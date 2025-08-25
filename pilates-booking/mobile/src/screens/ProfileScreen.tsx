@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import AvatarUpload from '../components/AvatarUpload';
+import EditProfileModal from '../components/EditProfileModal';
 import { useUserRole } from '../hooks/useUserRole';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -30,11 +31,12 @@ interface UserStats {
 }
 
 const ProfileScreen: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const navigation = useNavigation();
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
 
   const { data: userStats } = useQuery<UserStats>({
     queryKey: ['user-stats'],
@@ -42,6 +44,7 @@ const ProfileScreen: React.FC = () => {
       const response = await apiClient.get('/api/v1/users/me/stats');
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   const { data: upcomingClasses } = useQuery({
@@ -50,6 +53,7 @@ const ProfileScreen: React.FC = () => {
       const response = await apiClient.get('/api/v1/bookings/my-bookings?status=confirmed&upcoming=true&limit=3');
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   const handleLogout = async () => {
@@ -68,7 +72,11 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleNavigation = (screen: string) => {
-    navigation.navigate(screen as never);
+    if (screen === 'EditProfile') {
+      setShowEditProfileModal(true);
+    } else {
+      navigation.navigate(screen as never);
+    }
   };
 
   const getInitials = (firstName?: string, lastName?: string) => {
@@ -185,16 +193,19 @@ const ProfileScreen: React.FC = () => {
             {upcomingClasses.slice(0, 3).map((booking: any) => (
               <View key={booking.id} style={styles.classItem}>
                 <View style={styles.classInfo}>
-                  <Text style={styles.className}>{booking.class_instance.class_template.name}</Text>
+                  <Text style={styles.className}>
+                    {booking?.class_instance?.class_template?.name || 'Class Name'}
+                  </Text>
                   <Text style={styles.classDate}>
-                    {new Date(booking.class_instance.start_time).toLocaleDateString()} at{' '}
-                    {new Date(booking.class_instance.start_time).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
+                    {booking?.class_instance?.start_time ? (
+                      `${new Date(booking.class_instance.start_time).toLocaleDateString()} at ${new Date(booking.class_instance.start_time).toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })}`
+                    ) : 'Date TBD'}
                   </Text>
                   <Text style={styles.classInstructor}>
-                    with {booking.class_instance.instructor.full_name}
+                    with {booking?.class_instance?.instructor?.full_name || 'Instructor TBD'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
@@ -224,6 +235,11 @@ const ProfileScreen: React.FC = () => {
           }}
         />
       )}
+
+      <EditProfileModal
+        visible={showEditProfileModal}
+        onClose={() => setShowEditProfileModal(false)}
+      />
     </SafeAreaView>
   );
 };

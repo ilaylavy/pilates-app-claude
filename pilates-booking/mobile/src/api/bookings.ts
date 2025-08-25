@@ -62,7 +62,17 @@ export const bookingsApi = {
         class_instance_id: classInstanceId,
         user_package_id: userPackageId,
       });
-      return { success: true, booking };
+      
+      const isNewBooking = booking.is_new_booking !== false; // Default to true if not specified
+      const message = isNewBooking 
+        ? 'Class booked successfully!' 
+        : 'You already have a booking for this class';
+      
+      return { 
+        success: true, 
+        booking,
+        message 
+      };
     } catch (error: any) {
       return {
         success: false,

@@ -10,6 +10,7 @@ import { AuthProvider } from './src/hooks/useAuth';
 import Navigation from './src/navigation/Navigation';
 import { STRIPE_PUBLISHABLE_KEY } from './src/utils/config';
 import { Logger, setupGlobalErrorHandler } from './src/services/LoggingService';
+import { apiClient } from './src/api/client';
 
 // Suppress all known warnings for cleaner development experience
 LogBox.ignoreLogs([
@@ -71,6 +72,16 @@ export default function App() {
       isTablet: Platform.OS === 'ios' && Platform.isPad,
       constants: Platform.constants
     });
+
+    // Development helper: expose clearTokens globally for debugging
+    if (__DEV__) {
+      (global as any).clearTokens = async () => {
+        console.log('🧹 Clearing stored tokens...');
+        await apiClient.clearTokens();
+        console.log('✅ Tokens cleared! Reload the app to see login screen.');
+      };
+      console.log('💡 Development tip: Call clearTokens() in console to reset auth');
+    }
     
     return () => {
       // Log app shutdown

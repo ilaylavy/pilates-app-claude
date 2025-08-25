@@ -9,7 +9,6 @@ import {
   TextInput,
   ScrollView,
   RefreshControl,
-  Share,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,9 +18,12 @@ import { useNavigation } from '@react-navigation/native';
 
 import { COLORS, SPACING } from '../utils/config';
 import { bookingsApi } from '../api/bookings';
+import { useApiErrorHandler } from '../utils/errorMessages';
 import { socialApi } from '../api/social';
-import { Booking } from '../types';
-import BookingCard from '../components/BookingCard';
+import { useAuth } from '../hooks/useAuth';
+import { Booking, ClassInstance } from '../types';
+import ClassCard from '../components/ClassCard';
+import ClassDetailsModal from '../components/ClassDetailsModal';
 
 type TabType = 'upcoming' | 'past' | 'cancelled';
 
@@ -37,9 +39,13 @@ const BookingsScreen: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<FilterOptions>({ withFriendsOnly: false });
+  const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const { handleError } = useApiErrorHandler();
+  const { isAuthenticated } = useAuth();
 
   // Fetch user bookings
   const {
@@ -50,6 +56,7 @@ const BookingsScreen: React.FC = () => {
   } = useQuery({
     queryKey: ['user-bookings'],
     queryFn: () => bookingsApi.getUserBookings(),
+    enabled: isAuthenticated,
   });
 
   // Cancel booking mutation
@@ -57,11 +64,14 @@ const BookingsScreen: React.FC = () => {
     mutationFn: (bookingId: number) => bookingsApi.cancelBooking(bookingId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
       Alert.alert('Success', 'Booking cancelled successfully');
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to cancel booking');
+      const { title, message } = handleError(error, 'Failed to cancel booking');
+      Alert.alert(title, message);
     },
   });
 
@@ -125,31 +135,37 @@ const BookingsScreen: React.FC = () => {
   }, [bookings, activeTab, searchQuery, filters]);
 
   const handleBookingPress = (booking: Booking) => {
-    navigation.navigate('ClassDetails' as any, { classId: booking.class_instance.id });
+    setSelectedClass(booking.class_instance);
+    setDetailsModalVisible(true);
   };
 
   const handleCancelBooking = (bookingId: number) => {
-    cancelBookingMutation.mutate(bookingId);
-  };
-
-  const handleShareBooking = async (booking: Booking) => {
-    try {
-      const classUrl = `pilates://class/${booking.class_instance.id}`;
-      const { date, time } = formatDateTime(booking.class_instance.start_datetime);
-      
-      await Share.share({
-        message: `Join me for ${booking.class_instance.template.name} on ${date} at ${time}! ${classUrl}`,
-        title: 'Join me for a Pilates class!',
-      });
-    } catch (error) {
-      console.error('Share error:', error);
+    // Prevent double cancellation
+    if (cancelBookingMutation.isPending) {
+      return;
     }
+    
+    // Find the booking to check if it can still be cancelled
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking || booking.status !== 'confirmed') {
+      Alert.alert('Error', 'This booking cannot be cancelled');
+      return;
+    }
+    
+    Alert.alert(
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes', 
+          style: 'destructive',
+          onPress: () => cancelBookingMutation.mutate(bookingId)
+        }
+      ]
+    );
   };
 
-  const handleRescheduleBooking = (booking: Booking) => {
-    // TODO: Navigate to reschedule screen
-    Alert.alert('Reschedule', 'Reschedule functionality coming soon!');
-  };
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -179,13 +195,15 @@ const BookingsScreen: React.FC = () => {
   );
 
   const renderBookingItem = ({ item }: { item: Booking }) => (
-    <BookingCard
+    <ClassCard
+      classInstance={item.class_instance}
       booking={item}
+      variant="list"
       onPress={() => handleBookingPress(item)}
-      onCancel={() => handleCancelBooking(item.id)}
-      onShare={() => handleShareBooking(item)}
-      onReschedule={() => handleRescheduleBooking(item)}
-      showSwipeActions={activeTab === 'upcoming'}
+      onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
+      isBooked={item.status === 'confirmed'}
+      availableSpots={item.class_instance.available_spots}
+      showActions={true}
     />
   );
 
@@ -322,10 +340,19 @@ const BookingsScreen: React.FC = () => {
             </Text>
           </View>
         }
-        contentContainerStyle={filteredBookings.length === 0 ? styles.emptyList : undefined}
+        contentContainerStyle={filteredBookings.length === 0 ? styles.emptyList : styles.listContent}
       />
 
       <FilterModal />
+
+      <ClassDetailsModal
+        visible={detailsModalVisible}
+        classInstance={selectedClass}
+        onClose={() => {
+          setDetailsModalVisible(false);
+          setSelectedClass(null);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -429,6 +456,9 @@ const styles = StyleSheet.create({
   emptyList: {
     flexGrow: 1,
     justifyContent: 'center',
+  },
+  listContent: {
+    padding: SPACING.lg,
   },
   filterModal: {
     flex: 1,

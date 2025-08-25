@@ -20,10 +20,18 @@ up: ## Start all services
 down: ## Stop all services
 	docker-compose down
 
-logs: ## Show logs from all services
+logs: ## Show filtered logs from all services (errors, warnings, and API calls only)
+	docker-compose logs -f | powershell -Command "Select-String -Pattern '(ERROR|WARN|INFO.*api|POST|GET|PUT|DELETE|Failed|Exception)'"
+
+logs-all: ## Show all logs from all services (unfiltered)
 	docker-compose logs -f
 
-backend-logs: ## Show backend logs
+start: down up logs  ## reset the backend and logs
+
+backend-logs: ## Show filtered backend logs (API calls, errors, warnings only)
+	docker-compose logs -f backend | powershell -Command "Select-String -Pattern '(ERROR|WARN|INFO.*api|POST|GET|PUT|DELETE|Failed|Exception|uvicorn)'"
+
+backend-logs-all: ## Show all backend logs (unfiltered)
 	docker-compose logs -f backend
 
 db-logs: ## Show database logs
@@ -57,7 +65,9 @@ migrate: ## Run database migrations
 	docker-compose exec backend python -m alembic upgrade head
 
 seed: ## Seed database with initial data
-	docker-compose exec backend python -m app.scripts.seed_data
+	docker-compose exec backend python -m app.scripts.seed_manager seed --type heavy
+seed-list: ## List available seed scripts
+	docker-compose exec backend python -m app.scripts.seed_manager list
 
 clean: ## Clean up containers and volumes
 	docker-compose down -v

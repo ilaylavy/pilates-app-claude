@@ -374,12 +374,23 @@ rm -rf node_modules && npm install
 - Use React Query for client-side caching
 - Implement lazy loading for screens
 
+## 📚 Documentation
+
+Detailed documentation is organized in the `docs/` folder:
+
+- [Mobile App Guide](docs/mobile-app.md) - React Native architecture, patterns, and development workflow
+- [Testing Guide](docs/testing.md) - Testing setup and best practices
+- [Package System](docs/packages.md) - Credit-based booking system
+- [Payment Integration](docs/payments.md) - Stripe payment processing
+- [Social Features](docs/social-features.md) - Friend system and social booking (planned)
+- [Security Implementation](docs/security.md) - Security measures and configuration
+- [Logging System](docs/logging.md) - Comprehensive logging and monitoring
+
 ## 🎯 Roadmap
 
 - [ ] Email notifications for class reminders
 - [ ] Advanced analytics dashboard
 - [ ] Multi-studio support
-- [ ] Integration with payment gateways
 - [ ] Instructor mobile app
 - [ ] Calendar synchronization
-- [ ] Social features and reviews
+- [ ] Enhanced social features and reviews

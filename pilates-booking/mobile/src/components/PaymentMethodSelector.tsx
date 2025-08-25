@@ -1,4 +1,5 @@
 import React from 'react';
+
 import {
   View,
   Text,
@@ -9,7 +10,7 @@ import {
 } from 'react-native';
 import { COLORS, SPACING } from '../utils/config';
 
-export type PaymentMethodType = 'card' | 'cash';
+export type PaymentMethodType = 'CREDIT_CARD' | 'CASH';
 
 interface PaymentMethodOption {
   id: PaymentMethodType;
@@ -27,13 +28,13 @@ interface Props {
 
 const PAYMENT_METHODS: PaymentMethodOption[] = [
   {
-    id: 'card',
+    id: 'CREDIT_CARD',
     title: 'Credit/Debit Card',
     description: 'Pay securely with your card',
     icon: '💳',
   },
   {
-    id: 'cash',
+    id: 'CASH',
     title: 'Pay with Cash',
     description: 'Reserve now, pay at studio reception',
     icon: '💵',
@@ -87,7 +88,7 @@ const PaymentMethodSelector: React.FC<Props> = ({
           </View>
         </View>
         
-        {method.id === 'cash' && (
+        {method.id === 'CASH' && (
           <View style={styles.cashNote}>
             <Text style={styles.cashNoteText}>
               ⚠️ Package will be reserved for 48 hours
@@ -154,7 +155,7 @@ const PaymentMethodSelector: React.FC<Props> = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Payment Method</Text>
-        {selectedMethod === 'cash' && (
+        {selectedMethod === 'CASH' && (
           <TouchableOpacity
             style={styles.infoButton}
             onPress={() => onHideInfoModal && onHideInfoModal()}

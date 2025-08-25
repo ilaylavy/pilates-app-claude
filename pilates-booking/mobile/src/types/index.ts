@@ -80,8 +80,39 @@ export interface UserPackage {
   is_expired: boolean;
   is_valid: boolean;
   days_until_expiry: number;
+  status: 'active' | 'expired' | 'cancelled';
+  // Simple payment fields
+  payment_status: 'pending' | 'confirmed' | 'rejected';
+  payment_method: 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
+  approved_by?: number;
+  approved_at?: string;
+  rejection_reason?: string;
+  payment_reference?: string;
+  admin_notes?: string;
+  is_pending_approval: boolean;
+  is_approved: boolean;
+  is_rejected: boolean;
+  is_payment_pending: boolean;
+  
+  // Package history and priority fields
+  is_historical: boolean;
+  is_primary?: boolean;
+  usage_priority?: number;
+  
   created_at: string;
   updated_at: string;
+}
+
+export interface UserPackagesResponse {
+  active_packages: UserPackage[];
+  pending_packages: UserPackage[];
+  historical_packages: UserPackage[];
+  total_active: number;
+  total_pending: number;
+  total_historical: number;
+  total_credits: number;
+  has_unlimited: boolean;
+  primary_package_id?: number;
 }
 
 export interface Booking {
@@ -97,6 +128,7 @@ export interface Booking {
   user: User;
   class_instance: ClassInstance;
   can_cancel: boolean;
+  is_new_booking?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -151,6 +183,7 @@ export interface UserListItem {
   role: 'student' | 'instructor' | 'admin';
   is_active: boolean;
   is_verified: boolean;
+  avatar_url?: string;
   created_at: string;
   total_bookings: number;
   active_packages: number;
@@ -299,4 +332,116 @@ export interface Invoice {
   created: number;
   invoice_pdf?: string;
   hosted_invoice_url?: string;
+}
+
+// Payment Approval Types
+export type PaymentMethodType = 'CREDIT_CARD' | 'CASH' | 'BANK_TRANSFER' | 'PAYPAL' | 'STRIPE';
+export type PaymentStatusType = 'pending' | 'confirmed' | 'rejected';
+export type UserPackageStatusType = 'active' | 'expired' | 'cancelled';
+
+export interface PendingApproval {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  package_id: number;
+  package_name: string;
+  package_credits: number;
+  package_price: number;
+  payment_method: PaymentMethodType;
+  payment_reference?: string;
+  purchase_date: string;
+  hours_waiting: number;
+  
+  payment_status: PaymentStatusType;
+}
+
+export interface PaymentApprovalRequest {
+  payment_reference?: string;
+  admin_notes?: string;
+}
+
+export interface PaymentRejectionRequest {
+  rejection_reason: string;
+  admin_notes?: string;
+}
+
+export interface ApprovalStats {
+  total_pending: number;
+  pending_today: number;
+  pending_over_24h: number;
+  avg_approval_time_hours: number;
+  total_approved_today: number;
+  total_rejected_today: number;
+}
+
+export interface CashPaymentInstructions {
+  message: string;
+  status: string;
+  package_id: number;
+  package_name: string;
+  user_package_id: number;
+  price: number;
+  currency: string;
+  payment_method: string;
+  reference_code: string;
+  payment_instructions: string[];
+  reservation_expires_at: string;
+  estimated_approval_time: string;
+}
+
+// Enhanced Home Page Types
+export interface ExtendedUserStats {
+  total_bookings: number;
+  bookings_this_month: number;
+  monthly_goal: number;
+  attendance_rate: number;
+  member_since: string;
+  week_streak: number;
+  last_class_date?: string;
+  days_since_last_class: number;
+}
+
+export interface Announcement {
+  id: number;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'urgent';
+  created_at: string;
+  expires_at?: string;
+  is_dismissible: boolean;
+  target_roles?: ('student' | 'instructor' | 'admin')[];
+}
+
+export interface TodaySchedule {
+  id: number;
+  class_name: string;
+  start_time: string;
+  end_time: string;
+  current_bookings: number;
+  capacity: number;
+  waitlist_count: number;
+  status: 'scheduled' | 'cancelled' | 'completed';
+}
+
+export interface DashboardMetrics {
+  weekly_capacity_utilization: number;
+  active_users_count: number;
+  active_users_growth: number;
+  today_classes: TodaySchedule[];
+  waitlist_notifications: Array<{
+    class_id: number;
+    class_name: string;
+    start_time: string;
+    waitlist_count: number;
+  }>;
+}
+
+export interface CreateAnnouncementRequest {
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'urgent';
+  expires_at?: string;
+  target_roles?: ('student' | 'instructor' | 'admin')[];
+  is_dismissible?: boolean;
 }

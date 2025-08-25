@@ -50,7 +50,14 @@ async def get_current_user(
         auth_logger.warning("Authentication failed - Invalid token")
         raise credentials_exception
 
-    stmt = select(User).where(User.id == int(user_id))
+    # Use selectinload to preload relationships and avoid lazy loading issues
+    from sqlalchemy.orm import selectinload
+    
+    stmt = (
+        select(User)
+        .options(selectinload(User.user_packages))
+        .where(User.id == int(user_id))
+    )
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 

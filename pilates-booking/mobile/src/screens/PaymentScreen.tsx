@@ -19,10 +19,11 @@ import {
   PaymentIntent,
   CardFieldInput
 } from '@stripe/stripe-react-native';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { COLORS, SPACING } from '../utils/config';
 import { paymentsApi } from '../api/payments';
+import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { packagesApi } from '../api/packages';
 import Button from '../components/common/Button';
 import PaymentMethodSelector, { PaymentMethodType } from '../components/PaymentMethodSelector';
@@ -58,6 +59,7 @@ interface Props {
 const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const { packageId, packageName, price, currency } = route.params;
   const { confirmPayment, initPaymentSheet, presentPaymentSheet } = useStripe();
+  const queryClient = useQueryClient();
 
   const [cardDetails, setCardDetails] = useState<CardFieldInput.Details>();
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('card');
@@ -72,7 +74,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     mutationFn: () => paymentsApi.createPaymentIntent(packageId, currency),
     onError: (error: any) => {
       console.error('Failed to create payment intent:', error);
-      Alert.alert('Payment Error', 'Failed to create payment. Please check your connection and try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create payment';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   });
@@ -81,6 +86,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const createCashReservationMutation = useMutation({
     mutationFn: () => paymentsApi.createCashReservation(packageId),
     onSuccess: (data) => {
+      // Invalidate queries to refresh package data
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      
       Vibration.vibrate(100);
       navigation.navigate('PurchaseConfirmation', {
         paymentMethod: 'cash',
@@ -93,7 +102,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     },
     onError: (error: any) => {
       console.error('Failed to create cash reservation:', error);
-      Alert.alert('Reservation Error', 'Failed to reserve package. Please try again.');
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to reserve package';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   });
@@ -102,6 +114,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
   const confirmPaymentMutation = useMutation({
     mutationFn: (paymentIntentId: string) => paymentsApi.confirmPayment(paymentIntentId),
     onSuccess: (data) => {
+      // Invalidate queries to refresh package data
+      queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+      queryClient.invalidateQueries({ queryKey: ['packages'] });
+      
       Vibration.vibrate([100, 100, 100]);
       navigation.navigate('PurchaseConfirmation', {
         paymentMethod: 'card',
@@ -118,7 +134,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       console.error('Failed to confirm payment:', error);
       Alert.alert(
         'Payment Confirmation Failed', 
-        'Your card was charged but we couldn\'t confirm the purchase. Please contact support with your payment receipt.',
+        error.response?.data?.detail || 'Your card was charged but we couldn\'t confirm the purchase. Please contact support with your payment receipt.',
         [
           { text: 'Contact Support', onPress: () => {/* TODO: Add support contact */} },
           { text: 'OK', style: 'cancel' }
@@ -159,7 +175,8 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       if (error) {
         let errorMessage = 'Payment failed. Please try again.';
         
-        switch (error.code) {
+        const errorCode = error.code as string;
+        switch (errorCode) {
           case 'card_declined':
             errorMessage = 'Your card was declined. Please try a different payment method.';
             break;
@@ -194,7 +211,10 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
       }
     } catch (error: any) {
       console.error('Payment error:', error);
-      Alert.alert('Payment Error', 'An unexpected error occurred. Please try again or contact support.');
+      const errorMessage = error.response?.data?.detail || error.message || 'An unexpected error occurred';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
       setLoading(false);
     }
   };
@@ -297,7 +317,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
     if (paymentMethod === 'card') {
       return (
         <Button
-          title={`Pay ${currency === 'ils' ? '₪' : currency.toUpperCase()}${price.toFixed(2)}`}
+          title={`Pay ${currency === 'ils' ? '₪' : currency.toUpperCase()}${Number(price || 0).toFixed(2)}`}
           onPress={handleCardPayment}
           disabled={loading || !cardDetails?.complete}
           loading={loading}
@@ -313,7 +333,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
           onPress={handleCashPayment}
           disabled={loading}
           loading={loading}
-          style={[styles.payButton, styles.cashPayButton]}
+          style={[styles.payButton, styles.cashPayButton] as any}
         />
       );
     }
@@ -330,7 +350,7 @@ const PaymentScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Package Information */}
         <View style={styles.packageInfo}>
           <Text style={styles.packageName}>{packageName}</Text>
-          <Text style={styles.packagePrice}>₪{price.toFixed(2)}</Text>
+          <Text style={styles.packagePrice}>₪{Number(price || 0).toFixed(2)}</Text>
         </View>
 
         {/* Payment Method Selection */}

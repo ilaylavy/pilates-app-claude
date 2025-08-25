@@ -15,7 +15,7 @@ from .middleware.logging import LoggingMiddleware
 from .middleware.security import (InputSanitizationMiddleware,
                                   IPWhitelistMiddleware, RateLimitMiddleware,
                                   SecurityMiddleware)
-from .services.business_logging_service import business_logger
+from .services.business_logging_service import business_logger, EventType
 
 
 @asynccontextmanager
@@ -24,8 +24,8 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger = get_logger("app")
 
-    # Setup database logging
-    setup_database_logging(engine)
+    # Database logging disabled for performance
+    # setup_database_logging(engine)
 
     # Log system startup
     logger.info("Starting Pilates Booking System API")
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Pilates Booking System API")
-    business_logger.log_event("system.shutdown")
+    business_logger.log_event(EventType.SYSTEM_SHUTDOWN)
 
     if hasattr(app.state, "redis") and app.state.redis:
         app.state.redis.close()
@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if settings.API_V1_STR.startswith("/") else f"/{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
 
@@ -81,9 +81,9 @@ if admin_whitelist:
     app.add_middleware(IPWhitelistMiddleware, whitelist=admin_whitelist)
 
 # Set all CORS enabled origins
-if settings.CORS_ORIGINS:
+cors_origins = settings.cors_origins_list
+if cors_origins:
     # Configure CORS properly for production
-    cors_origins = settings.CORS_ORIGINS
     if settings.ENVIRONMENT == "production":
         # Remove wildcard in production
         cors_origins = [origin for origin in cors_origins if origin != "*"]
@@ -107,7 +107,7 @@ if settings.CORS_ORIGINS:
         expose_headers=["X-Request-ID", "API-Version"],
     )
 
-app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix=settings.API_V1_STR if settings.API_V1_STR.startswith("/") else f"/{settings.API_V1_STR}")
 
 
 @app.get("/")

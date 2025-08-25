@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from ....core.logging_config import get_logger
 from ....services.business_logging_service import business_logger
@@ -30,8 +30,7 @@ class DeviceInfo(BaseModel):
     device_id: str = Field(alias="deviceId")
     is_emulator: bool = Field(alias="isEmulator")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class NetworkInfo(BaseModel):
@@ -41,8 +40,7 @@ class NetworkInfo(BaseModel):
     type: str
     is_internet_reachable: bool = Field(alias="isInternetReachable")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class LogContext(BaseModel):
@@ -58,8 +56,7 @@ class LogContext(BaseModel):
     device_info: DeviceInfo = Field(alias="deviceInfo")
     network_info: Optional[NetworkInfo] = Field(None, alias="networkInfo")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class MobileLogEntry(BaseModel):
@@ -73,17 +70,18 @@ class MobileLogEntry(BaseModel):
     extra: Optional[Dict[str, Any]] = None
     stack_trace: Optional[str] = Field(None, alias="stackTrace")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
-    @validator("level")
+    @field_validator("level")
+    @classmethod
     def validate_level(cls, v):
         valid_levels = ["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
             raise ValueError(f"Invalid log level: {v}")
         return v.upper()
 
-    @validator("timestamp")
+    @field_validator("timestamp")
+    @classmethod
     def validate_timestamp(cls, v):
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
@@ -100,10 +98,10 @@ class MobileEventData(BaseModel):
     timestamp: str
     context: LogContext
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
-    @validator("timestamp")
+    @field_validator("timestamp")
+    @classmethod
     def validate_timestamp(cls, v):
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
@@ -119,10 +117,10 @@ class MobileLogBatch(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_info: DeviceInfo = Field(alias="deviceInfo")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
-    @validator("logs")
+    @field_validator("logs")
+    @classmethod
     def validate_logs_count(cls, v):
         if len(v) > 100:  # Prevent abuse
             raise ValueError("Too many logs in batch (max 100)")
@@ -136,10 +134,10 @@ class MobileEventBatch(BaseModel):
     session_id: str = Field(alias="sessionId")
     device_info: DeviceInfo = Field(alias="deviceInfo")
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
-    @validator("events")
+    @field_validator("events")
+    @classmethod
     def validate_events_count(cls, v):
         if len(v) > 100:  # Prevent abuse
             raise ValueError("Too many events in batch (max 100)")

@@ -5,7 +5,7 @@
  * Provides easy access to logging functionality and automatic lifecycle tracking.
  */
 
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native';
 import { Logger, trackScreenView, trackUserAction } from '../services/LoggingService';
 import { useAuth } from './useAuth';

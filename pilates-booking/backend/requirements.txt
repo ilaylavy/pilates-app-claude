@@ -21,3 +21,8 @@ flake8==6.1.0
 python-dotenv==1.0.0
 celery==5.3.4
 stripe==8.7.0
+factory_boy==3.3.0
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+faker==20.1.0
+aiosqlite==0.19.0

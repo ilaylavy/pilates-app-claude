@@ -21,17 +21,29 @@ interface CalendarViewProps {
   onClassPress?: (classInstance: ClassInstance) => void;
   onEditClass?: (classInstance: ClassInstance) => void;
   onDeleteClass?: (classInstance: ClassInstance) => void;
+  onBook?: (classInstance: ClassInstance) => void;
+  onJoinWaitlist?: (classInstance: ClassInstance) => void;
+  onCancel?: (classInstance: ClassInstance) => void;
+  bookedClassIds?: Set<number>;
+  hasAvailableCredits?: boolean;
+  isBookingInProgress?: (classId: number) => boolean;
 }
 
 const CalendarView: React.FC<CalendarViewProps> = ({
   onClassPress,
   onEditClass,
   onDeleteClass,
+  onBook,
+  onJoinWaitlist,
+  onCancel,
+  bookedClassIds = new Set(),
+  hasAvailableCredits = true,
+  isBookingInProgress = () => false,
 }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayModalVisible, setDayModalVisible] = useState(false);
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isStudent } = useUserRole();
 
   // Fetch classes for current month
   const {
@@ -108,10 +120,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const handleDayPress = (day: DateData) => {
     setSelectedDate(day.dateString);
-    const dayClasses = getClassesForDate(day.dateString);
-    if (dayClasses.length > 0) {
-      setDayModalVisible(true);
-    }
+    // Always show the selected date, even if no classes exist
+    // Modal is now optional - classes are shown below calendar
   };
 
   const handleMonthChange = (month: DateData) => {
@@ -194,6 +204,81 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         enableSwipeMonths={true}
       />
 
+      {/* Selected Date Classes Section */}
+      {selectedDate && (
+        <View style={styles.selectedDateSection}>
+          <View style={styles.selectedDateHeader}>
+            <Text style={styles.selectedDateTitle}>
+              {new Date(selectedDate).toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setSelectedDate(null)}
+              style={styles.clearSelectionButton}
+            >
+              <Ionicons name="close" size={20} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.dailyClassesContainer} showsVerticalScrollIndicator={false}>
+            {selectedDateClasses.length === 0 ? (
+              <View style={styles.emptyDayContainer}>
+                <Ionicons name="calendar-outline" size={32} color={COLORS.textSecondary} />
+                <Text style={styles.emptyDayText}>No classes scheduled for this day</Text>
+                {isAdmin && (
+                  <TouchableOpacity
+                    style={styles.addClassButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Add Class',
+                        `Add a new class for ${new Date(selectedDate).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric'
+                        })}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Add Class', onPress: () => console.log('Add class for', selectedDate) }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="add" size={16} color={COLORS.white} />
+                    <Text style={styles.addClassButtonText}>Add Class</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              selectedDateClasses.map((classInstance) => (
+                <ClassCard
+                  key={classInstance.id}
+                  classInstance={classInstance}
+                  variant="list"
+                  isBooked={bookedClassIds.has(classInstance.id)}
+                  showActions={isStudent}
+                  hasAvailableCredits={hasAvailableCredits}
+                  isBookingInProgress={isBookingInProgress(classInstance.id)}
+                  onPress={() => {
+                    onClassPress?.(classInstance);
+                  }}
+                  onEdit={() => {
+                    onEditClass?.(classInstance);
+                  }}
+                  onDelete={() => onDeleteClass?.(classInstance)}
+                  onBook={() => onBook?.(classInstance)}
+                  onJoinWaitlist={() => onJoinWaitlist?.(classInstance)}
+                  onCancel={() => onCancel?.(classInstance)}
+                />
+              ))
+            )}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Legend */}
       <View style={styles.legend}>
         <Text style={styles.legendTitle}>Class Levels:</Text>
@@ -215,7 +300,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <Text style={styles.legendText}>All Levels</Text>
           </View>
         </View>
-        {isAdmin && (
+        {isAdmin && !selectedDate && (
           <Text style={styles.adminHint}>
             Long press on a date to add a new class
           </Text>
@@ -259,7 +344,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     setDayModalVisible(false);
                     onEditClass?.(classInstance);
                   }}
-                  onDelete={onDeleteClass}
+                  onDelete={() => onDeleteClass?.(classInstance)}
                 />
               ))
             )}
@@ -274,6 +359,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  selectedDateSection: {
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.lightGray,
+    maxHeight: 300,
+  },
+  selectedDateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  selectedDateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    flex: 1,
+  },
+  clearSelectionButton: {
+    padding: SPACING.xs,
+    marginLeft: SPACING.sm,
+  },
+  dailyClassesContainer: {
+    maxHeight: 220,
+  },
+  emptyDayContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+  },
+  emptyDayText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  addClassButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    gap: 4,
+  },
+  addClassButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
   legend: {
     padding: SPACING.lg,

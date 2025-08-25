@@ -84,14 +84,20 @@ class BusinessEventLogger:
         self.logger = get_logger("app.events")
         self.security_logger = get_logger("app.security")
 
-    def log_event(self, event_type: EventType, **kwargs):
+    def log_event(self, event_type, **kwargs):
         """Log a business event with standardized format."""
         event_data = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             **kwargs,
         }
 
-        self.logger.log_event(event_type.value, **event_data)
+        # Handle both EventType enums and string values
+        if isinstance(event_type, EventType):
+            event_type_str = event_type.value
+        else:
+            event_type_str = str(event_type)
+            
+        self.logger.log_event(event_type_str, **event_data)
 
     # User Events
     def log_user_registered(

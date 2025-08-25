@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.logging_config import get_logger
@@ -30,16 +30,15 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-@router.post(
-    "/create", response_model=BookingResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/create", response_model=BookingResponse)
 async def create_booking(
     request: Request,
     booking_create: BookingCreate,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Create a new booking."""
+    """Create a new booking or return existing booking."""
     booking_service = BookingService(db)
     audit_service = AuditService(db)
 
@@ -62,10 +61,20 @@ async def create_booking(
             user_package_id=booking_create.user_package_id,
         )
 
-        # Log successful booking creation with audit
+        # Set appropriate status code based on whether booking is new or existing
+        if getattr(booking, 'is_new_booking', True):
+            response.status_code = status.HTTP_201_CREATED
+            audit_action = AuditActionType.BOOKING_CREATE
+            log_message = "Booking creation successful"
+        else:
+            response.status_code = status.HTTP_200_OK
+            audit_action = AuditActionType.DATA_ACCESS  
+            log_message = "Existing booking returned"
+
+        # Log with audit
         await audit_service.log_from_request(
             request=request,
-            action=AuditActionType.BOOKING_CREATE,
+            action=audit_action,
             user=current_user,
             security_level=SecurityLevel.MEDIUM,
             details={
@@ -73,15 +82,17 @@ async def create_booking(
                 "class_instance_id": booking_create.class_instance_id,
                 "user_package_id": booking_create.user_package_id,
                 "booking_status": booking.status.value,
+                "is_new_booking": getattr(booking, 'is_new_booking', True),
             },
         )
 
         logger.info(
-            "Booking creation successful",
+            log_message,
             user_id=str(current_user.id),
             booking_id=str(booking.id),
             class_id=booking_create.class_instance_id,
             status=booking.status.value,
+            is_new_booking=getattr(booking, 'is_new_booking', True),
             client_ip=client_ip,
         )
 
@@ -292,7 +303,7 @@ async def get_user_bookings(
 @router.get("/my-bookings", response_model=List[BookingResponse])
 async def get_my_bookings(
     request: Request,
-    status: Optional[str] = None,
+    booking_status: Optional[str] = None,
     upcoming: bool = False,
     limit: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
@@ -309,14 +320,14 @@ async def get_my_bookings(
             "Filtered user bookings retrieval request",
             user_id=str(current_user.id),
             email=current_user.email,
-            status_filter=status,
+            status_filter=booking_status,
             upcoming=upcoming,
             limit=limit,
             client_ip=client_ip,
         )
 
         bookings = await booking_service.get_user_bookings_filtered(
-            user_id=current_user.id, status=status, upcoming=upcoming, limit=limit
+            user_id=current_user.id, status=booking_status, upcoming=upcoming, limit=limit
         )
 
         # Log successful retrieval
@@ -324,7 +335,7 @@ async def get_my_bookings(
             "Filtered user bookings retrieved successfully",
             user_id=str(current_user.id),
             bookings_count=len(bookings),
-            status_filter=status,
+            status_filter=booking_status,
             upcoming=upcoming,
             limit=limit,
             client_ip=client_ip,
@@ -338,7 +349,7 @@ async def get_my_bookings(
             security_level=SecurityLevel.LOW,
             details={
                 "resource": "user_bookings_filtered",
-                "status_filter": status,
+                "status_filter": booking_status,
                 "upcoming": upcoming,
                 "limit": limit,
                 "results_count": len(bookings),

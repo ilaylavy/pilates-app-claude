@@ -1,16 +1,16 @@
-import React from 'react';
+import React, { ReactNode, FC } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useUserRole, UserRole } from '../hooks/useUserRole';
 import { COLORS, SPACING } from '../utils/config';
 
 interface AdminGuardProps {
-  children: React.ReactNode;
+  children: ReactNode;
   requiredRoles: UserRole[];
-  fallback?: React.ReactNode;
+  fallback?: ReactNode;
   showUnauthorized?: boolean;
 }
 
-export const AdminGuard: React.FC<AdminGuardProps> = ({
+export const AdminGuard: FC<AdminGuardProps> = ({
   children,
   requiredRoles,
   fallback,

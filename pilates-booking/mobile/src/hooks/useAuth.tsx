@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { authApi } from '../api/auth';
+import { apiClient } from '../api/client';
 import { User, AuthTokens, LoginRequest, RegisterRequest } from '../types';
 import { STORAGE_KEYS } from '../utils/config';
 import { secureStorage } from '../utils/secureStorage';
@@ -45,9 +46,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const initializeSecurity = async () => {
     await securityManager.initialize({
-      autoLogoutMinutes: 15,
+      autoLogoutMinutes: 999999, // Effectively disable auto-logout (999999 minutes = ~694 days)
       enableBiometric: false,
-      clearDataOnBackground: true,
+      clearDataOnBackground: false, // Don't clear data when app goes to background
       enableJailbreakDetection: true,
     });
     
@@ -64,11 +65,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
-        // Optionally validate token with server
-        await fetchCurrentUser();
+        // Try to validate token with server, but don't clear auth data on network errors
+        try {
+          await fetchCurrentUser();
+        } catch (error: any) {
+          console.log('Token validation failed:', error.message);
+          
+          // Only clear auth data if it's a 401/403 (invalid token), not on network errors
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            console.log('Token is invalid, clearing auth data');
+            await clearAuthData();
+          } else {
+            // Network error or other issue - keep user logged in, they can try again
+            console.log('Network error during token validation, keeping user logged in');
+          }
+        }
       }
     } catch (error) {
       console.error('Error checking stored auth:', error);
+      // If there's any error with stored auth, clear it to force fresh login
+      await clearAuthData();
     } finally {
       setIsLoading(false);
     }
@@ -84,20 +100,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const currentUser = await authApi.getCurrentUser();
       setUser(currentUser);
       await secureStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(currentUser));
-    } catch (error) {
-      // Token might be invalid, clear storage
-      await clearAuthData();
+    } catch (error: any) {
+      // Only clear auth data if it's a 401/403 (invalid token), not on network errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log('Token is invalid in fetchCurrentUser, clearing auth data');
+        await clearAuthData();
+      } else {
+        // Network error or other issue - don't clear auth, just log it
+        console.log('Network error in fetchCurrentUser, keeping user logged in:', error.message);
+      }
     }
   };
 
   const clearAuthData = async () => {
-    await Promise.all([
-      secureStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN),
-      secureStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN),
-      secureStorage.removeItem(STORAGE_KEYS.USER_DATA),
-    ]);
+    // Clear user state immediately to prevent UI inconsistency
     setUser(null);
+    
+    // Clear all caches first to prevent stale data
     queryClient.clear();
+    
+    // Clear API client internal state and storage
+    await apiClient.clearTokens();
   };
 
   const clearSensitiveData = async () => {
@@ -146,18 +169,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
-    // Logout from server if possible
-    try {
-      const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      if (refreshToken) {
-        await authApi.logout(refreshToken);
-      }
-    } catch (error) {
-      console.warn('Failed to logout from server:', error);
-    }
+    // Clear user state immediately to prevent showing wrong user
+    setUser(null);
     
+    // Get refresh token before clearing storage
+    const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    
+    // Clear all local data first
     await clearAuthData();
     securityManager.cleanup();
+    
+    // Then logout from server (don't await to prevent blocking)
+    if (refreshToken) {
+      try {
+        await authApi.logout(refreshToken);
+      } catch (error) {
+        console.warn('Failed to logout from server:', error);
+      }
+    }
   };
 
   const enableBiometric = async () => {

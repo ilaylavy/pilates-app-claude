@@ -3,21 +3,25 @@
 // - Android emulator: 10.0.2.2:8000
 // - iOS simulator: localhost:8000  
 // - Physical device: your actual IP (check with ipconfig/ifconfig)
-import { Platform } from 'react-native';
 
 const getDevApiUrl = () => {
   // For physical device, use actual IP
-  const LOCAL_IP = '192.168.173.110'; // Updated to working IP
+  const LOCAL_IP = '10.100.102.16'; // Use working backup IP as primary
   return `http://${LOCAL_IP}:8000`;
 };
 
 // Backup URLs to try if primary fails
 export const BACKUP_API_URLS = [
+  'http://192.168.71.110:8000',
+  'http://10.100.102.16:8000',
+  'http://172.31.208.1:8000',
   'http://10.100.102.24:8000',  // WSL/Docker host IP
   'http://127.0.0.1:8000',     // localhost
+  'http://10.0.0.19:8000',      // Another local IP
   'http://10.0.2.2:8000',      // Android emulator host
+  'http://10.0.0.22:8000',      // Another local IP
   'http://localhost:8000',     // standard localhost
-  'http://192.168.1.107:8000', // Common router IP range
+  'http://192.168.235.110:8000', // Common router IP range
   'http://192.168.0.107:8000', // Common router IP range
 ];
 
@@ -54,6 +58,8 @@ export const API_ENDPOINTS = {
     ME: '/api/v1/users/me',
     AVATAR: '/api/v1/users/me/avatar',
     STATS: '/api/v1/users/me/stats',
+    STATS_EXTENDED: '/api/v1/users/me/stats/extended',
+    ANNOUNCEMENTS: '/api/v1/users/me/announcements',
     PREFERENCES: '/api/v1/users/me/preferences',
     BOOKING_HISTORY: '/api/v1/users/me/booking-history',
   },

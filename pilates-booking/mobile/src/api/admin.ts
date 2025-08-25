@@ -32,6 +32,16 @@ export const adminApi = {
     return response.data;
   },
 
+  getUserPackages: async (userId: number) => {
+    const response = await apiClient.get(`/api/v1/admin/users/${userId}/packages`);
+    return response.data;
+  },
+
+  getUserBookings: async (userId: number) => {
+    const response = await apiClient.get(`/api/v1/admin/users/${userId}/bookings`);
+    return response.data;
+  },
+
   // Analytics
   getDashboardAnalytics: async (): Promise<DashboardAnalytics> => {
     const response = await apiClient.get('/api/v1/admin/analytics/dashboard');

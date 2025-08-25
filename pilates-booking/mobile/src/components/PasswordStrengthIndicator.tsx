@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { View, Text, StyleSheet } from 'react-native';
 
 interface PasswordRequirement {
@@ -93,7 +94,7 @@ export const PasswordStrengthIndicator: React.FC<PasswordStrengthIndicatorProps>
             style={[
               styles.strengthBarFill,
               {
-                width: getStrengthWidth(),
+                width: getStrengthWidth() as any,
                 backgroundColor: getStrengthColor(),
               },
             ]}
