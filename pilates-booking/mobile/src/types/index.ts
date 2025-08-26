@@ -195,10 +195,10 @@ export interface DashboardAnalytics {
   total_bookings: number;
   total_revenue: number;
   monthly_revenue: number;
-  popular_packages: Array<{
+  popular_packages: {
     name: string;
     count: number;
-  }>;
+  }[];
 }
 
 export interface RevenueReport {
@@ -207,15 +207,15 @@ export interface RevenueReport {
     start_date: string;
     end_date: string;
   };
-  revenue_by_package: Array<{
+  revenue_by_package: {
     package: string;
     revenue: number;
     sales_count: number;
-  }>;
-  revenue_by_date: Array<{
+  }[];
+  revenue_by_date: {
     date: string;
     revenue: number;
-  }>;
+  }[];
 }
 
 export interface AttendanceReport {
@@ -223,14 +223,14 @@ export interface AttendanceReport {
     start_date: string;
     end_date: string;
   };
-  popular_times: Array<{
+  popular_times: {
     time: string;
     bookings: number;
-  }>;
-  bookings_by_date: Array<{
+  }[];
+  bookings_by_date: {
     date: string;
     bookings: number;
-  }>;
+  }[];
 }
 
 // New profile-related types
@@ -429,12 +429,12 @@ export interface DashboardMetrics {
   active_users_count: number;
   active_users_growth: number;
   today_classes: TodaySchedule[];
-  waitlist_notifications: Array<{
+  waitlist_notifications: {
     class_id: number;
     class_name: string;
     start_time: string;
     waitlist_count: number;
-  }>;
+  }[];
 }
 
 export interface CreateAnnouncementRequest {

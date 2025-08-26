@@ -12,14 +12,14 @@ import { useAuth, AuthProvider } from '../../../src/hooks/useAuth';
 import { UserRole } from '../../../src/types';
 import { mockUsers, mockApiResponses } from '../../testUtils/testData';
 
+import apiClient from '../../../src/api/client';
+
 // Mock the API client
 jest.mock('../../../src/api/client', () => ({
   post: jest.fn(),
   get: jest.fn(),
   put: jest.fn(),
 }));
-
-import apiClient from '../../../src/api/client';
 
 describe('useAuth Hook', () => {
   const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;

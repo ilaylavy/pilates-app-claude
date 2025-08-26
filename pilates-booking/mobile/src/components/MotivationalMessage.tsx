@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface MotivationalMessageProps {
   message?: string;
@@ -12,27 +13,29 @@ const MotivationalMessage: React.FC<MotivationalMessageProps> = ({
   message,
   type = 'quote' 
 }) => {
+  const { t, rtlText, isRTL } = useTranslation();
+  
   const defaultMessages = {
     quote: [
-      "Every workout is a step towards a stronger you! 💪",
-      "Progress, not perfection. Keep showing up! ✨",
-      "Your body can do it. It's your mind you need to convince! 🧠",
-      "Consistency is the key to transformation! 🔑",
-      "Strong is the new beautiful! 🌟"
+      t('motivational.quotes.stronger'),
+      t('motivational.quotes.progress'),
+      t('motivational.quotes.mind'),
+      t('motivational.quotes.consistency'),
+      t('motivational.quotes.strong')
     ],
     tip: [
-      "💡 Tip: Arrive 5 minutes early to center yourself",
-      "💡 Tip: Focus on your breath during challenging poses",
-      "💡 Tip: Listen to your body and modify as needed",
-      "💡 Tip: Stay hydrated before and after class",
-      "💡 Tip: Consistency beats intensity for long-term results"
+      t('motivational.tips.arrive'),
+      t('motivational.tips.breath'),
+      t('motivational.tips.listen'),
+      t('motivational.tips.hydrate'),
+      t('motivational.tips.longterm')
     ],
     reminder: [
-      "📅 Remember: Book early to secure your favorite time slots",
-      "⏰ Reminder: Cancel 2+ hours in advance to avoid fees",
-      "🎯 Goal check: How are you progressing this month?",
-      "🧘‍♀️ Take a moment to appreciate your commitment",
-      "📈 Track your progress - small wins add up!"
+      t('motivational.reminders.bookEarly'),
+      t('motivational.reminders.cancelPolicy'),
+      t('motivational.reminders.goalCheck'),
+      t('motivational.reminders.appreciate'),
+      t('motivational.reminders.trackProgress')
     ]
   };
 
@@ -49,11 +52,11 @@ const MotivationalMessage: React.FC<MotivationalMessageProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isRTL && styles.containerRTL]}>
       <View style={styles.iconContainer}>
         <Ionicons name={getIcon()} size={16} color={COLORS.primary} />
       </View>
-      <Text style={styles.message}>{displayMessage}</Text>
+      <Text style={[styles.message, rtlText()]}>{displayMessage}</Text>
     </View>
   );
 };
@@ -68,6 +71,12 @@ const styles = StyleSheet.create({
     marginVertical: SPACING.sm,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
+  },
+  containerRTL: {
+    flexDirection: 'row-reverse',
+    borderLeftWidth: 0,
+    borderRightWidth: 3,
+    borderRightColor: COLORS.primary,
   },
   iconContainer: {
     marginRight: SPACING.sm,

@@ -93,3 +93,8 @@ htmlcov/
 # Temporary files
 *.tmp
 *.temp
+
+# builds
+*android*
+*ios*
+*web*

@@ -23,8 +23,11 @@ import { PendingApproval, PaymentApprovalRequest, PaymentRejectionRequest, Packa
 import PaymentStatusBadge from '../components/PaymentStatusBadge';
 import EnhancedPackageCard from '../components/packages/EnhancedPackageCard';
 import Button from '../components/common/Button';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 
 const AdminPackagesScreen: React.FC = () => {
+  const { t, pluralize, rtlText, formatCurrency: formatCurrencyI18n } = useTranslation();
   const [currentTab, setCurrentTab] = useState<'approvals' | 'packages'>('approvals');
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -91,10 +94,10 @@ const AdminPackagesScreen: React.FC = () => {
       setShowApproveModal(false);
       setSelectedApproval(null);
       setApprovalData({ payment_reference: '', admin_notes: '' });
-      Alert.alert('Success', 'Package payment approved successfully');
+      Alert.alert(t('common.success'), t('admin.paymentApprovedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to approve payment');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.paymentApproveFailed'));
     },
   });
 
@@ -108,10 +111,10 @@ const AdminPackagesScreen: React.FC = () => {
       setShowRejectModal(false);
       setSelectedApproval(null);
       setRejectionData({ rejection_reason: '', admin_notes: '' });
-      Alert.alert('Success', 'Package payment rejected successfully');
+      Alert.alert(t('common.success'), t('admin.paymentRejectedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to reject payment');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.paymentRejectFailed'));
     },
   });
 
@@ -122,10 +125,10 @@ const AdminPackagesScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
       setShowCreatePackageModal(false);
       resetCreateForm();
-      Alert.alert('Success', 'Package created successfully');
+      Alert.alert(t('common.success'), t('admin.packageCreatedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create package');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.packageCreateFailed'));
     },
   });
 
@@ -133,10 +136,10 @@ const AdminPackagesScreen: React.FC = () => {
     mutationFn: (packageId: number) => adminApi.deletePackage(packageId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['packages'] });
-      Alert.alert('Success', 'Package deleted successfully');
+      Alert.alert(t('common.success'), t('admin.packageDeletedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to delete package');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.packageDeleteFailed'));
     },
   });
 
@@ -184,7 +187,7 @@ const AdminPackagesScreen: React.FC = () => {
 
   const handleConfirmReject = () => {
     if (!selectedApproval || !rejectionData.rejection_reason.trim()) {
-      Alert.alert('Error', 'Please provide a rejection reason');
+      Alert.alert(t('common.error'), t('admin.rejectionReasonRequired'));
       return;
     }
     
@@ -210,7 +213,7 @@ const AdminPackagesScreen: React.FC = () => {
     const { name, description, price, credits, validity_days, is_unlimited, is_active } = createPackageForm;
     
     if (!name.trim() || !price || (!is_unlimited && !credits) || !validity_days) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert(t('common.error'), t('validation.allFieldsRequired'));
       return;
     }
 
@@ -243,11 +246,11 @@ const AdminPackagesScreen: React.FC = () => {
   };
 
   const formatTimeWaiting = (hours: number) => {
-    if (hours < 1) return 'Less than 1 hour';
-    if (hours < 24) return `${Math.floor(hours)} hours`;
+    if (hours < 1) return t('time.lessThanHour');
+    if (hours < 24) return pluralize(Math.floor(hours), 'time.hours');
     const days = Math.floor(hours / 24);
     const remainingHours = Math.floor(hours % 24);
-    return `${days}d ${remainingHours}h`;
+    return `${days}${t('time.dayShort')} ${remainingHours}${t('time.hourShort')}`;
   };
 
   const getUrgencyColor = (hours: number) => {
@@ -259,7 +262,7 @@ const AdminPackagesScreen: React.FC = () => {
   // Render tab header
   const renderTabHeader = () => (
     <View style={styles.tabHeader}>
-      <Text style={styles.headerTitle}>Admin Management</Text>
+      <Text style={[styles.headerTitle, rtlText()]}>{t('screens.adminPackages.title')}</Text>
       
       <View style={styles.tabContainer}>
         <TouchableOpacity
@@ -275,7 +278,7 @@ const AdminPackagesScreen: React.FC = () => {
             styles.tabButtonText,
             currentTab === 'approvals' && styles.tabButtonTextActive
           ]}>
-            Approvals
+            {t('sections.paymentApprovals')}
           </Text>
           {approvalStats && approvalStats.total_pending > 0 && (
             <View style={styles.badge}>
@@ -297,7 +300,7 @@ const AdminPackagesScreen: React.FC = () => {
             styles.tabButtonText,
             currentTab === 'packages' && styles.tabButtonTextActive
           ]}>
-            Packages
+            {t('packages.title')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -319,31 +322,31 @@ const AdminPackagesScreen: React.FC = () => {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{approvalStats.total_pending}</Text>
-            <Text style={styles.statLabel}>Total Pending</Text>
+            <Text style={styles.statLabel}>{t('stats.totalPending')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{approvalStats.pending_over_24h}</Text>
-            <Text style={[styles.statLabel, { color: COLORS.error }]}>Over 24h</Text>
+            <Text style={[styles.statLabel, { color: COLORS.error }]}>{t('stats.over24h')}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{approvalStats.total_approved_today}</Text>
-            <Text style={[styles.statLabel, { color: COLORS.success }]}>Approved Today</Text>
+            <Text style={[styles.statLabel, { color: COLORS.success }]}>{t('stats.approvedToday')}</Text>
           </View>
         </View>
       )}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Payment Approvals</Text>
-        <Text style={styles.sectionSubtitle}>
-          Review and approve cash payments from customers
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('sections.paymentApprovals')}</Text>
+        <Text style={[styles.sectionSubtitle, rtlText()]}>
+          {t('admin.reviewApprovePayments')}
         </Text>
       </View>
 
       {approvalsError && (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Unable to Load Approvals</Text>
+          <Text style={styles.errorTitle}>{t('status.unableToLoad')}</Text>
           <Text style={styles.errorText}>
-            {approvalsError instanceof Error ? approvalsError.message : 'Please try again later'}
+            {approvalsError instanceof Error ? approvalsError.message : t('errors.tryAgain')}
           </Text>
         </View>
       )}
@@ -351,9 +354,9 @@ const AdminPackagesScreen: React.FC = () => {
       {pendingApprovals.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>✅</Text>
-          <Text style={styles.emptyTitle}>All Caught Up!</Text>
+          <Text style={styles.emptyTitle}>{t('status.allCaughtUp')}</Text>
           <Text style={styles.emptyText}>
-            No pending payment approvals at the moment.
+            {t('admin.noPendingApprovals')}
           </Text>
         </View>
       ) : (

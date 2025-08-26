@@ -13,6 +13,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { StackNavigationProp } from '@react-navigation/stack';
 
 import { useAuth } from '../../hooks/useAuth';
+import { useTranslation } from '../../hooks/useTranslation';
+import { StyleUtils } from '../../utils/styleUtils';
 import { AuthStackParamList } from '../../navigation/Navigation';
 import { COLORS, SPACING } from '../../utils/config';
 import Button from '../../components/common/Button';
@@ -35,6 +37,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const { login, isBiometricEnabled, authenticateWithBiometric } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const { log, track } = useLogging('LoginScreen');
+  const { t, rtlText, rtlRow } = useTranslation();
 
   const {
     control,
@@ -95,7 +98,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         timestamp: new Date().toISOString()
       });
       
-      Alert.alert('Login Failed', errorMessage);
+      Alert.alert(t('alerts.loginFailed'), errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +122,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           timestamp: new Date().toISOString()
         });
         
-        Alert.alert('Authentication Failed', 'Biometric authentication was not successful');
+        Alert.alert(t('alerts.authenticationFailed'), t('alerts.biometricFailed'));
       } else {
         log.info('Biometric authentication successful', { duration });
         track.event('auth.biometric_success', {
@@ -132,7 +135,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       log.error('Biometric authentication error', error, { duration });
       track.error(error, 'biometric_authentication');
       
-      Alert.alert('Error', 'An error occurred during biometric authentication');
+      Alert.alert(t('common.error'), t('alerts.biometricError'));
     }
   };
 
@@ -147,8 +150,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
+            <Text style={[styles.title, rtlText('center')]}>{t('screens.login.welcomeBack')}</Text>
+            <Text style={[styles.subtitle, rtlText('center')]}>{t('screens.login.subtitle')}</Text>
           </View>
 
           <View style={styles.form}>
@@ -156,16 +159,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
               control={control}
               name="email"
               rules={{
-                required: 'Email is required',
+                required: t('validation.emailRequired'),
                 pattern: {
                   value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Invalid email address',
+                  message: t('validation.emailInvalid'),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Email"
-                  placeholder="Enter your email"
+                  label={t('auth.email')}
+                  placeholder={t('forms.placeholders.enterEmail')}
                   leftIcon="mail"
                   value={value}
                   onChangeText={onChange}
@@ -173,6 +176,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
                   error={errors.email?.message}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  textAlign={rtlText().textAlign}
                 />
               )}
             />
@@ -181,28 +185,29 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
               control={control}
               name="password"
               rules={{
-                required: 'Password is required',
+                required: t('validation.passwordRequired'),
                 minLength: {
                   value: 8,
-                  message: 'Password must be at least 8 characters',
+                  message: t('validation.passwordMinLength'),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Password"
-                  placeholder="Enter your password"
+                  label={t('auth.password')}
+                  placeholder={t('forms.placeholders.enterPassword')}
                   leftIcon="lock-closed"
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
                   error={errors.password?.message}
                   isPassword
+                  textAlign={rtlText().textAlign}
                 />
               )}
             />
 
             <Button
-              title="Sign In"
+              title={t('buttons.signIn')}
               onPress={handleSubmit(onSubmit)}
               loading={isLoading}
               style={styles.loginButton}
@@ -210,7 +215,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
             {isBiometricEnabled && (
               <Button
-                title="Use Biometric"
+                title={t('buttons.useBiometric')}
                 onPress={handleBiometricLogin}
                 variant="outline"
                 style={styles.biometricButton}
@@ -218,17 +223,17 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             )}
 
             <Button
-              title="Forgot Password?"
+              title={t('buttons.forgotPassword')}
               onPress={() => navigation.navigate('ForgotPassword')}
               variant="outline"
               style={styles.forgotButton}
             />
           </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+          <View style={[styles.footer, rtlRow()]}>
+            <Text style={[styles.footerText, rtlText()]}>{t('auth.dontHaveAccount')} </Text>
             <Button
-              title="Sign Up"
+              title={t('buttons.signUp')}
               onPress={() => navigation.navigate('Register')}
               variant="outline"
               size="small"
@@ -281,14 +286,13 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   footer: {
-    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
   footerText: {
     fontSize: 16,
     color: COLORS.textSecondary,
-    marginRight: SPACING.sm,
+    ...StyleUtils.marginEnd(SPACING.sm),
   },
 });
 

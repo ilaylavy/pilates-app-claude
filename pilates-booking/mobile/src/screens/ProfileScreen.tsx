@@ -6,11 +6,13 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Image, 
-  Dimensions,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { COLORS, SPACING } from '../utils/config';
 import Button from '../components/common/Button';
 import { useNavigation } from '@react-navigation/native';
@@ -21,12 +23,9 @@ import EditProfileModal from '../components/EditProfileModal';
 import { useUserRole } from '../hooks/useUserRole';
 import { Ionicons } from '@expo/vector-icons';
 
-const { width } = Dimensions.get('window');
 
 interface UserStats {
   total_bookings: number;
-  bookings_this_month: number;
-  attendance_rate: number;
   member_since: string;
 }
 
@@ -37,8 +36,10 @@ const ProfileScreen: React.FC = () => {
   const queryClient = useQueryClient();
   const [showAvatarUpload, setShowAvatarUpload] = useState(false);
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const { t, rtlText, rtlRow, formatDate: formatDateI18n } = useTranslation();
 
-  const { data: userStats } = useQuery<UserStats>({
+  const { data: userStats, isLoading } = useQuery<UserStats>({
     queryKey: ['user-stats'],
     queryFn: async () => {
       const response = await apiClient.get('/api/v1/users/me/stats');
@@ -47,22 +48,13 @@ const ProfileScreen: React.FC = () => {
     enabled: isAuthenticated,
   });
 
-  const { data: upcomingClasses } = useQuery({
-    queryKey: ['upcoming-classes'],
-    queryFn: async () => {
-      const response = await apiClient.get('/api/v1/bookings/my-bookings?status=confirmed&upcoming=true&limit=3');
-      return response.data;
-    },
-    enabled: isAuthenticated,
-  });
-
   const handleLogout = async () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      t('auth.logout'),
+      t('alerts.confirmLogout'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout }
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('auth.logout'), style: 'destructive', onPress: logout }
       ]
     );
   };
@@ -84,15 +76,73 @@ const ProfileScreen: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long',
-      year: 'numeric'
-    });
+    return formatDateI18n(new Date(dateString));
   };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ['user-stats'] });
+    await queryClient.invalidateQueries({ queryKey: ['user'] });
+    setRefreshing(false);
+  };
+
+  const menuItems = [
+    {
+      key: 'editProfile',
+      title: t('profile.editProfile'),
+      icon: 'person-outline',
+      onPress: () => setShowEditProfileModal(true)
+    },
+    {
+      key: 'settings',
+      title: t('navigation.settings'),
+      icon: 'settings-outline',
+      onPress: () => navigation.navigate('Settings' as never)
+    },
+    {
+      key: 'paymentHistory',
+      title: t('profile.paymentHistory'),
+      icon: 'receipt-outline',
+      onPress: () => navigation.navigate('PaymentHistory' as never)
+    },
+    {
+      key: 'help',
+      title: t('settings.contactSupport'),
+      icon: 'help-circle-outline',
+      onPress: () => {
+        Alert.alert(
+          t('settings.contactSupport'),
+          t('settings.contactSupportDetails'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('settings.sendEmail'), onPress: () => {} }
+          ]
+        );
+      }
+    },
+    {
+      key: 'about',
+      title: t('settings.about'),
+      icon: 'information-circle-outline',
+      onPress: () => {
+        Alert.alert(
+          t('settings.about'),
+          `${t('settings.appVersion')}: 1.0.0\n${t('settings.build')}: 2024.01.01`,
+          [{ text: t('common.ok') }]
+        );
+      }
+    }
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Profile Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleAvatarPress} style={styles.avatarContainer}>
@@ -110,111 +160,63 @@ const ProfileScreen: React.FC = () => {
             </View>
           </TouchableOpacity>
           
-          <Text style={styles.name}>{user?.first_name} {user?.last_name}</Text>
-          <Text style={styles.memberSince}>
-            Member since {userStats ? formatDate(userStats.member_since) : ''}
+          <Text style={[styles.name, rtlText('center')]}>{user?.first_name} {user?.last_name}</Text>
+          <Text style={[styles.email, rtlText('center')]}>{user?.email}</Text>
+          <Text style={[styles.memberSince, rtlText('center')]}>
+            {t('profile.memberSince', { date: userStats ? formatDate(userStats.member_since) : '' })}
           </Text>
           
-          {/* Quick Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats?.bookings_this_month || 0}</Text>
-              <Text style={styles.statLabel}>This Month</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats?.total_bookings || 0}</Text>
-              <Text style={styles.statLabel}>Total Classes</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{userStats?.attendance_rate || 0}%</Text>
-              <Text style={styles.statLabel}>Attendance</Text>
-            </View>
-          </View>
-          
-          <TouchableOpacity style={styles.editButton} onPress={() => handleNavigation('EditProfile')}>
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+          <TouchableOpacity style={styles.editButton} onPress={() => setShowEditProfileModal(true)}>
+            <Text style={styles.editButtonText}>{t('profile.editProfile')}</Text>
           </TouchableOpacity>
         </View>
         
-        {/* Action Buttons */}
-        <View style={styles.actionGrid}>
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => handleNavigation('PaymentHistory')}
-          >
-            <View style={styles.actionIconContainer}>
-              <Ionicons name="receipt" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.actionText}>Payment History</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => handleNavigation('BookingHistory')}
-          >
-            <View style={styles.actionIconContainer}>
-              <Ionicons name="time" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.actionText}>Booking History</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => handleNavigation('Settings')}
-          >
-            <View style={styles.actionIconContainer}>
-              <Ionicons name="settings" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.actionText}>Settings</Text>
-          </TouchableOpacity>
-          
-          {isAdmin && (
-            <TouchableOpacity 
-              style={styles.actionButton} 
-              onPress={() => handleNavigation('AdminPackages')}
+        {/* Achievement Bar */}
+        <View style={styles.achievementSection}>
+          <View style={styles.achievementBar}>
+            <Text style={styles.achievementText}>
+              {userStats?.total_bookings || 0} {t('stats.totalClasses')}
+            </Text>
+          </View>
+        </View>
+        
+        {/* Menu Items */}
+        <View style={styles.menuSection}>
+          {menuItems.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={[styles.menuItem, rtlRow()]}
+              onPress={item.onPress}
             >
-              <View style={styles.actionIconContainer}>
-                <Ionicons name="briefcase" size={24} color={COLORS.accent} />
+              <View style={[styles.menuIcon, StyleUtils.marginEnd(SPACING.md)]}>
+                <Ionicons name={item.icon as any} size={24} color={COLORS.primary} />
               </View>
-              <Text style={[styles.actionText, { color: COLORS.accent }]}>Manage Packages</Text>
+              <Text style={[styles.menuText, rtlText()]}>{item.title}</Text>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} style={StyleUtils.iconTransform()} />
+            </TouchableOpacity>
+          ))}
+          
+          {/* Admin Dashboard */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.menuItem, styles.adminItem, rtlRow()]}
+              onPress={() => navigation.navigate('AdminPackages' as never)}
+            >
+              <View style={[styles.menuIcon, styles.adminIcon, StyleUtils.marginEnd(SPACING.md)]}>
+                <Ionicons name="construct" size={24} color={COLORS.accent} />
+              </View>
+              <Text style={[styles.menuText, styles.adminText, rtlText()]}>
+                {t('admin.dashboard')}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.accent} style={StyleUtils.iconTransform()} />
             </TouchableOpacity>
           )}
         </View>
         
-        {/* Upcoming Classes */}
-        {upcomingClasses && upcomingClasses.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Classes</Text>
-            {upcomingClasses.slice(0, 3).map((booking: any) => (
-              <View key={booking.id} style={styles.classItem}>
-                <View style={styles.classInfo}>
-                  <Text style={styles.className}>
-                    {booking?.class_instance?.class_template?.name || 'Class Name'}
-                  </Text>
-                  <Text style={styles.classDate}>
-                    {booking?.class_instance?.start_time ? (
-                      `${new Date(booking.class_instance.start_time).toLocaleDateString()} at ${new Date(booking.class_instance.start_time).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}`
-                    ) : 'Date TBD'}
-                  </Text>
-                  <Text style={styles.classInstructor}>
-                    with {booking?.class_instance?.instructor?.full_name || 'Instructor TBD'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-              </View>
-            ))}
-          </View>
-        )}
-        
         {/* Logout Button */}
         <View style={styles.logoutContainer}>
           <Button
-            title="Logout"
+            title={t('auth.logout')}
             onPress={handleLogout}
             variant="danger"
           />
@@ -296,37 +298,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.xs,
-    textAlign: 'center',
+  },
+  email: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
   },
   memberSince: {
     fontSize: 14,
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
-    textAlign: 'center',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: COLORS.border,
   },
   editButton: {
     paddingHorizontal: SPACING.lg,
@@ -339,93 +320,70 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
   },
-  actionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  achievementSection: {
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.lg,
   },
-  actionButton: {
-    width: (width - SPACING.lg * 3) / 2,
-    aspectRatio: 1,
+  achievementBar: {
     backgroundColor: COLORS.card,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-    marginBottom: SPACING.md,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  actionIconContainer: {
-    position: 'relative',
-    marginBottom: SPACING.sm,
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    textAlign: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: COLORS.accent,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    color: COLORS.background,
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  section: {
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-  },
-  classItem: {
-    backgroundColor: COLORS.card,
-    borderRadius: 8,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    flexDirection: 'row',
     alignItems: 'center',
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 1,
+    shadowRadius: 2,
   },
-  classInfo: {
+  achievementText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  menuSection: {
+    backgroundColor: COLORS.card,
+    marginHorizontal: SPACING.lg,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: SPACING.lg,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  menuItem: {
+    ...StyleUtils.flexDirection('row'),
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  menuIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: `${COLORS.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuText: {
     flex: 1,
-  },
-  className: {
     fontSize: 16,
-    fontWeight: '600',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    fontWeight: '500',
   },
-  classDate: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: 2,
+  adminItem: {
+    backgroundColor: `${COLORS.accent}08`,
   },
-  classInstructor: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+  adminIcon: {
+    backgroundColor: `${COLORS.accent}15`,
+  },
+  adminText: {
+    color: COLORS.accent,
+    fontWeight: '600',
   },
   logoutContainer: {
     paddingHorizontal: SPACING.lg,

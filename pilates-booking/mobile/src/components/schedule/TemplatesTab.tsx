@@ -203,7 +203,7 @@ const TemplatesTab: React.FC = () => {
   };
 
   const getFilteredTemplates = () => {
-    let filtered = templates.filter(template => {
+    const filtered = templates.filter(template => {
       if (!showInactiveTemplates && !template.is_active) return false;
       if (searchQuery && !template.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (filterLevel && template.level !== filterLevel) return false;

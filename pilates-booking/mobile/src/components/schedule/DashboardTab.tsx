@@ -12,6 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../../utils/config';
 import { classesApi } from '../../api/classes';
 import { adminApi } from '../../api/admin';
+import { useTranslation } from '../../hooks/useTranslation';
+import { StyleUtils } from '../../utils/styleUtils';
 
 interface StatCardProps {
   title: string;
@@ -25,32 +27,36 @@ interface StatCardProps {
   };
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend }) => (
-  <View style={[styles.statCard, { borderLeftColor: color }]}>
-    <View style={styles.statHeader}>
-      <View style={styles.statInfo}>
-        <Text style={styles.statTitle}>{title}</Text>
-        <Text style={styles.statValue}>{value}</Text>
-        {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, subtitle, trend }) => {
+  const { rtlText, rtlRow } = useTranslation();
+  
+  return (
+    <View style={[styles.statCard, StyleUtils.borderStart(color, 4)]}>
+      <View style={[styles.statHeader, rtlRow()]}>
+        <View style={styles.statInfo}>
+          <Text style={[styles.statTitle, rtlText()]}>{title}</Text>
+          <Text style={[styles.statValue, rtlText()]}>{value}</Text>
+          {subtitle && <Text style={[styles.statSubtitle, rtlText()]}>{subtitle}</Text>}
+        </View>
+        <View style={[styles.statIcon, { backgroundColor: color + '15' }]}>
+          <Ionicons name={icon as any} size={24} color={color} />
+        </View>
       </View>
-      <View style={[styles.statIcon, { backgroundColor: color + '15' }]}>
-        <Ionicons name={icon as any} size={24} color={color} />
-      </View>
+      {trend && (
+        <View style={[styles.trendContainer, rtlRow()]}>
+          <Ionicons 
+            name={trend.positive ? 'trending-up' : 'trending-down'} 
+            size={16} 
+            color={trend.positive ? COLORS.success : COLORS.error} 
+          />
+          <Text style={[styles.trendText, { color: trend.positive ? COLORS.success : COLORS.error }]}>
+            {trend.value}
+          </Text>
+        </View>
+      )}
     </View>
-    {trend && (
-      <View style={styles.trendContainer}>
-        <Ionicons 
-          name={trend.positive ? 'trending-up' : 'trending-down'} 
-          size={16} 
-          color={trend.positive ? COLORS.success : COLORS.error} 
-        />
-        <Text style={[styles.trendText, { color: trend.positive ? COLORS.success : COLORS.error }]}>
-          {trend.value}
-        </Text>
-      </View>
-    )}
-  </View>
-);
+  );
+};
 
 interface QuickActionProps {
   title: string;
@@ -69,6 +75,7 @@ const QuickAction: React.FC<QuickActionProps> = ({ title, icon, color, onPress }
 );
 
 const DashboardTab: React.FC = () => {
+  const { t, rtlText, rtlRow } = useTranslation();
   // Fetch dashboard stats
   const {
     data: dashboardStats,
@@ -134,7 +141,7 @@ const DashboardTab: React.FC = () => {
       },
     },
     {
-      title: 'Reports',
+      title: t('admin.reports'),
       icon: 'analytics',
       color: COLORS.success,
       onPress: () => {
@@ -167,7 +174,7 @@ const DashboardTab: React.FC = () => {
     >
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>Quick Actions</Text>
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action, index) => (
             <QuickAction
@@ -183,7 +190,7 @@ const DashboardTab: React.FC = () => {
 
       {/* Stats Overview */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Overview</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>Overview</Text>
         <View style={styles.statsGrid}>
           <StatCard
             title="Today's Classes"
@@ -197,7 +204,7 @@ const DashboardTab: React.FC = () => {
             value={tomorrowClasses.length}
             icon="calendar"
             color={COLORS.secondary}
-            subtitle={`${tomorrowClasses.reduce((sum, cls) => sum + (cls.participant_count || 0), 0)} participants`}
+            subtitle={`${tomorrowClasses.reduce((sum, cls) => sum + (cls.participant_count || 0), 0)} ${t('admin.participants')}`}
           />
           <StatCard
             title="Active Templates"
@@ -219,15 +226,15 @@ const DashboardTab: React.FC = () => {
       {/* Today's Schedule */}
       {todayClasses.length > 0 && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Classes</Text>
+          <View style={[styles.sectionHeader, rtlRow()]}>
+            <Text style={[styles.sectionTitle, rtlText()]}>Today's Classes</Text>
             <TouchableOpacity>
               <Text style={styles.viewAll}>View All</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.classesContainer}>
             {todayClasses.slice(0, 3).map((classInstance) => (
-              <TouchableOpacity key={classInstance.id} style={styles.classCard}>
+              <TouchableOpacity key={classInstance.id} style={[styles.classCard, rtlRow()]}>
                 <View style={styles.classTime}>
                   <Text style={styles.classTimeText}>
                     {new Date(classInstance.start_datetime).toLocaleTimeString('en-US', {
@@ -288,7 +295,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   sectionHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
@@ -340,12 +346,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: SPACING.md,
-    borderLeftWidth: 4,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   statHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
@@ -375,7 +379,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   trendContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
     marginTop: SPACING.sm,
     gap: SPACING.xs,
@@ -391,13 +394,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: SPACING.md,
-    flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   classTime: {
-    marginRight: SPACING.md,
     minWidth: 70,
   },
   classTimeText: {

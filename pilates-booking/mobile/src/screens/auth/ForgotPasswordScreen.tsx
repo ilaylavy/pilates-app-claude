@@ -11,6 +11,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 
 import { AuthStackParamList } from '../../navigation/Navigation';
 import { COLORS, SPACING } from '../../utils/config';
+import { useTranslation } from '../../hooks/useTranslation';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 
@@ -25,6 +26,7 @@ interface FormData {
 }
 
 const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
+  const { t, rtlText } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -38,14 +40,14 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
     try {
       // TODO: Implement forgot password API call
       Alert.alert(
-        'Reset Link Sent',
-        'If an account with this email exists, you will receive a password reset link.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        t('auth.resetLinkSent'),
+        t('auth.resetLinkSentMessage'),
+        [{ text: t('common.ok'), onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
       Alert.alert(
-        'Error',
-        'An error occurred while sending the reset link'
+        t('common.error'),
+        t('auth.resetLinkError')
       );
     } finally {
       setIsLoading(false);
@@ -56,9 +58,9 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Forgot Password</Text>
-          <Text style={styles.subtitle}>
-            Enter your email address and we'll send you a link to reset your password.
+          <Text style={[styles.title, rtlText('center')]}>{t('auth.forgotPassword')}</Text>
+          <Text style={[styles.subtitle, rtlText('center')]}>
+            {t('auth.forgotPasswordMessage')}
           </Text>
         </View>
 
@@ -67,16 +69,16 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
             control={control}
             name="email"
             rules={{
-              required: 'Email is required',
+              required: t('auth.emailRequired'),
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: 'Invalid email address',
+                message: t('auth.invalidEmailAddress'),
               },
             }}
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Email"
-                placeholder="Enter your email"
+                label={t('auth.email')}
+                placeholder={t('auth.emailPlaceholder')}
                 leftIcon="mail"
                 value={value}
                 onChangeText={onChange}
@@ -89,14 +91,14 @@ const ForgotPasswordScreen: React.FC<Props> = ({ navigation }) => {
           />
 
           <Button
-            title="Send Reset Link"
+            title={t('auth.sendResetLink')}
             onPress={handleSubmit(onSubmit)}
             loading={isLoading}
             style={styles.submitButton}
           />
 
           <Button
-            title="Back to Sign In"
+            title={t('auth.backToSignIn')}
             onPress={() => navigation.navigate('Login')}
             variant="outline"
             style={styles.backButton}

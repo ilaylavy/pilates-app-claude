@@ -21,6 +21,8 @@ import { packagesApi } from '../api/packages';
 import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useUserRole } from '../hooks/useUserRole';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import type { UserPackagesResponse, Package } from '../types';
 import EnhancedPackageCard from '../components/packages/EnhancedPackageCard';
 import QuickPurchaseModal from '../components/packages/QuickPurchaseModal';
@@ -48,6 +50,7 @@ const PackagesScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const navigation = useNavigation<PackagesScreenNavigationProp>();
+  const { t, pluralize, rtlText, rtlRow, formatCurrency: formatCurrencyI18n } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [currentView, setCurrentView] = useState<'active' | 'browse'>('active');
   const [packageToPurchase, setPackageToPurchase] = useState<Package | null>(null);
@@ -137,12 +140,12 @@ const PackagesScreen: React.FC = () => {
 
   const handleDeletePackage = (pkg: Package) => {
     Alert.alert(
-      'Delete Package',
-      `Are you sure you want to delete "${pkg.name}"? This action cannot be undone.`,
+      t('common.deletePackage'),
+      t('alerts.deletePackageConfirm', { name: pkg.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => deletePackageMutation.mutate(pkg.id),
         },
@@ -159,19 +162,19 @@ const PackagesScreen: React.FC = () => {
     <View style={styles.header}>
       {isAdmin ? (
         <View style={styles.adminHeader}>
-          <Text style={styles.adminTitle}>Package Management</Text>
+          <Text style={[styles.adminTitle, rtlText()]}>{t('admin.packageManagement')}</Text>
           <TouchableOpacity
             style={[styles.adminToggle, isAdminMode && styles.adminToggleActive]}
             onPress={() => setIsAdminMode(!isAdminMode)}
           >
             <Text style={[styles.adminToggleText, isAdminMode && styles.adminToggleTextActive]}>
-              {isAdminMode ? 'Admin View' : 'Student View'}
+              {isAdminMode ? t('admin.adminView') : t('admin.studentView')}
             </Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
-          <Text style={styles.headerTitle}>My Packages</Text>
+          <Text style={[styles.headerTitle, rtlText()]}>{t('packages.myPackages')}</Text>
           
           <View style={styles.toggleContainer}>
             <TouchableOpacity
@@ -187,7 +190,7 @@ const PackagesScreen: React.FC = () => {
                 styles.toggleButtonText,
                 currentView === 'active' && styles.toggleButtonTextActive
               ]}>
-                My Packages
+                {t('packages.myPackages')}
               </Text>
             </TouchableOpacity>
             
@@ -204,7 +207,7 @@ const PackagesScreen: React.FC = () => {
                 styles.toggleButtonText,
                 currentView === 'browse' && styles.toggleButtonTextActive
               ]}>
-                Buy Packages
+                {t('packages.buyPackages')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -233,7 +236,7 @@ const PackagesScreen: React.FC = () => {
             <Text style={[styles.creditsNumber, isLowCredits && { color: COLORS.warning }]}>
               {hasUnlimited ? '∞' : totalCredits}
             </Text>
-            <Text style={styles.creditsLabel}>Credits Available</Text>
+            <Text style={[styles.creditsLabel, rtlText()]}>{t('packages.creditsAvailable')}</Text>
           </View>
           <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
             <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
@@ -242,12 +245,12 @@ const PackagesScreen: React.FC = () => {
         
         {primaryPackage && (
           <View style={styles.primaryInfo}>
-            <Text style={styles.primaryLabel}>Primary Package</Text>
+            <Text style={[styles.primaryLabel, rtlText()]}>{t('packages.primaryPackage')}</Text>
             <Text style={styles.primaryName}>{primaryPackage.package.name}</Text>
             <Text style={styles.primaryExpiry}>
               {primaryPackage.days_until_expiry > 0 
-                ? `Expires in ${primaryPackage.days_until_expiry} days`
-                : 'Expired'}
+                ? pluralize(primaryPackage.days_until_expiry, 'packages.expiresInDays')
+                : t('packages.expired')}
             </Text>
           </View>
         )}
@@ -255,7 +258,7 @@ const PackagesScreen: React.FC = () => {
         {isLowCredits && (
           <View style={styles.lowCreditsAlert}>
             <Ionicons name="warning" size={16} color={COLORS.warning} />
-            <Text style={styles.lowCreditsText}>Running low! Consider purchasing more credits.</Text>
+            <Text style={[styles.lowCreditsText, rtlText()]}>{t('packages.lowCreditsAlert')}</Text>
           </View>
         )}
       </View>
@@ -271,15 +274,15 @@ const PackagesScreen: React.FC = () => {
 
     return (
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Pending Payments ({pendingPackages.length})</Text>
+        <View style={[styles.sectionHeader, rtlRow()]}>
+          <Text style={[styles.sectionTitle, rtlText()]}>{pluralize(pendingPackages.length, 'packages.pendingPayments')}</Text>
           {hasMorePending && (
             <TouchableOpacity 
-              style={styles.viewAllButton}
+              style={[styles.viewAllButton, rtlRow()]}
               onPress={() => setShowAllPending(!showAllPending)}
             >
               <Text style={styles.viewAllText}>
-                {showAllPending ? 'Show Less' : 'View All'}
+                {showAllPending ? t('packages.showLess') : t('packages.viewAll')}
               </Text>
               <Ionicons 
                 name={showAllPending ? "chevron-up" : "chevron-down"} 
@@ -316,28 +319,28 @@ const PackagesScreen: React.FC = () => {
       {renderPendingPackages()}
       
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Active Packages ({activePackages.length})</Text>
-          <TouchableOpacity style={styles.historyButton} onPress={handleViewHistory}>
+        <View style={[styles.sectionHeader, rtlRow()]}>
+          <Text style={[styles.sectionTitle, rtlText()]}>{t('packages.title')} ({activePackages.length})</Text>
+          <TouchableOpacity style={[styles.historyButton, rtlRow()]} onPress={handleViewHistory}>
             <Ionicons name="time" size={16} color={COLORS.primary} />
-            <Text style={styles.historyButtonText}>History</Text>
+            <Text style={styles.historyButtonText}>{t('paymentHistory.title')}</Text>
           </TouchableOpacity>
         </View>
         
         {userPackagesLoading ? (
           <View style={styles.loadingState}>
-            <Text style={styles.loadingText}>Loading packages...</Text>
+            <Text style={[styles.loadingText, rtlText()]}>{t('status.loading')}</Text>
           </View>
         ) : activePackages.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="cube-outline" size={64} color={COLORS.textSecondary} />
-            <Text style={styles.emptyTitle}>No Active Packages</Text>
-            <Text style={styles.emptySubtext}>Purchase a package to start booking classes</Text>
+            <Text style={[styles.emptyTitle, rtlText()]}>{t('packages.noActivePackages')}</Text>
+            <Text style={[styles.emptySubtext, rtlText()]}>{t('packages.noActivePackagesSubtext')}</Text>
             <TouchableOpacity 
               style={styles.browseButton}
               onPress={() => setCurrentView('browse')}
             >
-              <Text style={styles.browseButtonText}>Browse Packages</Text>
+              <Text style={styles.browseButtonText}>{t('packages.buyPackages')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -354,13 +357,19 @@ const PackagesScreen: React.FC = () => {
                   </View>
                   <View style={styles.activePackageInfo}>
                     <Text style={styles.activePackageName}>{userPackage.package.name}</Text>
-                    <Text style={styles.activePackageCredits}>
-                      {userPackage.package.is_unlimited ? '∞' : userPackage.credits_remaining} of {userPackage.package.is_unlimited ? '∞' : userPackage.package.credits} credits
+                    <Text style={[styles.activePackageCredits, rtlText()]}>
+                      {userPackage.package.is_unlimited 
+                        ? t('packages.unlimitedCredits')
+                        : t('packages.creditsRemaining', { 
+                            remaining: userPackage.credits_remaining, 
+                            total: userPackage.package.credits 
+                          })
+                      }
                     </Text>
                   </View>
                   {userPackage.is_primary && (
                     <View style={styles.primaryBadge}>
-                      <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                      <Text style={styles.primaryBadgeText}>{t('packages.primary')}</Text>
                     </View>
                   )}
                 </View>
@@ -375,20 +384,22 @@ const PackagesScreen: React.FC = () => {
                         ]} 
                       />
                     </View>
-                    <Text style={styles.progressText}>
-                      {Math.round((userPackage.credits_remaining / userPackage.package.credits) * 100)}% remaining
+                    <Text style={[styles.progressText, rtlText()]}>
+                      {t('packages.percentageRemaining', { 
+                        percentage: Math.round((userPackage.credits_remaining / userPackage.package.credits) * 100)
+                      })}
                     </Text>
                   </View>
                 )}
                 
                 <View style={styles.activePackageFooter}>
-                  <Text style={styles.expiryText}>
+                  <Text style={[styles.expiryText, rtlText()]}>
                     {userPackage.days_until_expiry > 0 
-                      ? `Expires in ${userPackage.days_until_expiry} days`
-                      : 'Expired'}
+                      ? pluralize(userPackage.days_until_expiry, 'packages.expiresInDays')
+                      : t('packages.expired')}
                   </Text>
-                  <Text style={styles.purchaseDate}>
-                    Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
+                  <Text style={[styles.purchaseDate, rtlText()]}>
+                    {t('packages.purchased')} {new Date(userPackage.purchase_date).toLocaleDateString()}
                   </Text>
                 </View>
               </View>
@@ -407,9 +418,9 @@ const PackagesScreen: React.FC = () => {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Available Packages</Text>
-        <Text style={styles.sectionSubtitle}>
-          Choose the perfect package for your fitness journey
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('packages.availablePackages')}</Text>
+        <Text style={[styles.sectionSubtitle, rtlText()]}>
+          {t('packages.choosePackage')}
         </Text>
         
         <FlatList
@@ -439,7 +450,7 @@ const PackagesScreen: React.FC = () => {
       <View style={styles.adminSection}>
         <View style={styles.adminActions}>
           <Button
-            title="Add New Package"
+            title={t('packages.addNewPackage')}
             onPress={() => {
               setSelectedPackage(null);
               setShowEditModal(true);

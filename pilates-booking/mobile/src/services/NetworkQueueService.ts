@@ -370,14 +370,14 @@ export class NetworkQueueService {
     size: number;
     processing: boolean;
     isOnline: boolean;
-    requests: Array<{
+    requests: {
       id: string;
       url: string;
       method: string;
       priority: string;
       retryCount: number;
       createdAt: string;
-    }>;
+    }[];
   } {
     return {
       size: this.queue.length,

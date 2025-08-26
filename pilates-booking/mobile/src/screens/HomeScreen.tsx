@@ -19,6 +19,8 @@ import type { RootStackParamList } from '../navigation/Navigation';
 import { useAuth } from '../hooks/useAuth';
 import { useUserRole } from '../hooks/useUserRole';
 import { useCancelBooking } from '../hooks/useBookings';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { classesApi } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
 import { packagesApi } from '../api/packages';
@@ -38,6 +40,7 @@ const HomeScreen: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const { isStudent, isInstructor, isAdmin } = useUserRole();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const { t, rtlText, rtlRow, rtlAlign, rtlJustify, formatDateTime: formatDateTimeI18n } = useTranslation();
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [bookingInProgressId, setBookingInProgressId] = useState<number | null>(null);
@@ -322,11 +325,11 @@ const HomeScreen: React.FC = () => {
       // Add to notifications
       NotificationStorage.addNotification({
         type: 'waitlist_joined',
-        title: 'Joined Waitlist',
-        message: 'Added to waitlist successfully! You\'ll be notified if a spot opens up.',
+        title: t('booking.waitlistTitle'),
+        message: t('booking.waitlistMessage'),
       });
       
-      Alert.alert('Success', 'Added to waitlist successfully!');
+      Alert.alert(t('common.success'), t('alerts.waitlistJoined'));
     },
     onError: (error: any, classInstanceId) => {
       setBookingInProgressId(null);
@@ -359,8 +362,8 @@ const HomeScreen: React.FC = () => {
           // Add to notifications instead of showing alert
           NotificationStorage.addNotification({
             type: 'package_activation',
-            title: 'Package Activated! 🎉',
-            message: `Your cash payment has been confirmed. ${totalCredits} credits are now available for booking classes.`,
+            title: t('packageActivation.title'),
+            message: t('packageActivation.message', { credits: totalCredits }),
           });
         }
       }
@@ -398,7 +401,7 @@ const HomeScreen: React.FC = () => {
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString(),
+      date: formatDateTimeI18n(date),
       time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
   };
@@ -453,10 +456,10 @@ const HomeScreen: React.FC = () => {
 
   // Get role-specific subtitle
   const getSubtitle = () => {
-    if (isStudent) return "Welcome to your pilates journey";
-    if (isInstructor) return "Ready to inspire your students today";
-    if (isAdmin) return "Studio management dashboard";
-    return "Welcome back";
+    if (isStudent) return t('home.studentSubtitle');
+    if (isInstructor) return t('home.instructorSubtitle');
+    if (isAdmin) return t('home.adminSubtitle');
+    return t('home.defaultSubtitle');
   };
 
   return (
@@ -470,8 +473,8 @@ const HomeScreen: React.FC = () => {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.headerText}>
-              <Text style={styles.greeting}>Hello, {user?.first_name}!</Text>
-              <Text style={styles.subtitle}>{getSubtitle()}</Text>
+              <Text style={[styles.greeting, rtlText()]}>{t('home.greeting', { name: user?.first_name })}</Text>
+              <Text style={[styles.subtitle, rtlText()]}>{getSubtitle()}</Text>
             </View>
             <NotificationBell style={styles.notificationBell} />
           </View>
@@ -495,10 +498,10 @@ const HomeScreen: React.FC = () => {
         {/* Student-only: Quick Class Browse */}
         {isStudent && upcomingClasses && upcomingClasses.length > 0 && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Quick Book</Text>
+            <View style={[styles.sectionHeader, rtlRow()]}>
+              <Text style={[styles.sectionTitle, rtlText()]}>{t('home.quickBook')}</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Schedule' as never)}>
-                <Text style={styles.seeAllText}>See All</Text>
+                <Text style={styles.seeAllText}>{t('buttons.seeAll')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -580,7 +583,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   headerContent: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
@@ -601,7 +604,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   statsContainer: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-between',
     marginBottom: SPACING.lg,
   },
@@ -626,7 +629,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pendingIndicator: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     marginTop: SPACING.xs,
     backgroundColor: COLORS.warning + '15',
@@ -637,14 +640,13 @@ const styles = StyleSheet.create({
   pendingText: {
     fontSize: 10,
     color: COLORS.warning,
-    marginLeft: 2,
+    ...StyleUtils.marginStart(2),
     fontWeight: '500',
   },
   section: {
     marginBottom: SPACING.lg,
   },
   sectionHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
@@ -663,7 +665,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     padding: SPACING.md,
     borderRadius: 12,
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -682,19 +684,19 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   nextClassTime: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
   },
   nextClassTimeText: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginLeft: SPACING.xs,
+    ...StyleUtils.marginStart(SPACING.xs),
   },
   packageCard: {
     backgroundColor: COLORS.surface,
     padding: SPACING.md,
     borderRadius: 12,
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-between',
     alignItems: 'center',
   },

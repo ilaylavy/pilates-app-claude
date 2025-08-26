@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ClassInstance, Booking } from '../types';
 import { addClassToCalendar } from '../utils/calendarUtils';
+import { useTranslation } from '../hooks/useTranslation';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -37,21 +38,13 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
   const checkmarkAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const timeoutRef = useRef<NodeJS.Timeout>();
+  const { t, pluralize, formatDateTime: formatDateTimeI18n, rtlText } = useTranslation();
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }),
-      time: date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }),
+      date: formatDateTimeI18n(date),
+      time: formatDateTimeI18n(date),
     };
   };
 
@@ -114,22 +107,22 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
       });
 
       if (eventId) {
-        Alert.alert('Success', 'Class added to your calendar!');
+        Alert.alert(t('common.success'), t('calendar.addedToCalendar'));
       }
     } catch (error) {
       console.error('Calendar error:', error);
-      Alert.alert('Error', 'Failed to add class to calendar.');
+      Alert.alert(t('common.error'), t('calendar.addFailed'));
     }
   };
 
   const handleInviteFriends = async () => {
     try {
       const classUrl = `pilates://class/${classInstance.id}`;
-      const shareMessage = `Join me for ${classInstance.template.name} on ${date} at ${time}! Book your spot: ${classUrl}`;
+      const shareMessage = t('social.inviteMessage', { className: classInstance.template.name, date, time, url: classUrl });
 
       await Share.share({
         message: shareMessage,
-        title: 'Join me for a Pilates class!',
+        title: t('social.inviteTitle'),
       });
     } catch (error) {
       console.error('Share error:', error);
@@ -164,18 +157,18 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
             >
               <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
             </Animated.View>
-            <Text style={styles.successTitle}>Booking Confirmed!</Text>
-            <Text style={styles.successSubtitle}>Your spot is reserved</Text>
+            <Text style={[styles.successTitle, rtlText('center')]}>{t('booking.successTitle')}</Text>
+            <Text style={[styles.successSubtitle, rtlText('center')]}>{t('booking.successMessage', { className: classInstance.template.name, date })}</Text>
           </View>
 
           <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
             {/* Class Details */}
             <View style={styles.classDetails}>
-              <Text style={styles.className}>{classInstance.template.name}</Text>
-              <Text style={styles.classDate}>{date}</Text>
-              <Text style={styles.classTime}>{time}</Text>
-              <Text style={styles.instructor}>
-                with {classInstance.instructor.first_name} {classInstance.instructor.last_name}
+              <Text style={[styles.className, rtlText('center')]}>{classInstance.template.name}</Text>
+              <Text style={[styles.classDate, rtlText('center')]}>{date}</Text>
+              <Text style={[styles.classTime, rtlText('center')]}>{time}</Text>
+              <Text style={[styles.instructor, rtlText('center')]}>
+                {t('classes.instructor')}: {classInstance.instructor.first_name} {classInstance.instructor.last_name}
               </Text>
             </View>
 
@@ -184,7 +177,7 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
               <View style={styles.creditsContainer}>
                 <Ionicons name="star" size={20} color="#FF9800" />
                 <Text style={styles.creditsText}>
-                  {creditsRemaining} credit{creditsRemaining !== 1 ? 's' : ''} remaining
+                  {pluralize(creditsRemaining, 'packages.creditsLeft')}
                 </Text>
               </View>
             )}
@@ -197,7 +190,7 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
                 onPress={handleAddToCalendar}
               >
                 <Ionicons name="calendar" size={20} color="white" />
-                <Text style={styles.primaryButtonText}>Add to Calendar</Text>
+                <Text style={styles.primaryButtonText}>{t('calendar.addToCalendar')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -205,7 +198,7 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
                 onPress={handleInviteFriends}
               >
                 <Ionicons name="share" size={20} color="#007AFF" />
-                <Text style={styles.secondaryButtonText}>Invite Friends</Text>
+                <Text style={styles.secondaryButtonText}>{t('social.inviteFriends')}</Text>
               </TouchableOpacity>
 
               {onViewSchedule && (
@@ -217,7 +210,7 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
                   }}
                 >
                   <Ionicons name="calendar-outline" size={20} color="#007AFF" />
-                  <Text style={styles.secondaryButtonText}>View My Schedule</Text>
+                  <Text style={styles.secondaryButtonText}>{t('bookings.title')}</Text>
                 </TouchableOpacity>
               )}
 
@@ -225,7 +218,7 @@ const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> = ({
                 style={[styles.actionButton, styles.doneButton]}
                 onPress={handleClose}
               >
-                <Text style={styles.doneButtonText}>Done</Text>
+                <Text style={styles.doneButtonText}>{t('common.done')}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>

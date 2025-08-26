@@ -20,6 +20,8 @@ import { packagesApi } from '../api/packages';
 import { socialApi } from '../api/social';
 import { ClassInstance } from '../types';
 import AttendeeAvatars from './AttendeeAvatars';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 
 interface ClassDetailsModalProps {
   visible: boolean;
@@ -41,6 +43,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const [showParticipants, setShowParticipants] = useState(false);
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const queryClient = useQueryClient();
+  const { t, pluralize, formatDateTime: formatDateTimeI18n, formatTime: formatTimeI18n, rtlText, rtlRow } = useTranslation();
 
   // Get user's bookings to check if they have a booking for this class
   const {
@@ -268,7 +271,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           refetchType: 'all' 
         });
       }, 300);
-      Alert.alert('Success', 'Added to waitlist successfully!');
+      Alert.alert(t('common.success'), t('alerts.waitlistJoined'));
       onClose();
     },
     onError: (error: any) => {
@@ -317,7 +320,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
         });
       }, 300);
       
-      Alert.alert('Success', 'Left waitlist successfully!');
+      Alert.alert(t('common.success'), t('classes.leftWaitlist'));
       onClose();
     },
     onError: (error: any) => {
@@ -335,36 +338,23 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      }),
-      time: date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      })
+      date: formatDateTimeI18n(date),
+      time: formatTimeI18n(date)
     };
   };
 
   const { date, time } = formatDateTime(classInstance.start_datetime);
-  const endTime = new Date(classInstance.end_datetime).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  const endTime = formatTimeI18n(new Date(classInstance.end_datetime));
 
   const handleBookClass = () => {
     // Check if user has available credits first
     if (isStudent && !hasAvailableCredits) {
       Alert.alert(
-        'No Credits Available',
-        'You need to purchase a package or top up your credits to book this class.',
+        t('classes.noCredits'),
+        t('alerts.needCreditsMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Buy Package', onPress: () => {
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('packages.buyPackage'), onPress: () => {
             // Navigate to packages screen
             onClose();
             console.log('Navigate to packages');
@@ -376,11 +366,11 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
     if (classInstance.is_full) {
       Alert.alert(
-        'Join Waitlist',
-        'This class is full. Would you like to join the waitlist?',
+        t('classes.waitlist'),
+        t('classes.classFullJoinWaitlist'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Join Waitlist', onPress: () => joinWaitlistMutation.mutate() }
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('classes.waitlist'), onPress: () => joinWaitlistMutation.mutate() }
         ]
       );
     } else {
@@ -393,12 +383,12 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     if (!userBooking) return;
     
     Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel your booking for this class?',
+      t('bookings.cancelBooking'),
+      t('alerts.confirmCancelBooking'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         { 
-          text: 'Yes, Cancel',
+          text: t('buttons.yesCancel'),
           style: 'destructive',
           onPress: () => {
             cancelBookingMutation.mutate({
@@ -413,12 +403,12 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
   const handleCancelWaitlist = () => {
     Alert.alert(
-      'Leave Waitlist',
-      'Are you sure you want to leave the waitlist for this class?',
+      t('classes.leaveWaitlist'),
+      t('classes.confirmLeaveWaitlist'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         { 
-          text: 'Yes, Leave',
+          text: t('classes.yesLeave'),
           style: 'destructive',
           onPress: () => {
             cancelWaitlistMutation.mutate();
@@ -430,11 +420,11 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
 
   const handleSendNotification = () => {
     Alert.alert(
-      'Send Notification',
-      'Send a notification to all participants?',
+      t('admin.sendNotification'),
+      t('admin.sendNotificationToParticipants'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Send', onPress: () => console.log('Send notification to participants') }
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.send'), onPress: () => console.log('Send notification to participants') }
       ]
     );
   };
@@ -450,7 +440,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
         <Text style={styles.participantName}>{item.name}</Text>
         <Text style={styles.participantEmail}>{item.email}</Text>
         <Text style={styles.participantBookingDate}>
-          Booked: {new Date(item.booking_date).toLocaleDateString()}
+          {t('bookings.booked')}: {formatDateTimeI18n(new Date(item.booking_date))}
         </Text>
       </View>
       {isAdmin && (
@@ -474,7 +464,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Class Details</Text>
+          <Text style={styles.headerTitle}>{t('sections.classDetails')}</Text>
           <View style={styles.headerActions}>
             {isAdmin && (
               <>
@@ -498,7 +488,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           <View style={styles.classInfo}>
             <Text style={styles.className}>{classInstance.template.name}</Text>
             <Text style={styles.classLevel}>
-              {classInstance.template.level.charAt(0).toUpperCase() + classInstance.template.level.slice(1)} Level
+              {t('classes.' + classInstance.template.level)} {t('classes.level')}
             </Text>
             
             <View style={styles.instructor}>
@@ -509,47 +499,47 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                 <Text style={styles.instructorName}>
                   {classInstance.instructor.first_name} {classInstance.instructor.last_name}
                 </Text>
-                <Text style={styles.instructorTitle}>Instructor</Text>
+                <Text style={styles.instructorTitle}>{t('classes.instructor')}</Text>
               </View>
             </View>
           </View>
 
           {/* Schedule Info */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Schedule</Text>
+            <Text style={[styles.sectionTitle, rtlText()]}>{t('navigation.schedule')}</Text>
             <View style={styles.scheduleInfo}>
-              <View style={styles.scheduleItem}>
+              <View style={[styles.scheduleItem, rtlRow()]}>
                 <Ionicons name="calendar" size={20} color={COLORS.primary} />
-                <Text style={styles.scheduleText}>{date}</Text>
+                <Text style={[styles.scheduleText, rtlText()]}>{date}</Text>
               </View>
-              <View style={styles.scheduleItem}>
+              <View style={[styles.scheduleItem, rtlRow()]}>
                 <Ionicons name="time" size={20} color={COLORS.primary} />
-                <Text style={styles.scheduleText}>{time} - {endTime}</Text>
+                <Text style={[styles.scheduleText, rtlText()]}>{time} - {endTime}</Text>
               </View>
-              <View style={styles.scheduleItem}>
+              <View style={[styles.scheduleItem, rtlRow()]}>
                 <Ionicons name="hourglass" size={20} color={COLORS.primary} />
-                <Text style={styles.scheduleText}>{classInstance.template.duration_minutes} minutes</Text>
+                <Text style={[styles.scheduleText, rtlText()]}>{pluralize(classInstance.template.duration_minutes, 'time.minutes')}</Text>
               </View>
             </View>
           </View>
 
           {/* Capacity Info */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Availability</Text>
+            <Text style={[styles.sectionTitle, rtlText()]}>{t('classes.availability')}</Text>
             <View style={styles.capacityInfo}>
               <View style={styles.capacityItem}>
                 <Text style={styles.capacityNumber}>{classInstance.participant_count}</Text>
-                <Text style={styles.capacityLabel}>Enrolled</Text>
+                <Text style={styles.capacityLabel}>{t('classes.enrolled')}</Text>
               </View>
               <View style={styles.capacityDivider} />
               <View style={styles.capacityItem}>
                 <Text style={styles.capacityNumber}>{classInstance.available_spots}</Text>
-                <Text style={styles.capacityLabel}>Available</Text>
+                <Text style={styles.capacityLabel}>{t('classes.available')}</Text>
               </View>
               <View style={styles.capacityDivider} />
               <View style={styles.capacityItem}>
                 <Text style={styles.capacityNumber}>{classInstance.waitlist_count}</Text>
-                <Text style={styles.capacityLabel}>Waitlist</Text>
+                <Text style={styles.capacityLabel}>{t('classes.waitlist')}</Text>
               </View>
             </View>
           </View>
@@ -557,10 +547,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           {/* Attendees */}
           {attendees.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Who's Going</Text>
+              <Text style={[styles.sectionTitle, rtlText()]}>{t('social.whoIsGoing')}</Text>
               {friendsInClass.length > 0 && (
-                <Text style={styles.friendsText}>
-                  {friendsInClass.length} of your friends {friendsInClass.length === 1 ? 'is' : 'are'} attending
+                <Text style={[styles.friendsText, rtlText()]}>
+                  {pluralize(friendsInClass.length, 'social.friendsAttendingCount')}
                 </Text>
               )}
               <AttendeeAvatars
@@ -576,16 +566,16 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           {/* Description */}
           {classInstance.template.description && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <Text style={styles.description}>{classInstance.template.description}</Text>
+              <Text style={[styles.sectionTitle, rtlText()]}>{t('common.description')}</Text>
+              <Text style={[styles.description, rtlText()]}>{classInstance.template.description}</Text>
             </View>
           )}
 
           {/* Notes */}
           {classInstance.notes && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notes</Text>
-              <Text style={styles.notes}>{classInstance.notes}</Text>
+              <Text style={[styles.sectionTitle, rtlText()]}>{t('common.notes')}</Text>
+              <Text style={[styles.notes, rtlText()]}>{classInstance.notes}</Text>
             </View>
           )}
 
@@ -596,8 +586,8 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                 style={styles.sectionHeader}
                 onPress={() => setShowParticipants(!showParticipants)}
               >
-                <Text style={styles.sectionTitle}>
-                  Participants ({participants.length})
+                <Text style={[styles.sectionTitle, rtlText()]}>
+                  {t('classes.participants')} ({participants.length})
                 </Text>
                 <Ionicons 
                   name={showParticipants ? "chevron-up" : "chevron-down"} 
@@ -609,9 +599,9 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
               {showParticipants && (
                 <View style={styles.participantsList}>
                   {participantsLoading ? (
-                    <Text style={styles.loadingText}>Loading participants...</Text>
+                    <Text style={styles.loadingText}>{t('classes.loadingParticipants')}</Text>
                   ) : participants.length === 0 ? (
-                    <Text style={styles.emptyText}>No participants yet</Text>
+                    <Text style={styles.emptyText}>{t('classes.noParticipantsYet')}</Text>
                   ) : (
                     <FlatList
                       data={participants}
@@ -645,10 +635,10 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                   />
                   <Text style={styles.actionButtonText}>
                     {cancelBookingMutation.isPending
-                      ? 'Cancelling...'
+                      ? t('status.cancelling')
                       : !userBooking.can_cancel
-                        ? 'Cannot Cancel'
-                        : 'Cancel Booking'
+                        ? t('classes.cannotCancel')
+                        : t('bookings.cancelBooking')
                     }
                   </Text>
                 </TouchableOpacity>
@@ -666,8 +656,8 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                   />
                   <Text style={styles.actionButtonText}>
                     {cancelWaitlistMutation.isPending
-                      ? 'Leaving...'
-                      : 'Leave Waitlist'
+                      ? t('status.leaving')
+                      : t('classes.leaveWaitlist')
                     }
                   </Text>
                 </TouchableOpacity>
@@ -688,12 +678,12 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                   />
                   <Text style={styles.actionButtonText}>
                     {bookClassMutation.isPending || joinWaitlistMutation.isPending
-                      ? 'Processing...'
+                      ? t('status.processing')
                       : !hasAvailableCredits
-                        ? 'No Credits'
+                        ? t('classes.noCredits')
                         : classInstance.is_full 
-                          ? 'Join Waitlist' 
-                          : 'Book Class'
+                          ? t('classes.waitlist') 
+                          : t('classes.book')
                     }
                   </Text>
                 </TouchableOpacity>
@@ -709,19 +699,19 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                 onPress={onEdit}
               >
                 <Ionicons name="create" size={20} color={COLORS.primary} />
-                <Text style={styles.secondaryButtonText}>Edit</Text>
+                <Text style={styles.secondaryButtonText}>{t('common.edit')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.actionButton, styles.dangerButton, { flex: 1, marginRight: SPACING.sm }]}
                 onPress={() => {
                   Alert.alert(
-                    'Delete Class',
-                    'Are you sure you want to delete this class? This action cannot be undone.',
+                    t('classes.deleteClass'),
+                    t('classes.confirmDeleteClass'),
                     [
-                      { text: 'Cancel', style: 'cancel' },
+                      { text: t('common.cancel'), style: 'cancel' },
                       { 
-                        text: 'Delete', 
+                        text: t('common.delete'), 
                         style: 'destructive',
                         onPress: onDelete 
                       }
@@ -730,7 +720,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                 }}
               >
                 <Ionicons name="trash" size={20} color={COLORS.white} />
-                <Text style={styles.actionButtonText}>Delete</Text>
+                <Text style={styles.actionButtonText}>{t('common.delete')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -738,7 +728,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                 onPress={handleSendNotification}
               >
                 <Ionicons name="notifications" size={20} color={COLORS.primary} />
-                <Text style={styles.secondaryButtonText}>Notify</Text>
+                <Text style={styles.secondaryButtonText}>{t('admin.notify')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -755,7 +745,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
@@ -775,7 +765,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   headerActions: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     gap: SPACING.sm,
   },
   headerAction: {
@@ -803,7 +793,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   instructor: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     gap: SPACING.md,
   },
@@ -830,7 +820,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   sectionHeader: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-between',
     alignItems: 'center',
   },
@@ -844,7 +834,7 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   scheduleItem: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     gap: SPACING.md,
   },
@@ -853,7 +843,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   capacityInfo: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-around',
     alignItems: 'center',
   },
@@ -890,7 +880,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   participantItem: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
@@ -952,11 +942,11 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   adminActionsRow: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     gap: SPACING.sm,
   },
   actionButton: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: SPACING.md,

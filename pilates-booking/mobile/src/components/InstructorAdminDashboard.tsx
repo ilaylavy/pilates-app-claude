@@ -25,12 +25,12 @@ interface DashboardMetrics {
   active_users_count: number;
   active_users_growth: number;
   today_classes: TodaySchedule[];
-  waitlist_notifications: Array<{
+  waitlist_notifications: {
     class_id: number;
     class_name: string;
     start_time: string;
     waitlist_count: number;
-  }>;
+  }[];
 }
 
 interface InstructorAdminDashboardProps {
@@ -108,7 +108,7 @@ const InstructorAdminDashboard: React.FC<InstructorAdminDashboardProps> = ({ use
     });
   };
 
-  const formatTime = (timeString: string) => {
+  const formatDisplayTime = (timeString: string) => {
     return new Date(`2024-01-01T${timeString}`).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit' 
@@ -190,7 +190,7 @@ const InstructorAdminDashboard: React.FC<InstructorAdminDashboardProps> = ({ use
               <View style={styles.classInfo}>
                 <Text style={styles.className}>{classItem.class_name}</Text>
                 <Text style={styles.classTime}>
-                  {formatTime(classItem.start_time)} - {formatTime(classItem.end_time)}
+                  {formatDisplayTime(classItem.start_time)} - {formatDisplayTime(classItem.end_time)}
                 </Text>
                 <Text style={styles.classCapacity}>
                   {classItem.current_bookings}/{classItem.capacity} booked
@@ -219,7 +219,7 @@ const InstructorAdminDashboard: React.FC<InstructorAdminDashboardProps> = ({ use
               <Ionicons name="people" size={16} color={COLORS.warning} />
               <Text style={styles.waitlistText}>
                 {notification.waitlist_count} people waiting for {notification.class_name} 
-                at {formatTime(notification.start_time)}
+                at {formatDisplayTime(notification.start_time)}
               </Text>
             </View>
           ))}

@@ -13,11 +13,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { COLORS, SPACING } from '../utils/config';
 import { packagesApi } from '../api/packages';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { UserPackage } from '../types';
 import PendingApprovalCard from '../components/PendingApprovalCard';
 import CashPaymentInstructions from '../components/CashPaymentInstructions';
 
 const PendingApprovalsScreen: React.FC = () => {
+  const { t, rtlText } = useTranslation();
   const [showInstructions, setShowInstructions] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<UserPackage | null>(null);
 
@@ -63,7 +66,7 @@ const PendingApprovalsScreen: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading pending approvals...</Text>
+          <Text style={[styles.loadingText, rtlText()]}>{t('pendingApprovals.loadingText')}</Text>
         </View>
       </View>
     );
@@ -73,9 +76,9 @@ const PendingApprovalsScreen: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>Unable to Load Packages</Text>
-          <Text style={styles.errorText}>
-            {error instanceof Error ? error.message : 'Please try again later'}
+          <Text style={[styles.errorTitle, rtlText()]}>{t('pendingApprovals.errorTitle')}</Text>
+          <Text style={[styles.errorText, rtlText()]}>
+            {error instanceof Error ? error.message : t('pendingApprovals.errorMessage')}
           </Text>
         </View>
       </View>
@@ -93,25 +96,25 @@ const PendingApprovalsScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Pending Payments</Text>
-          <Text style={styles.subtitle}>
-            Complete your cash payments at reception to fully confirm your packages
+          <Text style={[styles.title, rtlText()]}>{t('pendingApprovals.title')}</Text>
+          <Text style={[styles.subtitle, rtlText()]}>
+            {t('pendingApprovals.subtitle')}
           </Text>
           <TouchableOpacity
             style={styles.refreshButton}
             onPress={handleRefresh}
           >
             <Ionicons name="refresh" size={20} color={COLORS.primary} />
-            <Text style={styles.refreshText}>Check Status</Text>
+            <Text style={[styles.refreshText, rtlText()]}>{t('pendingApprovals.checkStatus')}</Text>
           </TouchableOpacity>
         </View>
 
         {pendingPackages.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>✅</Text>
-            <Text style={styles.emptyTitle}>All Caught Up!</Text>
-            <Text style={styles.emptyText}>
-              You don't have any packages pending payment approval.
+            <Text style={[styles.emptyTitle, rtlText()]}>{t('pendingApprovals.emptyTitle')}</Text>
+            <Text style={[styles.emptyText, rtlText()]}>
+              {t('pendingApprovals.emptyMessage')}
             </Text>
           </View>
         ) : (
@@ -126,15 +129,9 @@ const PendingApprovalsScreen: React.FC = () => {
             ))}
 
             <View style={styles.infoSection}>
-              <Text style={styles.infoTitle}>Payment Process</Text>
-              <Text style={styles.infoText}>
-                • <Text style={styles.infoTextBold}>Step 1:</Text> Admin authorizes your payment - you can use credits immediately{'\n'}
-                • <Text style={styles.infoTextBold}>Step 2:</Text> Visit reception to complete cash payment{'\n'}
-                • Show your reference code to the staff{'\n'}
-                • Payment will be fully confirmed within 2 hours{'\n'}
-                • Use "Check Status" button to see updates{'\n'}{'\n'}
-                <Text style={styles.infoTextBold}>📍 Can I use my credits?</Text> Yes! Once authorized (orange status), you can start booking classes immediately.{'\n'}{'\n'}
-                <Text style={styles.infoTextBold}>Need help?</Text> Contact reception if payment isn't processed within 2 hours.
+              <Text style={[styles.infoTitle, rtlText()]}>{t('pendingApprovals.paymentProcessTitle')}</Text>
+              <Text style={[styles.infoText, rtlText()]}>
+                {t('pendingApprovals.paymentProcessSteps')}
               </Text>
             </View>
           </View>
@@ -146,7 +143,7 @@ const PendingApprovalsScreen: React.FC = () => {
         <CashPaymentInstructions
           visible={showInstructions}
           instructions={{
-            message: 'Package reserved for cash payment',
+            message: t('pendingApprovals.packageReservedMessage'),
             status: 'pending_approval',
             package_id: selectedPackage.package_id,
             package_name: selectedPackage.package.name,
@@ -156,13 +153,13 @@ const PendingApprovalsScreen: React.FC = () => {
             payment_method: 'cash',
             reference_code: selectedPackage.payment_reference,
             payment_instructions: [
-              'Visit the studio reception desk',
-              `Pay ₪${selectedPackage.package.price} in cash`,
-              `Show reference code: ${selectedPackage.payment_reference}`,
-              'Credits will be activated after payment confirmation',
+              t('pendingApprovals.visitReception'),
+              t('pendingApprovals.payAmount', { amount: selectedPackage.package.price }),
+              t('pendingApprovals.showReference', { reference: selectedPackage.payment_reference }),
+              t('pendingApprovals.creditsActivated'),
             ],
             reservation_expires_at: selectedPackage.reservation_expires_at || '',
-            estimated_approval_time: 'Usually approved within 2 hours during business hours',
+            estimated_approval_time: t('pendingApprovals.estimatedApprovalTime'),
           }}
           onClose={() => {
             setShowInstructions(false);

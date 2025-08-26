@@ -15,6 +15,7 @@ import { COLORS, SPACING } from '../../utils/config';
 import { classesApi } from '../../api/classes';
 import { adminApi } from '../../api/admin';
 import { useUserRole } from '../../hooks/useUserRole';
+import { useTranslation } from '../../hooks/useTranslation';
 import { ClassInstance } from '../../types';
 import ClassCard from '../ClassCard';
 import QuickAddClassModal from './QuickAddClassModal';
@@ -32,6 +33,7 @@ interface ScheduleFilter {
 
 const ScheduleTab: React.FC = () => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
+  const { t, rtlText, rtlRow } = useTranslation();
   
   // If user is a student, show the student-specific schedule
   if (isStudent && !isAdmin && !isInstructor) {
@@ -212,7 +214,7 @@ const ScheduleTab: React.FC = () => {
   };
 
   const renderViewModeToggle = () => (
-    <View style={styles.viewModeContainer}>
+    <View style={[styles.viewModeContainer, rtlRow()]}>
       {(['week', 'month'] as ViewMode[]).map((mode) => (
         <TouchableOpacity
           key={mode}
@@ -225,7 +227,7 @@ const ScheduleTab: React.FC = () => {
             color={viewMode === mode ? COLORS.white : COLORS.textSecondary}
           />
           <Text style={[styles.viewModeText, viewMode === mode && styles.activeViewModeText]}>
-            {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            {t(`schedule.${mode}`)}
           </Text>
         </TouchableOpacity>
       ))}
@@ -233,7 +235,7 @@ const ScheduleTab: React.FC = () => {
   );
 
   const renderWeekHeader = () => (
-    <View style={styles.weekHeader}>
+    <View style={[styles.weekHeader, rtlRow()]}>
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('prev')}>
         <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
       </TouchableOpacity>
@@ -291,18 +293,18 @@ const ScheduleTab: React.FC = () => {
               onPress={() => handleDayPress(day)}
               disabled={dayClasses.length === 0 && (!isAdmin && !isInstructor)}
             >
-              <View style={[styles.dayHeader, isToday && styles.todayHeader]}>
+              <View style={[styles.dayHeader, isToday && styles.todayHeader, rtlRow()]}>
                 <View style={styles.dayInfo}>
-                  <Text style={[styles.dayName, isToday && styles.todayText]}>
+                  <Text style={[styles.dayName, isToday && styles.todayText, rtlText()]}>
                     {day.toLocaleDateString('en-US', { weekday: 'short' })}
                   </Text>
-                  <Text style={[styles.dayDate, isToday && styles.todayText]}>
+                  <Text style={[styles.dayDate, isToday && styles.todayText, rtlText()]}>
                     {day.getDate()}
                   </Text>
                 </View>
                 <View style={styles.dayActions}>
                   <Text style={styles.dayClassCount}>
-                    {dayClasses.length} {dayClasses.length === 1 ? 'class' : 'classes'}
+                    {dayClasses.length} {t('schedule.classes', { count: dayClasses.length })}
                   </Text>
                   {(isAdmin || isInstructor) && (
                     <TouchableOpacity 
@@ -619,7 +621,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   weekHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
@@ -644,7 +645,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   viewModeContainer: {
-    flexDirection: 'row',
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
     gap: SPACING.xs,
@@ -681,7 +681,6 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   dayHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
@@ -689,7 +688,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   dayInfo: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.md,
   },

@@ -8,6 +8,7 @@ import ProgressRing from './ProgressRing';
 import StreakCounter from './StreakCounter';
 import MotivationalMessage from './MotivationalMessage';
 import AnnouncementBanner, { Announcement } from './AnnouncementBanner';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface ExtendedUserStats {
   total_bookings: number;
@@ -32,6 +33,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   reservedPackages,
 }) => {
   const [milestoneShown, setMilestoneShown] = useState<number | null>(null);
+  const { t, pluralize, rtlText } = useTranslation();
 
   const { data: extendedStats } = useQuery<ExtendedUserStats>({
     queryKey: ['user-extended-stats'],
@@ -66,20 +68,20 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const showMilestoneAlert = (weeks: number) => {
     const messages = {
-      1: "Congratulations on completing your first week! 🎉",
-      2: "Two weeks in a row - you're building momentum! 🚀",
-      4: "One month of consistency - amazing work! ⭐",
-      8: "Two months strong - you're a pilates warrior! 💪",
-      12: "Three months of dedication - incredible! 🏆",
-      16: "Four months streak - you're unstoppable! 🔥",
-      20: "Five months - you're a pilates champion! 👑",
-      24: "Six months streak - absolutely legendary! 🌟",
+      1: t('milestones.week1'),
+      2: t('milestones.week2'),
+      4: t('milestones.month1'),
+      8: t('milestones.month2'),
+      12: t('milestones.month3'),
+      16: t('milestones.month3'), // Fallback to month3
+      20: t('milestones.month3'), // Fallback to month3  
+      24: t('milestones.month3'), // Fallback to month3
     };
 
     Alert.alert(
-      `${weeks} Week${weeks !== 1 ? 's' : ''} Streak! 🎉`,
-      messages[weeks as keyof typeof messages] || `${weeks} weeks of consistency - keep it up! 🎯`,
-      [{ text: 'Amazing!', style: 'default' }]
+      `${weeks} ${weeks !== 1 ? t('time.weeks') : t('time.week')} Streak! 🎉`,
+      messages[weeks as keyof typeof messages] || `${weeks} ${t('time.weeks')} - ${t('motivational.quotes.consistency')}`,
+      [{ text: t('common.success'), style: 'default' }]
     );
   };
 
@@ -101,7 +103,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   };
 
   const getCreditsExpiryMessage = () => {
-    if (activeUserPackages.length === 0) return 'No active package';
+    if (activeUserPackages.length === 0) return t('progress.noActivePackage');
     
     // Find the package expiring soonest
     const earliestExpiryPackage = activeUserPackages.reduce((earliest, current) => 
@@ -109,11 +111,11 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
     );
     
     const daysUntilExpiry = earliestExpiryPackage?.days_until_expiry || 0;
-    if (daysUntilExpiry <= 0) return 'Expired';
-    if (daysUntilExpiry === 1) return 'Expires tomorrow!';
-    if (daysUntilExpiry <= 3) return `Expires in ${daysUntilExpiry} days!`;
-    if (daysUntilExpiry <= 7) return `${daysUntilExpiry} days left`;
-    return `${daysUntilExpiry} days left`;
+    if (daysUntilExpiry <= 0) return t('progress.expired');
+    if (daysUntilExpiry === 1) return t('progress.expiresTomorrow');
+    if (daysUntilExpiry <= 3) return pluralize(daysUntilExpiry, 'progress.expiresInDays');
+    if (daysUntilExpiry <= 7) return pluralize(daysUntilExpiry, 'progress.daysLeft');
+    return pluralize(daysUntilExpiry, 'progress.daysLeft');
   };
 
   const monthlyProgress = extendedStats ? 
@@ -123,11 +125,11 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
     if (!extendedStats?.days_since_last_class) return null;
     
     const days = extendedStats.days_since_last_class;
-    if (days === 0) return "You have a class today! 🎯";
-    if (days === 1) return "Your last class was yesterday";
-    if (days <= 3) return `${days} days since your last class`;
-    if (days <= 7) return `${days} days since your last class - time to book!`;
-    return `It's been ${days} days - we miss you! 💙`;
+    if (days === 0) return t('progress.classToday');
+    if (days === 1) return t('progress.lastClassYesterday');
+    if (days <= 3) return pluralize(days, 'progress.daysSinceLastClass');
+    if (days <= 7) return pluralize(days, 'progress.timeToBook');
+    return pluralize(days, 'progress.missYou');
   };
 
   return (
@@ -139,7 +141,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       {/* Progress Rings Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Progress</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('sections.yourProgress')}</Text>
         <View style={styles.progressContainer}>
           <ProgressRing
             progress={monthlyProgress}
@@ -165,14 +167,14 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <Text style={[styles.statNumber, { color: getCreditsExpiryColor() }]}>
             {hasUnlimited ? '∞' : totalCredits}
           </Text>
-          <Text style={styles.statLabel}>Credits Available</Text>
+          <Text style={[styles.statLabel, { textAlign: 'center' }]}>{t('stats.creditsAvailable')}</Text>
           <Text style={[styles.expiryText, { color: getCreditsExpiryColor() }]}>
             {getCreditsExpiryMessage()}
           </Text>
           {reservedPackages && reservedPackages.length > 0 && (
             <View style={styles.pendingIndicator}>
               <Ionicons name="time" size={12} color={COLORS.warning} />
-              <Text style={styles.pendingText}>{reservedPackages.length} pending</Text>
+              <Text style={styles.pendingText}>{reservedPackages.length} {t('stats.pending')}</Text>
             </View>
           )}
         </View>
@@ -183,8 +185,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <Text style={styles.statNumber}>
               {extendedStats.days_since_last_class}
             </Text>
-            <Text style={styles.statLabel}>
-              {extendedStats.days_since_last_class === 1 ? 'Day' : 'Days'} Ago
+            <Text style={[styles.statLabel, { textAlign: 'center' }]}>
+              {extendedStats.days_since_last_class === 1 ? t('stats.dayAgo') : t('stats.daysAgo')}
             </Text>
             <Text style={styles.timeMessage}>
               {getTimeMessage()}

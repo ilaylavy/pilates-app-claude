@@ -51,6 +51,16 @@ class SeedingManager:
                 "file": "seed_data.py",
                 "description": "Original seeding script (basic functionality)",
                 "estimated_time": "< 1 minute"
+            },
+            "hebrew": {
+                "file": "seed_data_hebrew.py",
+                "description": "Hebrew content for i18n testing (Hebrew names, descriptions, announcements)",
+                "estimated_time": "< 1 minute"
+            },
+            "hebrew-heavy": {
+                "file": "seed_data_hebrew_heavy.py",
+                "description": "Comprehensive Hebrew dataset with 2 months historical data (150 users, bookings, packages)",
+                "estimated_time": "3-5 minutes"
             }
         }
     
@@ -223,7 +233,7 @@ async def main():
     
     # Seeding options
     parser.add_argument("--type",
-                       choices=["light", "medium", "heavy", "custom", "original"],
+                       choices=["light", "medium", "heavy", "custom", "original", "hebrew", "hebrew-heavy"],
                        help="Type of seeding script to run")
     
     parser.add_argument("--clear-first", action="store_true",

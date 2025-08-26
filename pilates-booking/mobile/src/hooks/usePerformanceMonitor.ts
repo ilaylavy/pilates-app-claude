@@ -263,7 +263,7 @@ class PerformanceMonitor {
 
   public trackAnimationFrameRate(animationName: string): () => void {
     let frameCount = 0;
-    let startTime = Date.now();
+    const startTime = Date.now();
     let rafId: number;
 
     const trackFrame = () => {

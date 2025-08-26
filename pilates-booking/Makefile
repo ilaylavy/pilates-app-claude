@@ -65,12 +65,18 @@ migrate: ## Run database migrations
 	docker-compose exec backend python -m alembic upgrade head
 
 seed: ## Seed database with initial data
-	docker-compose exec backend python -m app.scripts.seed_manager seed --type heavy
+	docker-compose exec backend python -m app.scripts.seed_manager seed --type hebrew-heavy
 seed-list: ## List available seed scripts
 	docker-compose exec backend python -m app.scripts.seed_manager list
+seed-hebrew: ## Seed database with Hebrew content for i18n testing
+	docker-compose exec backend python -m app.scripts.seed_manager seed --type hebrew --clear-first --yes
+seed-hebrew-heavy: ## Seed database with comprehensive Hebrew data (2 months history)
+	docker-compose exec backend python -m app.scripts.seed_manager seed --type hebrew-heavy --clear-first --yes
 
 clean: ## Clean up containers and volumes
 	docker-compose down -v
 	docker system prune -f
 
 reset-db: clean up migrate seed ## Reset database completely
+reset-db-hebrew: clean up migrate seed-hebrew ## Reset database with Hebrew content
+reset-db-hebrew-heavy: clean up migrate seed-hebrew-heavy ## Reset database with comprehensive Hebrew data

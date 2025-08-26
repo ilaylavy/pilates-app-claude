@@ -24,7 +24,7 @@ interface ErrorBoundaryProps {
   isolate?: boolean;
   enableRecovery?: boolean;
   maxRetries?: number;
-  resetKeys?: Array<string | number>;
+  resetKeys?: (string | number)[];
   resetOnPropsChange?: boolean;
   name?: string;
 }

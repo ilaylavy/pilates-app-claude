@@ -22,13 +22,17 @@ import ClassCard from '../ClassCard';
 import ClassDetailsModal from '../ClassDetailsModal';
 import BookingConfirmationModal from '../BookingConfirmationModal';
 import { useAuth } from '../../hooks/useAuth';
+import { useTranslation } from '../../hooks/useTranslation';
+import { StyleUtils } from '../../utils/styleUtils';
 
 type ViewMode = 'week' | 'month';
 type ScheduleMode = 'schedule' | 'bookings';
 
 const StudentScheduleTab: React.FC = () => {
   const { isAuthenticated } = useAuth();
+  const { t, rtlText, rtlRow, rtlAlign, formatDateTime, formatDate, formatTime, isRTL } = useTranslation();
   const queryClient = useQueryClient();
+  
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -390,7 +394,7 @@ const StudentScheduleTab: React.FC = () => {
         });
       }, 300);
       
-      Alert.alert('Success', 'Added to waitlist successfully!');
+      Alert.alert(t('common.success'), t('alerts.waitlistJoined'));
     },
     onError: (error: any, classInstanceId) => {
       setBookingInProgressId(null);
@@ -406,13 +410,13 @@ const StudentScheduleTab: React.FC = () => {
     // Check if user has available credits first
     if (!activePackage || (activePackage.credits_remaining <= 0 && !activePackage.package.is_unlimited)) {
       Alert.alert(
-        'No Credits Available',
-        'You need to purchase a package or top up your credits to book this class.',
+        t('booking.noCredits'),
+        t('booking.noCreditsMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Buy Package', onPress: () => {
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('booking.buyPackage'), onPress: () => {
             // TODO: Navigate to packages screen - would need navigation prop
-            Alert.alert('Navigate to Packages', 'This would navigate to the packages screen in a full implementation');
+            Alert.alert(t('navigation.packages'), t('booking.buyPackageMessage'));
           }}
         ]
       );
@@ -442,17 +446,17 @@ const StudentScheduleTab: React.FC = () => {
     if (!userBooking) return;
     
     Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel your booking for this class?',
+      t('booking.cancelTitle'),
+      t('booking.cancelConfirmation'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         { 
-          text: 'Yes, Cancel',
+          text: t('booking.yesCancel'),
           style: 'destructive',
           onPress: () => {
             cancelBookingMutation.mutate({
               bookingId: userBooking!.id,
-              reason: 'User cancelled'
+              reason: t('booking.userCancelReason')
             });
           }
         }
@@ -467,8 +471,9 @@ const StudentScheduleTab: React.FC = () => {
   };
 
   const formatWeekRange = () => {
-    const start = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const end = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const locale = isRTL ? 'he-IL' : 'en-US';
+    const start = weekStart.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+    const end = weekEnd.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
     return `${start} - ${end}`;
   };
 
@@ -524,7 +529,7 @@ const StudentScheduleTab: React.FC = () => {
             color={scheduleMode === mode ? COLORS.white : COLORS.textSecondary}
           />
           <Text style={[styles.scheduleModeText, scheduleMode === mode && styles.activeScheduleModeText]}>
-            {mode === 'schedule' ? 'Schedule' : 'My Bookings'}
+            {t(mode === 'schedule' ? 'schedule.schedule' : 'schedule.myBookings')}
           </Text>
         </TouchableOpacity>
       ))}
@@ -540,7 +545,7 @@ const StudentScheduleTab: React.FC = () => {
           onPress={() => setActiveBookingTab(tab)}
         >
           <Text style={[styles.bookingTabText, activeBookingTab === tab && styles.activeBookingTabText]}>
-            {tab.charAt(0).toUpperCase() + tab.slice(1)} ({bookingTabCounts[tab]})
+            {t(`booking.tab.${tab}`)} ({bookingTabCounts[tab]})
           </Text>
         </TouchableOpacity>
       ))}
@@ -553,7 +558,7 @@ const StudentScheduleTab: React.FC = () => {
         <Ionicons name="search" size={20} color={COLORS.textSecondary} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search classes or instructors..."
+          placeholder={t('schedule.searchPlaceholder')}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -573,7 +578,7 @@ const StudentScheduleTab: React.FC = () => {
     if (isLoading) {
       return (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading your bookings...</Text>
+          <Text style={styles.loadingText}>{t('schedule.loadingBookings')}</Text>
         </View>
       );
     }
@@ -602,13 +607,10 @@ const StudentScheduleTab: React.FC = () => {
           <View style={styles.emptyBookingsContainer}>
             <Ionicons name="calendar-outline" size={64} color={COLORS.textSecondary} />
             <Text style={styles.emptyBookingsTitle}>
-              No {activeBookingTab === 'upcoming' ? 'upcoming' : activeBookingTab} bookings
+              {t(`booking.empty.${activeBookingTab}.title`)}
             </Text>
             <Text style={styles.emptyBookingsSubtitle}>
-              {activeBookingTab === 'upcoming' 
-                ? 'Book a class to see it here'
-                : `You don't have any ${activeBookingTab} bookings`
-              }
+              {t(`booking.empty.${activeBookingTab}.subtitle`)}
             </Text>
           </View>
         }
@@ -618,7 +620,7 @@ const StudentScheduleTab: React.FC = () => {
   };
 
   const renderViewModeToggle = () => (
-    <View style={styles.viewModeContainer}>
+    <View style={[styles.viewModeContainer, rtlRow()]}>
       {(['week', 'month'] as ViewMode[]).map((mode) => (
         <TouchableOpacity
           key={mode}
@@ -631,7 +633,7 @@ const StudentScheduleTab: React.FC = () => {
             color={viewMode === mode ? COLORS.white : COLORS.textSecondary}
           />
           <Text style={[styles.viewModeText, viewMode === mode && styles.activeViewModeText]}>
-            {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            {t(`schedule.${mode}`)}
           </Text>
         </TouchableOpacity>
       ))}
@@ -639,7 +641,7 @@ const StudentScheduleTab: React.FC = () => {
   );
 
   const renderWeekHeader = () => (
-    <View style={styles.weekHeader}>
+    <View style={[styles.weekHeader, rtlRow()]}>
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('prev')}>
         <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
       </TouchableOpacity>
@@ -656,7 +658,7 @@ const StudentScheduleTab: React.FC = () => {
   );
 
   const renderMonthHeader = () => (
-    <View style={styles.weekHeader}>
+    <View style={[styles.weekHeader, rtlRow()]}>
       <TouchableOpacity style={styles.navButton} onPress={() => {
         const newDate = new Date(currentMonth);
         newDate.setMonth(newDate.getMonth() - 1);
@@ -667,7 +669,7 @@ const StudentScheduleTab: React.FC = () => {
       
       <View style={styles.weekInfo}>
         <Text style={styles.weekRange}>
-          {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          {currentMonth.toLocaleDateString(isRTL ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' })}
         </Text>
       </View>
       
@@ -698,18 +700,18 @@ const StudentScheduleTab: React.FC = () => {
           
           return (
             <View key={index} style={[styles.dayContainer]}>
-              <View style={[styles.dayHeader, isToday && styles.todayHeader]}>
-                <View style={styles.dayInfo}>
-                  <Text style={[styles.dayName, isToday && styles.todayText]}>
-                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
+              <View style={[styles.dayHeader, isToday && styles.todayHeader, rtlRow()]}>
+                <View style={[styles.dayInfo, rtlAlign('start')]}>
+                  <Text style={[styles.dayName, isToday && styles.todayText, rtlText()]}>
+                    {day.toLocaleDateString(isRTL ? 'he-IL' : 'en-US', { weekday: 'short' })}
                   </Text>
-                  <Text style={[styles.dayDate, isToday && styles.todayText]}>
+                  <Text style={[styles.dayDate, isToday && styles.todayText, rtlText()]}>
                     {day.getDate()}
                   </Text>
                 </View>
                 <View style={styles.dayActions}>
                   <Text style={styles.dayClassCount}>
-                    {dayClasses.length} {dayClasses.length === 1 ? 'class' : 'classes'}
+                    {dayClasses.length} {t('schedule.classes', { count: dayClasses.length })}
                   </Text>
                 </View>
               </View>
@@ -717,7 +719,7 @@ const StudentScheduleTab: React.FC = () => {
               <View style={styles.dayClasses}>
                 {dayClasses.length === 0 ? (
                   <View style={styles.emptyDay}>
-                    <Text style={styles.emptyDayText}>No classes</Text>
+                    <Text style={styles.emptyDayText}>{t('schedule.noClasses')}</Text>
                   </View>
                 ) : (
                   dayClasses.map((classInstance) => (
@@ -788,9 +790,15 @@ const StudentScheduleTab: React.FC = () => {
     return (
       <View style={styles.monthView}>
         <View style={styles.monthDaysHeader}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <Text key={day} style={styles.monthDayHeaderText}>{day}</Text>
-          ))}
+          {Array.from({ length: 7 }, (_, index) => {
+            const date = new Date();
+            // Set to Sunday (0) + index to get each day of week
+            date.setDate(date.getDate() - date.getDay() + index);
+            const dayName = date.toLocaleDateString(isRTL ? 'he-IL' : 'en-US', { weekday: 'short' });
+            return (
+              <Text key={index} style={styles.monthDayHeaderText}>{dayName}</Text>
+            );
+          })}
         </View>
 
         <ScrollView style={styles.monthCalendar} showsVerticalScrollIndicator={false}>
@@ -852,7 +860,7 @@ const StudentScheduleTab: React.FC = () => {
 
         {monthLoading && (
           <View style={styles.monthLoadingOverlay}>
-            <Text style={styles.loadingText}>Loading classes...</Text>
+            <Text style={styles.loadingText}>{t('schedule.loadingClasses')}</Text>
           </View>
         )}
       </View>
@@ -886,9 +894,9 @@ const StudentScheduleTab: React.FC = () => {
         ) : error ? (
           <View style={styles.errorState}>
             <Ionicons name="warning" size={48} color={COLORS.error} />
-            <Text style={styles.errorText}>Failed to load classes</Text>
+            <Text style={styles.errorText}>{t('schedule.errorLoading')}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : viewMode === 'week' ? (
@@ -950,7 +958,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   weekHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
@@ -975,7 +982,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   viewModeContainer: {
-    flexDirection: 'row',
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
     gap: SPACING.xs,
@@ -1012,7 +1018,6 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   dayHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,

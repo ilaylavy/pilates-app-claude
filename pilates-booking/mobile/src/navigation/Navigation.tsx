@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../hooks/useAuth';
 import { useUserRole } from '../hooks/useUserRole';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { COLORS } from '../utils/config';
 
 // Auth screens
@@ -14,7 +16,7 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // Main app screens
 import HomeScreen from '../screens/HomeScreen';
-import NewScheduleScreen from '../screens/NewScheduleScreen'; // Updated unified schedule
+import ScheduleScreen from '../screens/ScheduleScreen'; // Unified schedule
 import BookingsScreen from '../screens/BookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PackagesScreen from '../screens/PackagesScreen';
@@ -31,7 +33,7 @@ import ReportsScreen from '../screens/ReportsScreen';
 import SystemSettingsScreen from '../screens/SystemSettingsScreen';
 import AdminPackagesScreen from '../screens/AdminPackagesScreen';
 // Removed: AddClassScreen, EditClassScreen, TemplateManagementScreen, BulkOperationsScreen
-// These are now integrated into the unified NewScheduleScreen
+// These are now integrated into the unified ScheduleScreen
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -86,10 +88,12 @@ const AuthStack = createStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 
 const AuthNavigator = () => {
+  
   return (
     <AuthStack.Navigator
       screenOptions={{
         headerShown: false,
+        animationTypeForReplace: 'push',
       }}
     >
       <AuthStack.Screen name="Login" component={LoginScreen} />
@@ -101,6 +105,7 @@ const AuthNavigator = () => {
 
 const MainNavigator = () => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
+  const { t, rtlText, rtlRow } = useTranslation();
 
   const getIconName = (routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap => {
     const iconMap: Record<string, [string, string]> = {
@@ -127,45 +132,90 @@ const MainNavigator = () => {
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textSecondary,
         headerShown: false,
+        tabBarLabelPosition: 'below-icon',
+        tabBarStyle: {
+          ...StyleUtils.flexDirection('row'),
+        },
       })}
     >
       {/* Home screen for all users */}
-      <MainTab.Screen name="Home" component={HomeScreen} />
+      <MainTab.Screen 
+        name="Home" 
+        component={HomeScreen} 
+        options={() => ({ title: t('navigation.home') })}
+      />
 
       {/* Role-specific screens */}
       {isStudent && (
         <>
-          <MainTab.Screen name="Schedule" component={NewScheduleScreen} />
-          <MainTab.Screen name="Packages" component={PackageNavigator} />
+          <MainTab.Screen 
+            name="Schedule" 
+            component={ScheduleScreen}
+            options={() => ({ title: t('navigation.schedule') })}
+          />
+          <MainTab.Screen 
+            name="Packages" 
+            component={PackageNavigator}
+            options={() => ({ title: t('navigation.packages') })}
+          />
         </>
       )}
 
       {/* Instructor screens */}
       {isInstructor && (
         <>
-          <MainTab.Screen name="Schedule" component={NewScheduleScreen} options={{ title: 'My Classes' }} />
-          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
+          <MainTab.Screen 
+            name="Schedule" 
+            component={ScheduleScreen} 
+            options={() => ({ title: t('instructor.myClasses') })} 
+          />
+          <MainTab.Screen 
+            name="Users" 
+            component={UserManagementScreen} 
+            options={() => ({ title: t('instructor.students') })} 
+          />
         </>
       )}
 
       {/* Admin screens */}
       {isAdmin && (
         <>
-          <MainTab.Screen name="Schedule" component={NewScheduleScreen} options={{ title: 'Schedule' }} />
-          <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
-          <MainTab.Screen name="AdminPackages" component={AdminPackagesScreen} options={{ title: 'Admin' }} />
-          <MainTab.Screen name="Reports" component={ReportsScreen} />
+          <MainTab.Screen 
+            name="Schedule" 
+            component={ScheduleScreen} 
+            options={() => ({ title: t('navigation.schedule') })} 
+          />
+          <MainTab.Screen 
+            name="Users" 
+            component={UserManagementScreen} 
+            options={() => ({ title: t('admin.users') })} 
+          />
+          <MainTab.Screen 
+            name="AdminPackages" 
+            component={AdminPackagesScreen} 
+            options={() => ({ title: t('navigation.admin') })} 
+          />
+          <MainTab.Screen 
+            name="Reports" 
+            component={ReportsScreen}
+            options={() => ({ title: t('admin.reports') })}
+          />
         </>
       )}
 
       {/* Profile is common for all roles */}
-      <MainTab.Screen name="Profile" component={ProfileScreen} />
+      <MainTab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={() => ({ title: t('navigation.profile') })}
+      />
     </MainTab.Navigator>
   );
 };
 
 const Navigation = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const { t } = useTranslation();
 
   if (isLoading) {
     // TODO: Add loading screen
@@ -176,6 +226,8 @@ const Navigation = () => {
     <RootStack.Navigator
       screenOptions={{
         headerShown: false,
+        headerTitleAlign: 'center',
+        animationTypeForReplace: 'push',
       }}
     >
       {isAuthenticated ? (
@@ -184,62 +236,110 @@ const Navigation = () => {
           <RootStack.Screen 
             name="Packages" 
             component={PackagesScreen}
-            options={{ headerShown: true, title: 'Packages' }}
+            options={{ 
+              headerShown: true, 
+              title: t('navigation.packages'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="UserManagement" 
             component={UserManagementScreen}
-            options={{ headerShown: true, title: 'User Management' }}
+            options={{ 
+              headerShown: true, 
+              title: t('admin.userManagement'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="PackageManagement" 
             component={AdminPackagesScreen}
-            options={{ headerShown: true, title: 'Package Management' }}
+            options={{ 
+              headerShown: true, 
+              title: t('admin.packageManagement'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="Reports" 
             component={ReportsScreen}
-            options={{ headerShown: true, title: 'Reports' }}
+            options={{ 
+              headerShown: true, 
+              title: t('admin.reports'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="SystemSettings" 
             component={SystemSettingsScreen}
-            options={{ headerShown: true, title: 'System Settings' }}
+            options={{ 
+              headerShown: true, 
+              title: t('admin.settings'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="Settings" 
             component={SettingsScreen}
-            options={{ headerShown: true, title: 'Settings' }}
+            options={{ 
+              headerShown: true, 
+              title: t('navigation.settings'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="BookingHistory" 
             component={BookingsScreen}
-            options={{ headerShown: true, title: 'Booking History' }}
+            options={{ 
+              headerShown: true, 
+              title: t('bookings.title'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="AdminPackages" 
             component={AdminPackagesScreen}
-            options={{ headerShown: true, title: 'Manage Packages' }}
+            options={{ 
+              headerShown: true, 
+              title: t('admin.packages'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="Payment" 
             component={PaymentScreen}
-            options={{ headerShown: true, title: 'Payment' }}
+            options={{ 
+              headerShown: true, 
+              title: t('payments.title'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="PaymentHistory" 
             component={PaymentHistoryScreen}
-            options={{ headerShown: true, title: 'Payment History' }}
+            options={{ 
+              headerShown: true, 
+              title: t('profile.paymentHistory'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="PackageHistory" 
             component={PackageHistoryScreen}
-            options={{ headerShown: true, title: 'Package History' }}
+            options={{ 
+              headerShown: true, 
+              title: t('packages.title'),
+              headerTitleAlign: 'center',
+            }}
           />
           <RootStack.Screen 
             name="PurchaseConfirmation" 
             component={PurchaseConfirmationScreen}
-            options={{ headerShown: true, title: 'Purchase Confirmation' }}
+            options={{ 
+              headerShown: true, 
+              title: t('payments.paymentSuccessful'),
+              headerTitleAlign: 'center',
+            }}
           />
           {/* Removed old class management screens - now integrated into Schedule tab */}
         </>

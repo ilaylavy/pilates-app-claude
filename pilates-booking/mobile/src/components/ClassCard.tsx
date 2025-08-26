@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
+import { useTranslation } from '../hooks/useTranslation';
 import { ClassInstance } from '../types';
 
 interface ClassCardProps {
@@ -41,21 +42,14 @@ const ClassCard: React.FC<ClassCardProps> = ({
   isBookingInProgress = false,
 }) => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
+  const { t, formatTime: formatTimeI18n, formatDate: formatDateI18n, rtlText, rtlRow, rtlAlign } = useTranslation();
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+  const formatClassTime = (dateString: string) => {
+    return formatTimeI18n(new Date(dateString));
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    return formatDateI18n(new Date(dateString));
   };
 
 
@@ -80,27 +74,27 @@ const ClassCard: React.FC<ClassCardProps> = ({
 
   const renderListContent = () => (
     <>
-      <View style={styles.listHeader}>
+      <View style={[styles.listHeader, rtlRow()]}>
         <View style={styles.classInfo}>
-          <Text style={styles.className}>{classInstance.template?.name || 'Unknown Class'}</Text>
-          <Text style={styles.instructor}>
-            {classInstance.instructor?.first_name || 'Unknown'} {classInstance.instructor?.last_name || 'Instructor'}
+          <Text style={[styles.className, rtlText()]}>{classInstance.template?.name || t('classes.title')}</Text>
+          <Text style={[styles.instructor, rtlText()]}>
+            {classInstance.instructor?.first_name || t('classes.instructor')} {classInstance.instructor?.last_name || ''}
           </Text>
-          <View style={styles.listTimeInfo}>
+          <View style={[styles.listTimeInfo, rtlRow()]}>
             <Ionicons name="calendar" size={14} color={COLORS.textSecondary} />
             <Text style={styles.listTimeText}>
               {formatDate(classInstance.start_datetime)}
             </Text>
             <Ionicons name="time" size={14} color={COLORS.textSecondary} />
             <Text style={styles.listTimeText}>
-              {formatTime(classInstance.start_datetime)} - {formatTime(classInstance.end_datetime)}
+              {formatClassTime(classInstance.start_datetime)} - {formatClassTime(classInstance.end_datetime)}
             </Text>
           </View>
         </View>
-        <View style={styles.listRightInfo}>
+        <View style={[styles.listRightInfo, rtlAlign('start')]}>
           {/* Always show capacity info */}
           <View style={styles.listCapacityContainer}>
-            <View style={styles.listCapacityDisplay}>
+            <View style={[styles.listCapacityDisplay, rtlRow()]}>
               <Ionicons name="people" size={14} color={capacityInfo.color} />
               <Text style={[styles.listCapacityText, { color: capacityInfo.color }]}>
                 {capacityInfo.current}/{capacityInfo.total}
@@ -108,7 +102,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
               <View style={[styles.listCapacityDot, { backgroundColor: capacityInfo.color }]} />
             </View>
             {capacityInfo.isFull && (
-              <Text style={styles.listFullText}>FULL</Text>
+              <Text style={styles.listFullText}>{t('classes.full')}</Text>
             )}
           </View>
 
@@ -119,13 +113,13 @@ const ClassCard: React.FC<ClassCardProps> = ({
                 // Show booked status when booked
                 <View style={styles.bookedBadge}>
                   <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                  <Text style={styles.bookedText}>Booked</Text>
+                  <Text style={styles.bookedText}>{t('classes.bookingConfirmed')}</Text>
                 </View>
               ) : isWaitlisted ? (
                 // Show waitlisted status when waitlisted
                 <View style={styles.bookedBadge}>
                   <Ionicons name="hourglass" size={20} color={COLORS.warning} />
-                  <Text style={[styles.bookedText, { color: COLORS.warning }]}>Joined Waitlist</Text>
+                  <Text style={[styles.bookedText, { color: COLORS.warning }]}>{t('classes.addedToWaitlist')}</Text>
                 </View>
               ) : (
                 // Show book/waitlist button when not booked
@@ -135,7 +129,8 @@ const ClassCard: React.FC<ClassCardProps> = ({
                       <TouchableOpacity 
                         style={[
                           styles.actionButton, 
-                          !hasAvailableCredits ? styles.disabledActionButton : styles.studentWaitlistButton
+                          !hasAvailableCredits ? styles.disabledActionButton : styles.studentWaitlistButton,
+                          rtlRow()
                         ]}
                         onPress={onJoinWaitlist}
                         disabled={isBookingInProgress || !hasAvailableCredits}
@@ -145,8 +140,8 @@ const ClassCard: React.FC<ClassCardProps> = ({
                           size={16} 
                           color={!hasAvailableCredits ? COLORS.white : COLORS.warning} 
                         />
-                        <Text style={!hasAvailableCredits ? styles.studentBookButtonText : styles.studentWaitlistButtonText}>
-                          {isBookingInProgress ? 'Joining...' : !hasAvailableCredits ? 'No Credits' : 'Join Waitlist'}
+                        <Text style={[!hasAvailableCredits ? styles.studentBookButtonText : styles.studentWaitlistButtonText, rtlText()]}>
+                          {isBookingInProgress ? t('status.loading') : !hasAvailableCredits ? t('classes.noCredits') : t('classes.waitlist')}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -156,14 +151,15 @@ const ClassCard: React.FC<ClassCardProps> = ({
                         style={[
                           styles.actionButton, 
                           styles.studentBookButton,
-                          !hasAvailableCredits && styles.disabledActionButton
+                          !hasAvailableCredits && styles.disabledActionButton,
+                          rtlRow()
                         ]}
                         onPress={onBook}
                         disabled={isBookingInProgress || !hasAvailableCredits}
                       >
                         <Ionicons name={!hasAvailableCredits ? "card" : "add"} size={16} color={COLORS.white} />
-                        <Text style={styles.studentBookButtonText}>
-                          {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : 'Book Class'}
+                        <Text style={[styles.studentBookButtonText, rtlText()]}>
+                          {isBookingInProgress ? t('status.loading') : !hasAvailableCredits ? t('classes.noCredits') : t('classes.book')}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -177,7 +173,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
           {(!(isStudent || isAdmin) || !showActions) && isBooked && (
             <View style={styles.bookedBadge}>
               <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-              <Text style={styles.bookedText}>Booked</Text>
+              <Text style={styles.bookedText}>{t('classes.bookingConfirmed')}</Text>
             </View>
           )}
           

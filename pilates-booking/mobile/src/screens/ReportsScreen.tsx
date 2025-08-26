@@ -31,7 +31,7 @@ const ReportsScreen: React.FC = () => {
     queryKey: ['admin', 'reports', 'revenue', reportPeriod],
     queryFn: () => {
       const endDate = new Date();
-      let startDate = new Date();
+      const startDate = new Date();
       
       switch (reportPeriod) {
         case 'week':
@@ -57,7 +57,7 @@ const ReportsScreen: React.FC = () => {
     queryKey: ['admin', 'reports', 'attendance', reportPeriod],
     queryFn: () => {
       const endDate = new Date();
-      let startDate = new Date();
+      const startDate = new Date();
       
       switch (reportPeriod) {
         case 'week':

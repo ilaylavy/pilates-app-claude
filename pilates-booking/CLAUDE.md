@@ -10,9 +10,10 @@ All detailed documentation is organized in the `docs/` folder:
 - **[Testing Guide](docs/testing.md)** - Test setup, commands, best practices, and coverage requirements
 - **[Package System](docs/packages.md)** - Credit-based booking system, business logic, and API endpoints
 - **[Payment Integration](docs/payments.md)** - Stripe payment processing, security, and configuration
-- **[Social Features](docs/social-features.md)** - Friend system, attendee display, calendar integration (planned)
+- **[Social Features](docs/social-features.md)** - Friend system, attendee display, calendar integration (**planned, not yet implemented**)
 - **[Security Implementation](docs/security.md)** - Authentication, authorization, data protection, and audit logging
 - **[Logging System](docs/logging.md)** - Comprehensive logging, monitoring, error tracking, and performance metrics
+- **[Internationalization](docs/internationalization.md)** - Multi-language support, Hebrew/English RTL layouts, and translation management
 
 Refer to these documents for detailed implementation guidance on specific features.
 
@@ -24,13 +25,17 @@ Refer to these documents for detailed implementation guidance on specific featur
 make setup              # Install all dependencies (backend + mobile)
 
 # Development environment  
+make build              # Build all services
 make up                 # Start Docker services (PostgreSQL, Redis, Backend)
 make down               # Stop all services
-make logs               # View all service logs
+make start              # Reset backend and logs (down, up, logs)
+make logs               # View filtered logs (errors, warnings, API calls only)
+make logs-all           # View all unfiltered logs
 
 # Database operations
 make migrate            # Run pending migrations
-make seed               # Populate database with sample data
+make seed               # Populate database with sample data (heavy type by default)
+make seed-list          # List available seed scripts
 make reset-db           # Clean reset: drop volumes, migrate, seed
 
 # Testing and quality
@@ -38,6 +43,13 @@ make test               # Run all tests (backend + mobile)
 make test-backend       # Backend tests only  
 make lint               # Lint all code
 make lint-backend       # Backend linting (black, isort, flake8)
+make format             # Format all code
+
+# Utilities
+make clean              # Clean up containers and volumes
+make backend-logs       # Show filtered backend logs only
+make backend-logs-all   # Show all backend logs unfiltered
+make db-logs            # Show database logs
 ```
 
 ### Backend-Specific Commands
@@ -54,11 +66,11 @@ uvicorn app.main:app --reload                               # Start dev server
 ```bash
 cd mobile
 npm start                    # Start Expo dev server
-npm run ios                  # iOS simulator
-npm run android              # Android emulator 
+expo run:ios                 # iOS simulator (or npm run ios)
+expo run:android             # Android emulator (or npm run android)
 npm test                     # Run Jest tests
-npm test -- --watch         # Watch mode
 npm run lint                 # ESLint + TypeScript check
+npm run format               # Format code with Prettier
 ```
 
 ### Debugging & Troubleshooting
@@ -116,10 +128,11 @@ docker-compose exec postgres psql -U pilates_user -d pilates_db  # Connect to DB
 **Key Patterns:**
 - **Role-Based UI**: Different screens and features per user role
 - **Offline-First**: Request queuing and sync when connection restored
-- **Cash Payment Workflow**: Two-step approval system with real-time polling
+- **Cash Payment Workflow**: One-step approval system with real-time polling
 - **Advanced Caching**: 5-minute API response cache with intelligent invalidation
 - **Security Layers**: Biometric auth, auto-logout, secure storage, jailbreak detection
 - **Performance Monitoring**: Real-time FPS, memory usage, and API call tracking
+- **Internationalization**: Full Hebrew/English support with RTL layouts and 470+ translation keys
 
 ### Database Schema & Business Logic
 
@@ -162,7 +175,7 @@ ClassInstance (N) -> (1) User (instructor)
 
 ### Mobile Configuration  
 - **API Endpoint**: Set in `src/utils/config.ts` with backup URLs for reliability
-- **Development**: Uses `192.168.99.110:8000` for physical device testing
+- **Development**: Uses `192.168.71.110:8000` for physical device testing (update IP as needed)
 - **Production**: Update `API_BASE_URL` for production deployment  
 - **Expo Config**: `app.json` includes secure-store and local-authentication plugins
 - **Security**: Biometric authentication and auto-logout configuration
@@ -177,11 +190,13 @@ ClassInstance (N) -> (1) User (instructor)
 - **Payment Processing**: Stripe integration with webhooks and refunds
 - **Admin Management**: Comprehensive admin panel for users, classes, and packages
 
-### Social Features
+### Social Features (**PLANNED - NOT YET IMPLEMENTED**)
 - **Friend System**: Send/accept friend requests, view mutual connections
 - **Attendee Display**: See who's attending classes with avatar displays
 - **Calendar Integration**: Automatic calendar sync with native device calendars
 - **Privacy Controls**: Granular settings for social visibility
+
+*Note: Social features are coded but marked as "do not implement yet" in documentation. Backend endpoints exist but frontend integration is incomplete.*
 
 ### Security & Compliance
 - **JWT Authentication**: Secure token-based auth with automatic refresh
@@ -214,7 +229,7 @@ ClassInstance (N) -> (1) User (instructor)
 
 ### Database Changes
 1. Modify model in `models/`
-2. Generate migration: `make migration` (prompts for message)
+2. Generate migration: `docker-compose exec backend python -m alembic revision --autogenerate -m "description"`
 3. Review auto-generated migration in `alembic/versions/`
 4. Apply migration: `make migrate`
 5. Update seed data if needed in `app/scripts/seed_data.py`
@@ -222,17 +237,17 @@ ClassInstance (N) -> (1) User (instructor)
 ### Mobile-Backend Integration
 1. Mobile API client (`src/api/client.ts`) handles auth automatically
 2. API endpoints return JSON matching TypeScript interfaces
-3. TanStack Query manages caching and synchronization
+3. `@tanstack/react-query` manages caching and synchronization
 4. Error handling via React Query error boundaries
 5. Optimistic updates for better UX
 
 ## Important Notes
 
 ### Development Environment
-- Backend runs on `localhost:8000`, mobile dev server on `localhost:8083`
+- Backend runs on `localhost:8000`, mobile dev server on `localhost:19006` (default Expo)
 - Database accessible at `localhost:5432`, Redis at `localhost:6379`
-- Use `192.168.99.110:8000` for physical device testing (update in config.ts)
-- Expo dev tools available at `http://localhost:8083`
+- Use `192.168.71.110:8000` for physical device testing (update IP in config.ts as needed)
+- Expo dev tools available at `http://localhost:19006`
 
 ### Production Considerations
 - Set secure `SECRET_KEY` and database credentials
@@ -261,7 +276,7 @@ ClassInstance (N) -> (1) User (instructor)
 - **Mobile App Development**: See [Mobile App Guide](docs/mobile-app.md) for architecture and patterns
 - **Payment Features**: Reference [Payment Integration](docs/payments.md) for Stripe integration
 - **Package/Credit Logic**: Check [Package System](docs/packages.md) for business rules
-- **Social Features**: See [Social Features](docs/social-features.md) (marked as planned, not yet implemented)
+- **Social Features**: See [Social Features](docs/social-features.md) (**planned, not yet implemented**)
 - **Security Implementation**: Review [Security Guide](docs/security.md) for auth and protection
 - **Debugging Issues**: Use [Logging System](docs/logging.md) for troubleshooting
 - **Adding Tests**: Follow [Testing Guide](docs/testing.md) patterns
@@ -279,4 +294,4 @@ ClassInstance (N) -> (1) User (instructor)
 - Implement caching for expensive operations
 - Follow async/await patterns throughout
 - Monitor performance via logging system
-- Use TanStack Query for client-side caching
+- Use `@tanstack/react-query` for client-side caching

@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../../utils/config';
+import { useTranslation } from '../../hooks/useTranslation';
+import { StyleUtils } from '../../utils/styleUtils';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -17,6 +19,7 @@ interface InputProps extends TextInputProps {
   leftIcon?: keyof typeof Ionicons.glyphMap;
   rightIcon?: keyof typeof Ionicons.glyphMap;
   onRightIconPress?: () => void;
+  textAlign?: 'left' | 'right' | 'center';
 }
 
 const Input: React.FC<InputProps> = ({
@@ -27,10 +30,12 @@ const Input: React.FC<InputProps> = ({
   rightIcon,
   onRightIconPress,
   style,
+  textAlign,
   ...props
 }) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const { rtlText } = useTranslation();
 
   const togglePasswordVisibility = () => {
     setIsPasswordVisible(!isPasswordVisible);
@@ -48,7 +53,7 @@ const Input: React.FC<InputProps> = ({
 
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, rtlText()]}>{label}</Text>}
       
       <View style={[
         styles.inputContainer,
@@ -66,7 +71,13 @@ const Input: React.FC<InputProps> = ({
         
         <TextInput
           {...props}
-          style={[styles.input, style]}
+          style={[
+            styles.input, 
+            style,
+            { 
+              textAlign: textAlign || rtlText().textAlign
+            }
+          ]}
           secureTextEntry={isPassword && !isPasswordVisible}
           onFocus={handleFocus}
           onBlur={handleBlur}
@@ -100,7 +111,7 @@ const Input: React.FC<InputProps> = ({
         )}
       </View>
       
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && <Text style={[styles.errorText, rtlText()]}>{error}</Text>}
     </View>
   );
 };

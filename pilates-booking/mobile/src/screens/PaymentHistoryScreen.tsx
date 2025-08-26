@@ -13,9 +13,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS, SPACING } from '../utils/config';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { paymentsApi, PaymentHistoryItem } from '../api/payments';
 
 const PaymentHistoryScreen: React.FC = () => {
+  const { t, rtlText, formatCurrency, formatDate } = useTranslation();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -87,21 +90,21 @@ const PaymentHistoryScreen: React.FC = () => {
   const formatPaymentType = (type: string) => {
     switch (type) {
       case 'package_purchase':
-        return 'Package Purchase';
+        return t('paymentHistory.packagePurchase');
       case 'single_class':
-        return 'Single Class';
+        return t('paymentHistory.singleClass');
       case 'late_cancellation_fee':
-        return 'Late Cancellation Fee';
+        return t('paymentHistory.lateCancellationFee');
       case 'no_show_fee':
-        return 'No Show Fee';
+        return t('paymentHistory.noShowFee');
       case 'refund':
-        return 'Refund';
+        return t('paymentHistory.refund');
       default:
         return type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatPaymentDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('he-IL', {
       year: 'numeric',
@@ -114,7 +117,7 @@ const PaymentHistoryScreen: React.FC = () => {
 
   const handleViewInvoice = async (payment: PaymentHistoryItem) => {
     if (!payment.external_payment_id) {
-      Alert.alert('Info', 'No invoice available for this payment.');
+      Alert.alert(t('paymentHistory.infoTitle'), t('paymentHistory.noInvoiceAvailable'));
       return;
     }
 
@@ -123,18 +126,18 @@ const PaymentHistoryScreen: React.FC = () => {
       if (invoice.hosted_invoice_url) {
         // Open invoice URL - you might want to use a WebView or external browser
         Alert.alert(
-          'Invoice',
-          'Invoice URL: ' + invoice.hosted_invoice_url,
+          t('paymentHistory.invoiceTitle'),
+          t('paymentHistory.invoiceUrl', { url: invoice.hosted_invoice_url }),
           [
-            { text: 'OK' }
+            { text: t('common.ok') }
           ]
         );
       } else {
-        Alert.alert('Info', 'Invoice not available.');
+        Alert.alert(t('paymentHistory.infoTitle'), t('paymentHistory.invoiceNotAvailable'));
       }
     } catch (error) {
       console.error('Failed to get invoice:', error);
-      Alert.alert('Error', 'Failed to retrieve invoice.');
+      Alert.alert(t('common.error'), t('paymentHistory.failedToRetrieveInvoice'));
     }
   };
 
@@ -149,7 +152,7 @@ const PaymentHistoryScreen: React.FC = () => {
           <Text style={styles.paymentDescription}>
             {item.description || formatPaymentType(item.payment_type)}
           </Text>
-          <Text style={styles.paymentDate}>{formatDate(item.created_at)}</Text>
+          <Text style={styles.paymentDate}>{formatPaymentDate(item.created_at)}</Text>
         </View>
         <View style={styles.paymentAmount}>
           <Text style={styles.amountText}>
@@ -170,8 +173,8 @@ const PaymentHistoryScreen: React.FC = () => {
 
       {item.refund_amount && (
         <View style={styles.refundInfo}>
-          <Text style={styles.refundText}>
-            Refund: ₪{item.refund_amount} on {formatDate(item.refund_date!)}
+          <Text style={[styles.refundText, rtlText()]}>
+            {t('paymentHistory.refundInfo', { amount: item.refund_amount, date: formatPaymentDate(item.refund_date!) })}
           </Text>
         </View>
       )}
@@ -202,9 +205,9 @@ const PaymentHistoryScreen: React.FC = () => {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Ionicons name="card-outline" size={64} color={COLORS.disabled} />
-      <Text style={styles.emptyTitle}>No Payment History</Text>
-      <Text style={styles.emptyMessage}>
-        Your payment history will appear here once you make your first purchase.
+      <Text style={[styles.emptyTitle, rtlText()]}>{t('paymentHistory.emptyTitle')}</Text>
+      <Text style={[styles.emptyMessage, rtlText()]}>
+        {t('paymentHistory.emptyMessage')}
       </Text>
     </View>
   );
@@ -213,7 +216,7 @@ const PaymentHistoryScreen: React.FC = () => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading payment history...</Text>
+        <Text style={[styles.loadingText, rtlText()]}>{t('paymentHistory.loadingText')}</Text>
       </View>
     );
   }
@@ -222,9 +225,9 @@ const PaymentHistoryScreen: React.FC = () => {
     return (
       <View style={styles.errorContainer}>
         <Ionicons name="warning-outline" size={64} color={COLORS.error} />
-        <Text style={styles.errorTitle}>Failed to load payment history</Text>
+        <Text style={[styles.errorTitle, rtlText()]}>{t('paymentHistory.errorTitle')}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-          <Text style={styles.retryText}>Try Again</Text>
+          <Text style={[styles.retryText, rtlText()]}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );

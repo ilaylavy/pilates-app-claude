@@ -13,6 +13,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { StackNavigationProp } from '@react-navigation/stack';
 
 import { useAuth } from '../../hooks/useAuth';
+import { useTranslation } from '../../hooks/useTranslation';
+import { StyleUtils } from '../../utils/styleUtils';
 import { AuthStackParamList } from '../../navigation/Navigation';
 import { COLORS, SPACING } from '../../utils/config';
 import Button from '../../components/common/Button';
@@ -35,6 +37,7 @@ interface FormData {
 }
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
+  const { t, rtlText, rtlRow } = useTranslation();
   const { register } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -54,14 +57,14 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       await register(registerData);
       
       Alert.alert(
-        'Registration Successful',
-        'Your account has been created. Please sign in.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        t('auth.registrationSuccessful'),
+        t('auth.registrationSuccessMessage'),
+        [{ text: t('common.ok'), onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
       Alert.alert(
-        'Registration Failed',
-        error?.response?.data?.detail || 'An error occurred during registration'
+        t('auth.registrationFailed'),
+        error?.response?.data?.detail || t('auth.registrationError')
       );
     } finally {
       setIsLoading(false);
@@ -79,8 +82,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join our pilates community</Text>
+            <Text style={[styles.title, rtlText('center')]}>{t('auth.createAccount')}</Text>
+            <Text style={[styles.subtitle, rtlText('center')]}>{t('auth.joinCommunity')}</Text>
           </View>
 
           <View style={styles.form}>
@@ -88,11 +91,11 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               <Controller
                 control={control}
                 name="first_name"
-                rules={{ required: 'First name is required' }}
+                rules={{ required: t('auth.firstNameRequired') }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="First Name"
-                    placeholder="First name"
+                    label={t('auth.firstName')}
+                    placeholder={t('auth.firstNamePlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -105,11 +108,11 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               <Controller
                 control={control}
                 name="last_name"
-                rules={{ required: 'Last name is required' }}
+                rules={{ required: t('auth.lastNameRequired') }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="Last Name"
-                    placeholder="Last name"
+                    label={t('auth.lastName')}
+                    placeholder={t('auth.lastNamePlaceholder')}
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -124,16 +127,16 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               control={control}
               name="email"
               rules={{
-                required: 'Email is required',
+                required: t('auth.emailRequired'),
                 pattern: {
                   value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Invalid email address',
+                  message: t('auth.invalidEmailAddress'),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Email"
-                  placeholder="Enter your email"
+                  label={t('auth.email')}
+                  placeholder={t('auth.emailPlaceholder')}
                   leftIcon="mail"
                   value={value}
                   onChangeText={onChange}
@@ -150,8 +153,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               name="phone"
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Phone (Optional)"
-                  placeholder="Enter your phone number"
+                  label={t('auth.phoneOptional')}
+                  placeholder={t('auth.phonePlaceholder')}
                   leftIcon="call"
                   value={value}
                   onChangeText={onChange}
@@ -165,20 +168,20 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               control={control}
               name="password"
               rules={{
-                required: 'Password is required',
+                required: t('auth.passwordRequired'),
                 minLength: {
                   value: 8,
-                  message: 'Password must be at least 8 characters',
+                  message: t('auth.passwordMinLength'),
                 },
                 pattern: {
                   value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-                  message: 'Password must contain uppercase, lowercase, and number',
+                  message: t('auth.passwordComplexity'),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Password"
-                  placeholder="Enter your password"
+                  label={t('auth.password')}
+                  placeholder={t('auth.passwordPlaceholder')}
                   leftIcon="lock-closed"
                   value={value}
                   onChangeText={onChange}
@@ -193,14 +196,14 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               control={control}
               name="confirmPassword"
               rules={{
-                required: 'Please confirm your password',
+                required: t('auth.confirmPasswordRequired'),
                 validate: (value) =>
-                  value === password || 'Passwords do not match',
+                  value === password || t('auth.passwordsDoNotMatch'),
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <Input
-                  label="Confirm Password"
-                  placeholder="Confirm your password"
+                  label={t('auth.confirmPassword')}
+                  placeholder={t('auth.confirmPasswordPlaceholder')}
                   leftIcon="lock-closed"
                   value={value}
                   onChangeText={onChange}
@@ -212,7 +215,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             />
 
             <Button
-              title="Create Account"
+              title={t('auth.createAccount')}
               onPress={handleSubmit(onSubmit)}
               loading={isLoading}
               style={styles.registerButton}
@@ -220,9 +223,9 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={[styles.footerText, rtlText()]}>{t('auth.alreadyHaveAccount')} </Text>
             <Button
-              title="Sign In"
+              title={t('auth.signIn')}
               onPress={() => navigation.navigate('Login')}
               variant="outline"
               size="small"
@@ -266,7 +269,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   nameRow: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'space-between',
   },
   nameInput: {
@@ -276,14 +279,14 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   footer: {
-    flexDirection: 'row',
+    ...StyleUtils.flexDirection('row'),
     justifyContent: 'center',
     alignItems: 'center',
   },
   footerText: {
     fontSize: 16,
     color: COLORS.textSecondary,
-    marginRight: SPACING.sm,
+    ...StyleUtils.marginEnd(SPACING.sm),
   },
 });
 

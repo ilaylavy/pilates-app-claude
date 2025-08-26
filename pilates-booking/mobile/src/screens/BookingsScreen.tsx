@@ -21,6 +21,8 @@ import { bookingsApi } from '../api/bookings';
 import { useApiErrorHandler } from '../utils/errorMessages';
 import { socialApi } from '../api/social';
 import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from '../hooks/useTranslation';
+import { StyleUtils } from '../utils/styleUtils';
 import { Booking, ClassInstance } from '../types';
 import ClassCard from '../components/ClassCard';
 import ClassDetailsModal from '../components/ClassDetailsModal';
@@ -46,6 +48,7 @@ const BookingsScreen: React.FC = () => {
   const queryClient = useQueryClient();
   const { handleError } = useApiErrorHandler();
   const { isAuthenticated } = useAuth();
+  const { t, rtlText, formatDateTime } = useTranslation();
 
   // Fetch user bookings
   const {
@@ -67,7 +70,7 @@ const BookingsScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['userBookings'] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
-      Alert.alert('Success', 'Booking cancelled successfully');
+      Alert.alert(t('common.success'), t('booking.cancelled'));
     },
     onError: (error: any) => {
       const { title, message } = handleError(error, 'Failed to cancel booking');
@@ -148,17 +151,17 @@ const BookingsScreen: React.FC = () => {
     // Find the booking to check if it can still be cancelled
     const booking = bookings.find(b => b.id === bookingId);
     if (!booking || booking.status !== 'confirmed') {
-      Alert.alert('Error', 'This booking cannot be cancelled');
+      Alert.alert(t('common.error'), t('errors.generic'));
       return;
     }
     
     Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel this booking?',
+      t('alerts.cancelBooking'),
+      t('alerts.confirmCancelBooking'),
       [
-        { text: 'No', style: 'cancel' },
+        { text: t('common.no'), style: 'cancel' },
         { 
-          text: 'Yes', 
+          text: t('buttons.yesCancel'), 
           style: 'destructive',
           onPress: () => cancelBookingMutation.mutate(bookingId)
         }
@@ -167,19 +170,11 @@ const BookingsScreen: React.FC = () => {
   };
 
 
-  const formatDateTime = (dateString: string) => {
+  const formatDateTimeLocal = (dateString: string) => {
     const date = new Date(dateString);
     return {
-      date: date.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      }),
-      time: date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }),
+      date: formatDateTime(date),
+      time: t('formatTime', { date }),
     };
   };
 
@@ -216,21 +211,21 @@ const BookingsScreen: React.FC = () => {
     >
       <View style={styles.filterModal}>
         <View style={styles.filterHeader}>
-          <Text style={styles.filterTitle}>Filters</Text>
+          <Text style={[styles.filterTitle, rtlText()]}>{t('common.filter')}</Text>
           <TouchableOpacity onPress={() => setShowFilters(false)}>
-            <Text style={styles.filterDone}>Done</Text>
+            <Text style={styles.filterDone}>{t('common.done')}</Text>
           </TouchableOpacity>
         </View>
         
         <ScrollView style={styles.filterContent}>
           <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Quick Filters</Text>
+            <Text style={[styles.filterSectionTitle, rtlText()]}>{t('common.filter')}</Text>
             
             <TouchableOpacity
               style={styles.filterOption}
               onPress={() => setFilters(prev => ({ ...prev, withFriendsOnly: !prev.withFriendsOnly }))}
             >
-              <Text style={styles.filterOptionText}>Classes with friends only</Text>
+              <Text style={[styles.filterOptionText, rtlText()]}>{t('social.friendsAttending')}</Text>
               <Ionicons
                 name={filters.withFriendsOnly ? "checkbox" : "checkbox-outline"}
                 size={24}
@@ -244,7 +239,7 @@ const BookingsScreen: React.FC = () => {
               style={styles.clearFiltersButton}
               onPress={() => setFilters({ withFriendsOnly: false })}
             >
-              <Text style={styles.clearFiltersText}>Clear All Filters</Text>
+              <Text style={styles.clearFiltersText}>{t('common.clear')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -271,7 +266,7 @@ const BookingsScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading your bookings...</Text>
+          <Text style={[styles.loadingText, rtlText()]}>{t('status.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -281,7 +276,7 @@ const BookingsScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Bookings</Text>
+        <Text style={[styles.headerTitle, rtlText()]}>{t('bookings.title')}</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerAction}
@@ -298,7 +293,8 @@ const BookingsScreen: React.FC = () => {
           <Ionicons name="search" size={20} color={COLORS.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search classes or instructors..."
+            placeholder={t('forms.placeholders.searchClasses')}
+            textAlign={rtlText().textAlign}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -312,9 +308,9 @@ const BookingsScreen: React.FC = () => {
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
-        {renderTab('upcoming', 'Upcoming', upcomingCount)}
-        {renderTab('past', 'Past', pastCount)}
-        {renderTab('cancelled', 'Cancelled', cancelledCount)}
+        {renderTab('upcoming', t('bookings.upcoming'), upcomingCount)}
+        {renderTab('past', t('bookings.past'), pastCount)}
+        {renderTab('cancelled', t('classes.cancelled'), cancelledCount)}
       </View>
 
       {/* Content */}
@@ -329,13 +325,13 @@ const BookingsScreen: React.FC = () => {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color={COLORS.textSecondary} />
-            <Text style={styles.emptyTitle}>
-              No {activeTab === 'upcoming' ? 'upcoming' : activeTab} bookings
+            <Text style={[styles.emptyTitle, { textAlign: 'center' }]}>
+              {t('bookings.noBookings')}
             </Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptySubtitle, { textAlign: 'center' }]}>
               {activeTab === 'upcoming' 
-                ? 'Book a class to see it here'
-                : `You don't have any ${activeTab} bookings`
+                ? t('classes.book')
+                : t('bookings.noBookings')
               }
             </Text>
           </View>
