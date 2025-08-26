@@ -548,14 +548,16 @@ async def create_historical_class_instances(session: AsyncSession, instructors: 
 
 async def create_hebrew_user_packages_bulk(session: AsyncSession, students: List[User], 
                                          packages: List[Package], admins: List[User]):
-    """Create user packages with Hebrew-appropriate patterns."""
+    """Create user packages with Hebrew-appropriate patterns and proper Payment records first."""
     print("יוצר חבילות משתמשים...")
     
     user_packages = []
+    payments = []
     
     # 70% of students have packages (higher rate for Hebrew market)
     students_with_packages = sample(students, int(len(students) * 0.7))
     
+    # STEP 1: Create Payment records first
     for i, student in enumerate(students_with_packages):
         # Each student has 1-4 packages (historical and current)
         num_packages = randint(1, 4)
@@ -566,6 +568,72 @@ async def create_hebrew_user_packages_bulk(session: AsyncSession, students: List
             # Historical purchase dates (2 months back to now)
             days_ago = randint(1, 60)
             purchase_date = datetime.now(timezone.utc) - timedelta(days=days_ago)
+            expiry_date = purchase_date + timedelta(days=package.validity_days)
+            
+            # Status and payment distribution
+            if expiry_date < datetime.now(timezone.utc):
+                payment_status = PaymentStatus.COMPLETED
+                package_status = UserPackageStatus.EXPIRED
+            else:
+                # Payment status distribution
+                rand = random()
+                if rand < 0.92:  # 92% completed payments
+                    payment_status = PaymentStatus.COMPLETED
+                    package_status = UserPackageStatus.ACTIVE
+                elif rand < 0.97:  # 5% pending cash
+                    payment_status = PaymentStatus.PENDING
+                    package_status = UserPackageStatus.ACTIVE
+                else:  # 3% failed/cancelled
+                    payment_status = choice([PaymentStatus.FAILED, PaymentStatus.CANCELLED])
+                    package_status = UserPackageStatus.CANCELLED
+            
+            # Choose payment method
+            payment_method_distribution = random()
+            if payment_method_distribution < 0.75:  # 75% credit card
+                payment_method = PaymentMethod.CREDIT_CARD
+                legacy_payment_method = PackagePaymentMethod.CREDIT_CARD
+            elif payment_method_distribution < 0.95:  # 20% cash
+                payment_method = PaymentMethod.CASH
+                legacy_payment_method = PackagePaymentMethod.CASH
+            else:  # 5% other
+                payment_method = PaymentMethod.STRIPE
+                legacy_payment_method = PackagePaymentMethod.STRIPE
+            
+            # Create Payment record
+            payment = Payment(
+                user_id=student.id,
+                package_id=package.id,
+                amount=package.price,
+                currency="ILS",
+                payment_type=PaymentType.PACKAGE_PURCHASE,
+                payment_method=payment_method,
+                status=payment_status,
+                payment_date=purchase_date if payment_status == PaymentStatus.COMPLETED else None,
+                description=f"רכישת חבילה: {package.name}",
+                external_transaction_id=f"HEB-{randint(100000, 999999)}" if payment_status == PaymentStatus.COMPLETED else None
+            )
+            
+            payments.append(payment)
+            session.add(payment)
+    
+    # Commit payments first to get their IDs
+    await session.commit()
+    print(f"נוצרו {len(payments)} רשומות תשלום")
+    
+    # Refresh payment objects to get their IDs
+    for payment in payments:
+        await session.refresh(payment)
+    
+    # STEP 2: Create UserPackages with payment references
+    payment_index = 0
+    for i, student in enumerate(students_with_packages):
+        student_payments = [p for p in payments if p.user_id == student.id]
+        
+        for payment in student_payments:
+            package = next(p for p in packages if p.id == payment.package_id)
+            
+            # Calculate package details from payment
+            purchase_date = payment.payment_date or payment.created_at
             expiry_date = purchase_date + timedelta(days=package.validity_days)
             
             # Determine credits based on usage patterns
@@ -581,48 +649,49 @@ async def create_hebrew_user_packages_bulk(session: AsyncSession, students: List
                     # Active packages - conservative usage
                     credits_remaining = max(0, int(package.credits * (1 - usage_percent * 0.7)))
             
-            # Status and payment distribution
-            if expiry_date < datetime.now(timezone.utc):
-                status = UserPackageStatus.EXPIRED
-                payment_status = PackagePaymentStatus.CONFIRMED
-                payment_method = choice([PackagePaymentMethod.CASH, PackagePaymentMethod.CREDIT_CARD])
+            # Map payment status to package status
+            if payment.status == PaymentStatus.COMPLETED:
+                if expiry_date < datetime.now(timezone.utc):
+                    package_status = UserPackageStatus.EXPIRED
+                else:
+                    package_status = UserPackageStatus.ACTIVE
+                legacy_payment_status = PackagePaymentStatus.CONFIRMED
+            elif payment.status == PaymentStatus.PENDING:
+                package_status = UserPackageStatus.ACTIVE
+                legacy_payment_status = PackagePaymentStatus.PENDING
             else:
-                # Payment status distribution
-                rand = random()
-                if rand < 0.75:  # 75% confirmed (credit card)
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.CONFIRMED
-                    payment_method = PackagePaymentMethod.CREDIT_CARD
-                elif rand < 0.92:  # 17% confirmed cash
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.CONFIRMED
-                    payment_method = PackagePaymentMethod.CASH
-                elif rand < 0.97:  # 5% pending cash
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.PENDING
-                    payment_method = PackagePaymentMethod.CASH
-                else:  # 3% rejected
-                    status = UserPackageStatus.CANCELLED
-                    payment_status = PackagePaymentStatus.REJECTED
-                    payment_method = choice([PackagePaymentMethod.CASH, PackagePaymentMethod.CREDIT_CARD])
+                package_status = UserPackageStatus.CANCELLED
+                legacy_payment_status = PackagePaymentStatus.REJECTED
+            
+            # Map payment method for legacy compatibility
+            legacy_payment_method_map = {
+                PaymentMethod.CASH: PackagePaymentMethod.CASH,
+                PaymentMethod.CREDIT_CARD: PackagePaymentMethod.CREDIT_CARD,
+                PaymentMethod.STRIPE: PackagePaymentMethod.STRIPE,
+                PaymentMethod.BANK_TRANSFER: PackagePaymentMethod.BANK_TRANSFER,
+                PaymentMethod.PAYPAL: PackagePaymentMethod.PAYPAL,
+            }
+            legacy_payment_method = legacy_payment_method_map.get(payment.payment_method, PackagePaymentMethod.CREDIT_CARD)
             
             # Set approval details for confirmed payments
-            approved_by = choice(admins).id if payment_status == PackagePaymentStatus.CONFIRMED else None
+            approved_by = choice(admins).id if payment.status == PaymentStatus.COMPLETED else None
             approved_at = purchase_date + timedelta(hours=randint(1, 48)) if approved_by else None
             
             user_package = UserPackage(
                 user_id=student.id,
                 package_id=package.id,
+                payment_id=payment.id,  # REQUIRED foreign key
                 credits_remaining=credits_remaining,
                 purchase_date=purchase_date,
                 expiry_date=expiry_date,
-                status=status,
-                payment_method=payment_method,
-                payment_status=payment_status,
+                status=package_status,
+                # Legacy fields for backward compatibility
+                payment_method=legacy_payment_method,
+                payment_status=legacy_payment_status,
                 approved_by=approved_by,
                 approved_at=approved_at,
                 admin_notes=f"רכישה {purchase_date.strftime('%d/%m/%Y')}" if random() > 0.7 else None,
-                payment_reference=f"REF-{randint(10000, 99999)}" if payment_method == PackagePaymentMethod.CASH else None,
+                payment_reference=f"HEB-{payment.id}-{student.id}",
             )
             
             user_packages.append(user_package)
@@ -635,7 +704,7 @@ async def create_hebrew_user_packages_bulk(session: AsyncSession, students: List
     
     await session.commit()
     
-    print(f"נוצרו {len(user_packages)} חבילות משתמשים")
+    print(f"נוצרו {len(user_packages)} חבילות משתמשים עם רשומות תשלום")
     return user_packages
 
 
@@ -678,6 +747,7 @@ async def create_hebrew_bookings_bulk(session: AsyncSession, students: List[User
         
         for j, student in enumerate(class_students):
             # Find a valid user package for this student
+            # Note: Using basic validation since we know all seeded packages have valid payments
             student_packages = [up for up in user_packages if up.user_id == student.id and up.is_valid]
             if not student_packages:
                 continue

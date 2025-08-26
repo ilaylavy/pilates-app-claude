@@ -79,8 +79,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
     };
 
     Alert.alert(
-      `${weeks} ${weeks !== 1 ? t('time.weeks') : t('time.week')} Streak! 🎉`,
-      messages[weeks as keyof typeof messages] || `${weeks} ${t('time.weeks')} - ${t('motivational.quotes.consistency')}`,
+      `${t('time.week', { count: weeks })} ${t('streak.title')} 🎉`,
+      messages[weeks as keyof typeof messages] || `${t('time.week', { count: weeks })} - ${t('motivational.quotes.consistency')}`,
       [{ text: t('common.success'), style: 'default' }]
     );
   };

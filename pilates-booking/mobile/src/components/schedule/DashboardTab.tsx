@@ -117,7 +117,7 @@ const DashboardTab: React.FC = () => {
 
   const quickActions = [
     {
-      title: 'Add Class',
+      title: t('admin.quickActions.addClass'),
       icon: 'add-circle',
       color: COLORS.primary,
       onPress: () => {
@@ -125,7 +125,7 @@ const DashboardTab: React.FC = () => {
       },
     },
     {
-      title: 'Bulk Create',
+      title: t('admin.quickActions.bulkCreate'),
       icon: 'copy',
       color: COLORS.secondary,
       onPress: () => {
@@ -133,7 +133,7 @@ const DashboardTab: React.FC = () => {
       },
     },
     {
-      title: 'Templates',
+      title: t('admin.quickActions.templates'),
       icon: 'layers',
       color: COLORS.warning,
       onPress: () => {
@@ -141,7 +141,7 @@ const DashboardTab: React.FC = () => {
       },
     },
     {
-      title: t('admin.reports'),
+      title: t('admin.reports.title'),
       icon: 'analytics',
       color: COLORS.success,
       onPress: () => {
@@ -174,7 +174,7 @@ const DashboardTab: React.FC = () => {
     >
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, rtlText()]}>Quick Actions</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('admin.quickActions.title')}</Text>
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action, index) => (
             <QuickAction
@@ -190,35 +190,35 @@ const DashboardTab: React.FC = () => {
 
       {/* Stats Overview */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, rtlText()]}>Overview</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('admin.dashboard.overview')}</Text>
         <View style={styles.statsGrid}>
           <StatCard
-            title="Today's Classes"
+            title={t('admin.dashboard.todaysClasses')}
             value={todayClasses.length}
             icon="today"
             color={COLORS.primary}
-            subtitle={`${todayClasses.reduce((sum, cls) => sum + (cls.participant_count || 0), 0)} participants`}
+            subtitle={`${todayClasses.reduce((sum, cls) => sum + (cls.participant_count || 0), 0)} ${t('admin.participants')}`}
           />
           <StatCard
-            title="Tomorrow's Classes"
+            title={t('admin.dashboard.tomorrowsClasses')}
             value={tomorrowClasses.length}
             icon="calendar"
             color={COLORS.secondary}
             subtitle={`${tomorrowClasses.reduce((sum, cls) => sum + (cls.participant_count || 0), 0)} ${t('admin.participants')}`}
           />
           <StatCard
-            title="Active Templates"
+            title={t('admin.dashboard.activeTemplates')}
             value={templates.filter(t => t.is_active).length}
             icon="layers"
             color={COLORS.warning}
-            subtitle={`${templates.length} total`}
+            subtitle={`${templates.length} ${t('admin.dashboard.total')}`}
           />
           <StatCard
-            title="This Week"
+            title={t('admin.dashboard.thisWeek')}
             value={upcomingClasses.length}
             icon="trending-up"
             color={COLORS.success}
-            subtitle="upcoming classes"
+            subtitle={t('admin.dashboard.upcomingClasses')}
           />
         </View>
       </View>
@@ -227,9 +227,9 @@ const DashboardTab: React.FC = () => {
       {todayClasses.length > 0 && (
         <View style={styles.section}>
           <View style={[styles.sectionHeader, rtlRow()]}>
-            <Text style={[styles.sectionTitle, rtlText()]}>Today's Classes</Text>
+            <Text style={[styles.sectionTitle, rtlText()]}>{t('admin.dashboard.todaysClasses')}</Text>
             <TouchableOpacity>
-              <Text style={styles.viewAll}>View All</Text>
+              <Text style={styles.viewAll}>{t('common.viewAll')}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.classesContainer}>
@@ -273,9 +273,9 @@ const DashboardTab: React.FC = () => {
 
       {/* Recent Activity */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
+        <Text style={[styles.sectionTitle, rtlText()]}>{t('admin.dashboard.recentActivity')}</Text>
         <View style={styles.activityContainer}>
-          <Text style={styles.noActivity}>Activity tracking coming soon...</Text>
+          <Text style={[styles.noActivity, rtlText()]}>{t('admin.dashboard.activityComingSoon')}</Text>
         </View>
       </View>
     </ScrollView>

@@ -198,7 +198,7 @@ const MainNavigator = () => {
           <MainTab.Screen 
             name="Reports" 
             component={ReportsScreen}
-            options={() => ({ title: t('admin.reports') })}
+            options={() => ({ title: t('admin.reports.title') })}
           />
         </>
       )}
@@ -265,7 +265,7 @@ const Navigation = () => {
             component={ReportsScreen}
             options={{ 
               headerShown: true, 
-              title: t('admin.reports'),
+              title: t('admin.reports.title'),
               headerTitleAlign: 'center',
             }}
           />

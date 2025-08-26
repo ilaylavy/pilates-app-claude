@@ -445,8 +445,9 @@ async def create_extensive_class_instances(session: AsyncSession, instructors: L
 
 async def create_user_packages_bulk(session: AsyncSession, students: List[User], 
                                   packages: List[Package], admins: List[User]):
-    """Create large number of user packages with various statuses."""
+    """Create large number of user packages with proper Payment records first."""
     user_packages = []
+    payments = []
     
     # 60% of students have packages
     students_with_packages = sample(students, int(len(students) * 0.6))
@@ -476,47 +477,114 @@ async def create_user_packages_bulk(session: AsyncSession, students: List[User],
                     # Active packages have varying usage
                     credits_remaining = int(package.credits * (1 - usage_percent))
             
-            # Determine status and payment status (simplified model)
+            # Determine payment status based on package age
             if expiry_date < datetime.now():
-                status = UserPackageStatus.EXPIRED
-                payment_status = PackagePaymentStatus.CONFIRMED
+                payment_status = PaymentStatus.COMPLETED
+                package_status = UserPackageStatus.EXPIRED
             else:
-                # Active packages with simplified payment states
+                # Active packages with various payment states
                 rand = random()
-                if rand < 0.8:  # 80% confirmed payments
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.CONFIRMED
+                if rand < 0.8:  # 80% completed payments
+                    payment_status = PaymentStatus.COMPLETED
+                    package_status = UserPackageStatus.ACTIVE
                 elif rand < 0.95:  # 15% pending payments (cash)
-                    status = UserPackageStatus.ACTIVE
-                    payment_status = PackagePaymentStatus.PENDING
-                else:  # 5% rejected
-                    status = UserPackageStatus.CANCELLED
-                    payment_status = PackagePaymentStatus.REJECTED
+                    payment_status = PaymentStatus.PENDING
+                    package_status = UserPackageStatus.ACTIVE
+                else:  # 5% failed/cancelled
+                    payment_status = choice([PaymentStatus.FAILED, PaymentStatus.CANCELLED])
+                    package_status = UserPackageStatus.CANCELLED
             
             # Choose payment method
-            payment_method = choice([PackagePaymentMethod.CASH, PackagePaymentMethod.CREDIT_CARD, PackagePaymentMethod.STRIPE])
+            payment_method_map = {
+                PackagePaymentMethod.CASH: PaymentMethod.CASH,
+                PackagePaymentMethod.CREDIT_CARD: PaymentMethod.CREDIT_CARD,
+                PackagePaymentMethod.STRIPE: PaymentMethod.STRIPE
+            }
+            legacy_payment_method = choice([PackagePaymentMethod.CASH, PackagePaymentMethod.CREDIT_CARD, PackagePaymentMethod.STRIPE])
+            payment_method = payment_method_map[legacy_payment_method]
             
+            # FIRST: Create Payment record
+            payment = Payment(
+                user_id=student.id,
+                package_id=package.id,
+                amount=package.price,
+                currency="ILS",
+                payment_type=PaymentType.PACKAGE_PURCHASE,
+                payment_method=payment_method,
+                status=payment_status,
+                payment_date=purchase_date if payment_status == PaymentStatus.COMPLETED else None,
+                description=f"Package purchase: {package.name}",
+                external_transaction_id=f"SEED-{randint(100000, 999999)}" if payment_status == PaymentStatus.COMPLETED else None
+            )
+            
+            payments.append(payment)
+            session.add(payment)
+    
+    # Commit payments first to get their IDs
+    await session.commit()
+    
+    # Refresh payment objects to get their IDs
+    for payment in payments:
+        await session.refresh(payment)
+    
+    # Now create UserPackages with payment references
+    payment_index = 0
+    for student in students_with_packages:
+        num_packages = min(3, len([p for p in payments if p.user_id == student.id]))
+        student_payments = [p for p in payments if p.user_id == student.id]
+        
+        for i in range(len(student_payments)):
+            payment = student_payments[i]
+            package = next(p for p in packages if p.id == payment.package_id)
+            
+            # Calculate package details from payment
+            days_ago = (datetime.now() - payment.created_at).days if payment.created_at else randint(1, 180)
+            purchase_date = payment.payment_date or payment.created_at
+            expiry_date = purchase_date + timedelta(days=package.validity_days)
+            
+            # Determine credits based on usage
+            if package.is_unlimited:
+                credits_remaining = 999
+            else:
+                usage_percent = random()
+                if expiry_date < datetime.now():
+                    credits_remaining = randint(0, package.credits)
+                else:
+                    credits_remaining = int(package.credits * (1 - usage_percent))
+            
+            # Map payment status to package status
+            if payment.status == PaymentStatus.COMPLETED:
+                if expiry_date < datetime.now():
+                    package_status = UserPackageStatus.EXPIRED
+                else:
+                    package_status = UserPackageStatus.ACTIVE
+            elif payment.status == PaymentStatus.PENDING:
+                package_status = UserPackageStatus.ACTIVE
+            else:
+                package_status = UserPackageStatus.CANCELLED
+            
+            # SECOND: Create UserPackage with payment_id
             user_package = UserPackage(
                 user_id=student.id,
                 package_id=package.id,
+                payment_id=payment.id,  # Required foreign key
                 credits_remaining=credits_remaining,
                 purchase_date=purchase_date,
                 expiry_date=expiry_date,
-                status=status,
-                payment_status=payment_status,
-                payment_method=payment_method,
-                payment_reference=f"SEED-{randint(1000, 9999)}-{student.id}",
+                status=package_status,
+                # Keep legacy fields for backward compatibility
+                payment_status=PackagePaymentStatus.CONFIRMED if payment.status == PaymentStatus.COMPLETED else PackagePaymentStatus.PENDING,
+                payment_method=legacy_payment_method,
+                payment_reference=f"SEED-{payment.id}-{student.id}",
             )
             
             # Add approval details for processed packages
-            if payment_status != PackagePaymentStatus.PENDING:
+            if payment.status != PaymentStatus.PENDING:
                 admin = choice(admins)
                 user_package.approved_by = admin.id
                 user_package.approved_at = purchase_date + timedelta(hours=randint(1, 24))
                 
-                if payment_status == PackagePaymentStatus.CONFIRMED:
-                    # Set payment reference for confirmed payments
-                    user_package.payment_reference = f"CONFIRMED-{randint(1000, 9999)}"
+                if payment.status == PaymentStatus.COMPLETED:
                     user_package.admin_notes = "Heavy seed payment confirmation"
             
             user_packages.append(user_package)

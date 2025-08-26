@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { COLORS, SPACING } from '../utils/config';
 import { AdminGuard } from '../components/AdminGuard';
 import { classesApi, ClassTemplate } from '../api/classes';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface TemplateFormData {
   name: string;
@@ -29,6 +30,7 @@ interface TemplateFormData {
 }
 
 const TemplateManagementScreen: React.FC = () => {
+  const { t, rtlText, rtlRow } = useTranslation();
   const queryClient = useQueryClient();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -63,13 +65,13 @@ const TemplateManagementScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['classTemplates'] });
       setShowCreateModal(false);
       resetForm();
-      Alert.alert('Success', 'Template created successfully!');
+      Alert.alert(t('common.success'), t('admin.templateManagement.templateCreatedSuccessfully'));
     },
     onError: (error: unknown) => {
       const errorMessage = error && typeof error === 'object' && 'response' in error 
-        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to create template'
-        : 'Failed to create template';
-      Alert.alert('Error', errorMessage);
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || t('admin.templateManagement.failedToCreateTemplate')
+        : t('admin.templateManagement.failedToCreateTemplate');
+      Alert.alert(t('common.error'), errorMessage);
     },
   });
 
@@ -82,13 +84,13 @@ const TemplateManagementScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['classTemplates'] });
       setEditingTemplate(null);
       resetForm();
-      Alert.alert('Success', 'Template updated successfully!');
+      Alert.alert(t('common.success'), t('admin.templateManagement.templateUpdatedSuccessfully'));
     },
     onError: (error: unknown) => {
       const errorMessage = error && typeof error === 'object' && 'response' in error 
-        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to update template'
-        : 'Failed to update template';
-      Alert.alert('Error', errorMessage);
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || t('admin.templateManagement.failedToUpdateTemplate')
+        : t('admin.templateManagement.failedToUpdateTemplate');
+      Alert.alert(t('common.error'), errorMessage);
     },
   });
 
@@ -99,13 +101,13 @@ const TemplateManagementScreen: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classTemplates'] });
-      Alert.alert('Success', 'Template deleted successfully!');
+      Alert.alert(t('common.success'), t('admin.templateManagement.templateDeletedSuccessfully'));
     },
     onError: (error: unknown) => {
       const errorMessage = error && typeof error === 'object' && 'response' in error 
-        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to delete template'
-        : 'Failed to delete template';
-      Alert.alert('Error', errorMessage);
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || t('admin.templateManagement.failedToDeleteTemplate')
+        : t('admin.templateManagement.failedToDeleteTemplate');
+      Alert.alert(t('common.error'), errorMessage);
     },
   });
 
@@ -126,11 +128,11 @@ const TemplateManagementScreen: React.FC = () => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.name.trim()) {
-      newErrors.name = 'Template name is required';
+      newErrors.name = t('admin.templateManagement.enterTemplateName');
     }
     
     if (formData.duration_minutes < 15 || formData.duration_minutes > 180) {
-      newErrors.duration_minutes = 'Duration must be between 15 and 180 minutes';
+      newErrors.duration_minutes = t('admin.templateManagement.duration') + ' must be between 15 and 180 minutes';
     }
     
     if (formData.capacity < 1 || formData.capacity > 50) {
@@ -170,12 +172,12 @@ const TemplateManagementScreen: React.FC = () => {
 
   const handleDeleteTemplate = (template: ClassTemplate) => {
     Alert.alert(
-      'Delete Template',
-      `Are you sure you want to delete "${template.name}"? This action cannot be undone.`,
+      t('admin.templateManagement.deleteTemplate'),
+      t('admin.templateManagement.confirmDeleteTemplate'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => deleteTemplateMutation.mutate(template.id),
         },
@@ -307,7 +309,7 @@ const TemplateManagementScreen: React.FC = () => {
             <View style={styles.emptyContainer}>
               <Ionicons name="document-outline" size={64} color={COLORS.textSecondary} />
               <Text style={styles.emptyText}>
-                {searchQuery || filterLevel ? "No templates match your filters" : "No templates created yet"}
+                {searchQuery || filterLevel ? t('admin.templateManagement.noTemplatesMatchFilters') : t('admin.templateManagement.noTemplatesCreated')}
               </Text>
               {!searchQuery && !filterLevel && (
                 <TouchableOpacity
@@ -398,7 +400,7 @@ const TemplateManagementScreen: React.FC = () => {
                 <Ionicons name="close" size={24} color={COLORS.text} />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
-                {editingTemplate ? 'Edit Template' : 'Create Template'}
+                {editingTemplate ? t('admin.templateManagement.editTemplate') : t('admin.templateManagement.createTemplate')}
               </Text>
               <View style={{ width: 24 }} />
             </View>
@@ -410,7 +412,7 @@ const TemplateManagementScreen: React.FC = () => {
                   style={[styles.formInput, errors.name && styles.formInputError]}
                   value={formData.name}
                   onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-                  placeholder="Enter template name"
+                  placeholder={t('admin.templateManagement.enterTemplateName')}
                 />
                 {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
               </View>
@@ -534,7 +536,7 @@ const TemplateManagementScreen: React.FC = () => {
                   <ActivityIndicator size="small" color={COLORS.white} />
                 ) : (
                   <Text style={styles.saveButtonText}>
-                    {editingTemplate ? 'Update' : 'Create'}
+                    {editingTemplate ? t('common.save') : t('common.add')}
                   </Text>
                 )}
               </TouchableOpacity>

@@ -66,7 +66,9 @@ class Payment(Base):
     # Relationships
     user = relationship("User", back_populates="payments")
     package = relationship("Package")
-    user_package = relationship("UserPackage")
+    # Use the new payment_id foreign key for the one-to-one relationship
+    user_package = relationship("UserPackage", back_populates="payment", uselist=False, 
+                               primaryjoin="Payment.id==UserPackage.payment_id")
 
     @property
     def is_successful(self) -> bool:

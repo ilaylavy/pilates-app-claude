@@ -16,8 +16,10 @@ import { COLORS, SPACING } from '../utils/config';
 import { AdminGuard } from '../components/AdminGuard';
 import { adminApi } from '../api/admin';
 import { DashboardAnalytics, RevenueReport, AttendanceReport } from '../types';
+import { useTranslation } from '../hooks/useTranslation';
 
 const ReportsScreen: React.FC = () => {
+  const { t, rtlText, rtlRow } = useTranslation();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'revenue' | 'attendance'>('dashboard');
   const [reportPeriod, setReportPeriod] = useState<'week' | 'month' | 'quarter'>('month');
 
@@ -109,36 +111,36 @@ const ReportsScreen: React.FC = () => {
 
     return (
       <View style={styles.tabContent}>
-        <Text style={styles.sectionTitle}>Key Metrics</Text>
+        <Text style={styles.sectionTitle}>{t('admin.reports.dashboard')}</Text>
         
         <View style={styles.metricsGrid}>
           <View style={[styles.metricCard, { backgroundColor: COLORS.primary }]}>
             <Ionicons name="people" size={24} color={COLORS.white} />
             <Text style={styles.metricValue}>{analytics.total_users}</Text>
-            <Text style={styles.metricLabel}>Total Users</Text>
+            <Text style={styles.metricLabel}>{t('admin.reports.totalStudents')}</Text>
           </View>
           
           <View style={[styles.metricCard, { backgroundColor: COLORS.success }]}>
             <Ionicons name="person-add" size={24} color={COLORS.white} />
             <Text style={styles.metricValue}>{analytics.new_users_last_30_days}</Text>
-            <Text style={styles.metricLabel}>New Users (30d)</Text>
+            <Text style={styles.metricLabel}>{t('admin.reports.studentGrowth')}</Text>
           </View>
           
           <View style={[styles.metricCard, { backgroundColor: COLORS.warning }]}>
             <Ionicons name="calendar" size={24} color={COLORS.white} />
             <Text style={styles.metricValue}>{analytics.total_bookings}</Text>
-            <Text style={styles.metricLabel}>Total Bookings</Text>
+            <Text style={styles.metricLabel}>{t('admin.reports.totalBookings')}</Text>
           </View>
           
           <View style={[styles.metricCard, { backgroundColor: COLORS.secondary }]}>
             <Ionicons name="cash" size={24} color={COLORS.white} />
             <Text style={styles.metricValue}>{formatCurrency(analytics.total_revenue)}</Text>
-            <Text style={styles.metricLabel}>Total Revenue</Text>
+            <Text style={styles.metricLabel}>{t('admin.reports.totalRevenue')}</Text>
           </View>
         </View>
 
         <View style={styles.monthlyRevenueCard}>
-          <Text style={styles.monthlyRevenueTitle}>This Month's Revenue</Text>
+          <Text style={styles.monthlyRevenueTitle}>{t('admin.reports.revenue')} ({t('admin.reports.month')})</Text>
           <Text style={styles.monthlyRevenueAmount}>
             {formatCurrency(analytics.monthly_revenue)}
           </Text>
@@ -146,11 +148,11 @@ const ReportsScreen: React.FC = () => {
 
         {analytics.popular_packages.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Popular Packages</Text>
+            <Text style={styles.sectionTitle}>{t('admin.reports.packageSales')}</Text>
             {analytics.popular_packages.map((pkg, index) => (
               <View key={index} style={styles.packageItem}>
                 <Text style={styles.packageName}>{pkg.name}</Text>
-                <Text style={styles.packageCount}>{pkg.count} sales</Text>
+                <Text style={styles.packageCount}>{pkg.count} {t('admin.packages')}</Text>
               </View>
             ))}
           </>
@@ -164,10 +166,10 @@ const ReportsScreen: React.FC = () => {
 
     return (
       <View style={styles.tabContent}>
-        <Text style={styles.sectionTitle}>Revenue Report</Text>
+        <Text style={styles.sectionTitle}>{t('admin.reports.revenue')}</Text>
         
         <View style={styles.totalRevenueCard}>
-          <Text style={styles.totalRevenueTitle}>Total Revenue ({reportPeriod})</Text>
+          <Text style={styles.totalRevenueTitle}>{t('admin.reports.totalRevenue')} ({t(`admin.reports.${reportPeriod}`)})</Text>
           <Text style={styles.totalRevenueAmount}>
             {formatCurrency(revenueReport.total_revenue)}
           </Text>
@@ -178,14 +180,14 @@ const ReportsScreen: React.FC = () => {
 
         {revenueReport.revenue_by_package.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Revenue by Package</Text>
+            <Text style={styles.sectionTitle}>{t('admin.reports.packageSales')}</Text>
             {revenueReport.revenue_by_package.map((item, index) => (
               <View key={index} style={styles.revenueItem}>
                 <View style={styles.revenueItemHeader}>
                   <Text style={styles.revenueItemName}>{item.package}</Text>
                   <Text style={styles.revenueItemAmount}>{formatCurrency(item.revenue)}</Text>
                 </View>
-                <Text style={styles.revenueItemSales}>{item.sales_count} sales</Text>
+                <Text style={styles.revenueItemSales}>{item.sales_count} {t('admin.packages')}</Text>
               </View>
             ))}
           </>
@@ -193,7 +195,7 @@ const ReportsScreen: React.FC = () => {
 
         {revenueReport.revenue_by_date.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Daily Revenue Trend</Text>
+            <Text style={styles.sectionTitle}>{t('admin.reports.revenueGrowth')}</Text>
             {revenueReport.revenue_by_date.slice(-7).map((item, index) => (
               <View key={index} style={styles.trendItem}>
                 <Text style={styles.trendDate}>{formatDate(item.date)}</Text>
@@ -215,10 +217,10 @@ const ReportsScreen: React.FC = () => {
 
     return (
       <View style={styles.tabContent}>
-        <Text style={styles.sectionTitle}>Attendance Report</Text>
+        <Text style={styles.sectionTitle}>{t('admin.reports.attendance')}</Text>
         
         <View style={styles.totalBookingsCard}>
-          <Text style={styles.totalBookingsTitle}>Total Bookings ({reportPeriod})</Text>
+          <Text style={styles.totalBookingsTitle}>{t('admin.reports.totalBookings')} ({t(`admin.reports.${reportPeriod}`)})</Text>
           <Text style={styles.totalBookingsAmount}>{totalBookings}</Text>
           <Text style={styles.periodText}>
             {formatDate(attendanceReport.period.start_date)} - {formatDate(attendanceReport.period.end_date)}
@@ -227,11 +229,11 @@ const ReportsScreen: React.FC = () => {
 
         {attendanceReport.popular_times.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Popular Class Times</Text>
+            <Text style={styles.sectionTitle}>{t('admin.reports.classAttendance')}</Text>
             {attendanceReport.popular_times.slice(0, 5).map((item, index) => (
               <View key={index} style={styles.popularTimeItem}>
                 <Text style={styles.popularTimeText}>{item.time}</Text>
-                <Text style={styles.popularTimeBookings}>{item.bookings} bookings</Text>
+                <Text style={styles.popularTimeBookings}>{item.bookings} {t('admin.bookings')}</Text>
               </View>
             ))}
           </>
@@ -239,11 +241,11 @@ const ReportsScreen: React.FC = () => {
 
         {attendanceReport.bookings_by_date.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Daily Booking Trend</Text>
+            <Text style={styles.sectionTitle}>{t('admin.reports.bookingGrowth')}</Text>
             {attendanceReport.bookings_by_date.slice(-7).map((item, index) => (
               <View key={index} style={styles.trendItem}>
                 <Text style={styles.trendDate}>{formatDate(item.date)}</Text>
-                <Text style={styles.trendAmount}>{item.bookings} bookings</Text>
+                <Text style={styles.trendAmount}>{item.bookings} {t('admin.bookings')}</Text>
               </View>
             ))}
           </>
@@ -255,7 +257,7 @@ const ReportsScreen: React.FC = () => {
   return (
     <AdminGuard requiredRoles={['admin']}>
       <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Reports & Analytics</Text>
+        <Text style={styles.title}>{t('admin.reports.title')}</Text>
         
         {/* Tab Navigation */}
         <View style={styles.tabContainer}>
@@ -264,7 +266,7 @@ const ReportsScreen: React.FC = () => {
             onPress={() => setActiveTab('dashboard')}
           >
             <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>
-              Dashboard
+              {t('admin.reports.dashboard')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -272,7 +274,7 @@ const ReportsScreen: React.FC = () => {
             onPress={() => setActiveTab('revenue')}
           >
             <Text style={[styles.tabText, activeTab === 'revenue' && styles.activeTabText]}>
-              Revenue
+              {t('admin.reports.revenue')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -280,7 +282,7 @@ const ReportsScreen: React.FC = () => {
             onPress={() => setActiveTab('attendance')}
           >
             <Text style={[styles.tabText, activeTab === 'attendance' && styles.activeTabText]}>
-              Attendance
+              {t('admin.reports.attendance')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -288,7 +290,7 @@ const ReportsScreen: React.FC = () => {
         {/* Period Selector (for revenue and attendance tabs) */}
         {activeTab !== 'dashboard' && (
           <View style={styles.periodContainer}>
-            <Text style={styles.periodLabel}>Period:</Text>
+            <Text style={styles.periodLabel}>{t('admin.reports.dateRange')}:</Text>
             {['week', 'month', 'quarter'].map((period) => (
               <TouchableOpacity
                 key={period}
@@ -296,7 +298,7 @@ const ReportsScreen: React.FC = () => {
                 onPress={() => setReportPeriod(period as any)}
               >
                 <Text style={[styles.periodText, reportPeriod === period && styles.activePeriodText]}>
-                  {period.charAt(0).toUpperCase() + period.slice(1)}
+                  {t(`admin.reports.${period}`)}
                 </Text>
               </TouchableOpacity>
             ))}

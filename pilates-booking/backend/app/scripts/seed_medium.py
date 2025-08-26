@@ -27,6 +27,7 @@ from app.models.package import (Package, UserPackage,
                                  UserPackageStatus, PaymentStatus as PackagePaymentStatus)
 from app.models.payment import Payment, PaymentMethod, PaymentType, PaymentStatus
 from app.models.user import User, UserRole
+from app.services.package_service import PackageService
 
 
 async def create_users(session: AsyncSession) -> List[User]:
@@ -267,82 +268,94 @@ async def create_class_templates(session: AsyncSession, instructors: List[User])
 
 
 async def create_user_packages(session: AsyncSession, users: List[User], packages: List[Package]):
-    """Create user packages with various statuses."""
+    """Create user packages with proper Payment records using PackageService."""
     students = [u for u in users if u.role == UserRole.STUDENT]
     
     user_packages = []
     
-    # Alice has an active 10-class package
-    user_packages.append(UserPackage(
+    # Alice has an active 10-class package - credit card payment
+    alice_package, alice_payment = await PackageService.create_user_package(
+        db=session,
         user_id=students[0].id,  # Alice
         package_id=packages[2].id,  # 10-class package
-        credits_remaining=8,
-        purchase_date=datetime.now() - timedelta(days=10),
-        expiry_date=datetime.now() + timedelta(days=80),
-        status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.CONFIRMED,
-    ))
+        payment_method=PaymentMethod.CREDIT_CARD,
+        payment_status=PaymentStatus.COMPLETED,
+        payment_reference="MEDIUM-ALICE-001"
+    )
+    # Manually set credits to show usage
+    alice_package.credits_remaining = 8
+    alice_package.purchase_date = datetime.now() - timedelta(days=10)
+    user_packages.append(alice_package)
     
-    # Bob has a pending approval package
-    user_packages.append(UserPackage(
+    # Bob has a pending approval package - cash payment
+    bob_package, bob_payment = await PackageService.create_user_package(
+        db=session,
         user_id=students[1].id,  # Bob
         package_id=packages[1].id,  # 5-class package
-        credits_remaining=5,
-        purchase_date=datetime.now() - timedelta(days=1),
-        expiry_date=datetime.now() + timedelta(days=59),
-        status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.PENDING,
-    ))
+        payment_method=PaymentMethod.CASH,
+        payment_status=PaymentStatus.PENDING,
+        payment_reference="MEDIUM-BOB-001"
+    )
+    bob_package.purchase_date = datetime.now() - timedelta(days=1)
+    user_packages.append(bob_package)
     
-    # Carol has a confirmed package
-    user_packages.append(UserPackage(
+    # Carol has a confirmed package - credit card payment
+    carol_package, carol_payment = await PackageService.create_user_package(
+        db=session,
         user_id=students[2].id,  # Carol
         package_id=packages[1].id,  # 5-class package
-        credits_remaining=5,
-        purchase_date=datetime.now() - timedelta(hours=2),
-        expiry_date=datetime.now() + timedelta(days=60),
-        status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.CONFIRMED,
-        approved_by=users[0].id,  # Admin
-        approved_at=datetime.now() - timedelta(hours=1),
-    ))
+        payment_method=PaymentMethod.CREDIT_CARD,
+        payment_status=PaymentStatus.COMPLETED,
+        payment_reference="MEDIUM-CAROL-001"
+    )
+    carol_package.purchase_date = datetime.now() - timedelta(hours=2)
+    carol_package.approved_by = users[0].id  # Admin
+    carol_package.approved_at = datetime.now() - timedelta(hours=1)
+    user_packages.append(carol_package)
     
-    # David has an expired package
-    user_packages.append(UserPackage(
+    # David has an expired package - credit card payment
+    david_package, david_payment = await PackageService.create_user_package(
+        db=session,
         user_id=students[3].id,  # David
         package_id=packages[0].id,  # Drop-in class
-        credits_remaining=0,
-        purchase_date=datetime.now() - timedelta(days=20),
-        expiry_date=datetime.now() - timedelta(days=5),
-        status=UserPackageStatus.EXPIRED,
-        payment_status=PackagePaymentStatus.CONFIRMED,
-    ))
+        payment_method=PaymentMethod.CREDIT_CARD,
+        payment_status=PaymentStatus.COMPLETED,
+        payment_reference="MEDIUM-DAVID-001"
+    )
+    # Manually set to expired state
+    david_package.credits_remaining = 0
+    david_package.purchase_date = datetime.now() - timedelta(days=20)
+    david_package.expiry_date = datetime.now() - timedelta(days=5)
+    david_package.status = UserPackageStatus.EXPIRED
+    user_packages.append(david_package)
     
     # Emma has multiple packages
-    user_packages.extend([
-        UserPackage(
-            user_id=students[4].id,  # Emma
-            package_id=packages[3].id,  # Monthly unlimited
-            credits_remaining=999,
-            purchase_date=datetime.now() - timedelta(days=5),
-            expiry_date=datetime.now() + timedelta(days=25),
-            status=UserPackageStatus.ACTIVE,
-            payment_status=PackagePaymentStatus.CONFIRMED,
-        ),
-        UserPackage(
-            user_id=students[4].id,  # Emma
-            package_id=packages[4].id,  # Student special
-            credits_remaining=3,
-            purchase_date=datetime.now() - timedelta(days=15),
-            expiry_date=datetime.now() + timedelta(days=30),
-            status=UserPackageStatus.ACTIVE,
-            payment_status=PackagePaymentStatus.CONFIRMED,
-        ),
-    ])
+    emma_package1, emma_payment1 = await PackageService.create_user_package(
+        db=session,
+        user_id=students[4].id,  # Emma
+        package_id=packages[3].id,  # Monthly unlimited
+        payment_method=PaymentMethod.CREDIT_CARD,
+        payment_status=PaymentStatus.COMPLETED,
+        payment_reference="MEDIUM-EMMA-001"
+    )
+    emma_package1.credits_remaining = 999
+    emma_package1.purchase_date = datetime.now() - timedelta(days=5)
+    user_packages.append(emma_package1)
+    
+    emma_package2, emma_payment2 = await PackageService.create_user_package(
+        db=session,
+        user_id=students[4].id,  # Emma
+        package_id=packages[4].id,  # Student special
+        payment_method=PaymentMethod.CREDIT_CARD,
+        payment_status=PaymentStatus.COMPLETED,
+        payment_reference="MEDIUM-EMMA-002"
+    )
+    emma_package2.credits_remaining = 3
+    emma_package2.purchase_date = datetime.now() - timedelta(days=15)
+    user_packages.append(emma_package2)
 
-    for user_package in user_packages:
-        session.add(user_package)
     await session.commit()
+    return user_packages
 
 
 async def create_class_instances(session: AsyncSession, instructors: List[User], templates: List[ClassTemplate]) -> List[ClassInstance]:
@@ -576,7 +589,7 @@ async def seed_medium():
         templates = await create_class_templates(session, instructors)
         
         print("[INFO] Creating user packages...")
-        await create_user_packages(session, users, packages)
+        user_packages = await create_user_packages(session, users, packages)
         
         print("[INFO] Creating class instances...")
         instances = await create_class_instances(session, instructors, templates)

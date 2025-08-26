@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS, SPACING } from '../utils/config';
 import { AdminGuard } from '../components/AdminGuard';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface SystemSetting {
   key: string;
@@ -25,61 +26,65 @@ interface SystemSetting {
 }
 
 const SystemSettingsScreen: React.FC = () => {
-  const [settings, setSettings] = useState<SystemSetting[]>([
+  const { t, rtlText, rtlRow } = useTranslation();
+
+  const getSettings = (): SystemSetting[] => [
     // Business Rules
     {
       key: 'MAX_BOOKINGS_PER_WEEK',
-      label: 'Max Bookings Per Week',
+      label: t('admin.systemSettings.maxBookingsPerWeek'),
       value: 4,
       type: 'number',
-      description: 'Maximum number of classes a student can book per week',
-      category: 'Business Rules',
+      description: t('admin.systemSettings.maxBookingsDescription'),
+      category: t('admin.systemSettings.businessRules'),
     },
     {
       key: 'CANCELLATION_HOURS_LIMIT',
-      label: 'Cancellation Hours Limit',
+      label: t('admin.systemSettings.cancellationHoursLimit'),
       value: 4,
       type: 'number',
-      description: 'Hours before class start when cancellation is allowed',
-      category: 'Business Rules',
+      description: t('admin.systemSettings.cancellationDescription'),
+      category: t('admin.systemSettings.businessRules'),
     },
     {
       key: 'WAITLIST_AUTO_PROMOTION',
-      label: 'Auto Waitlist Promotion',
+      label: t('admin.systemSettings.autoWaitlistPromotion'),
       value: true,
       type: 'boolean',
-      description: 'Automatically promote waitlisted users when spots become available',
-      category: 'Business Rules',
+      description: t('admin.systemSettings.waitlistDescription'),
+      category: t('admin.systemSettings.businessRules'),
     },
 
     // Studio Info
     {
       key: 'STUDIO_NAME',
-      label: 'Studio Name',
+      label: t('admin.systemSettings.studioName'),
       value: 'Pilates Studio',
       type: 'text',
-      description: 'Name of the pilates studio',
-      category: 'Studio Info',
+      description: t('admin.systemSettings.studioNameDescription'),
+      category: t('admin.systemSettings.studioInfo'),
     },
     {
       key: 'STUDIO_EMAIL',
-      label: 'Studio Contact Email',
+      label: t('admin.systemSettings.studioContactEmail'),
       value: 'info@pilatesstudio.com',
       type: 'text',
-      description: 'Main contact email for the studio',
-      category: 'Studio Info',
+      description: t('admin.systemSettings.studioEmailDescription'),
+      category: t('admin.systemSettings.studioInfo'),
     },
 
     // Email Settings
     {
       key: 'BOOKING_CONFIRMATION_EMAIL',
-      label: 'Booking Confirmation Emails',
+      label: t('admin.systemSettings.bookingConfirmationEmails'),
       value: true,
       type: 'boolean',
-      description: 'Send email confirmation when booking is made',
-      category: 'Email Settings',
+      description: t('admin.systemSettings.emailConfirmationDescription'),
+      category: t('admin.systemSettings.emailSettings'),
     },
-  ]);
+  ];
+
+  const [settings, setSettings] = useState<SystemSetting[]>(getSettings());
 
   const [unsavedChanges, setUnsavedChanges] = useState<Set<string>>(new Set());
 
@@ -94,9 +99,9 @@ const SystemSettingsScreen: React.FC = () => {
 
   const saveSettings = () => {
     Alert.alert(
-      'Settings Saved',
-      'System settings have been updated successfully.',
-      [{ text: 'OK' }]
+      t('admin.systemSettings.settingsSaved'),
+      t('admin.systemSettings.settingsSavedMessage'),
+      [{ text: t('common.ok') }]
     );
     setUnsavedChanges(new Set());
   };
@@ -145,7 +150,7 @@ const SystemSettingsScreen: React.FC = () => {
           {setting.type === 'boolean' && (
             <View style={styles.switchContainer}>
               <Text style={styles.switchLabel}>
-                {setting.value ? 'Enabled' : 'Disabled'}
+                {setting.value ? t('admin.systemSettings.enabled') : t('admin.systemSettings.disabled')}
               </Text>
               <Switch
                 value={setting.value as boolean}
@@ -176,7 +181,7 @@ const SystemSettingsScreen: React.FC = () => {
     <AdminGuard requiredRoles={['admin']}>
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>System Settings</Text>
+          <Text style={styles.title}>{t('admin.systemSettings.title')}</Text>
           <TouchableOpacity
             style={[
               styles.saveButton,
@@ -186,7 +191,7 @@ const SystemSettingsScreen: React.FC = () => {
             disabled={unsavedChanges.size === 0}
           >
             <Ionicons name="save" size={16} color={COLORS.white} />
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -194,7 +199,7 @@ const SystemSettingsScreen: React.FC = () => {
           <View style={styles.unsavedBanner}>
             <Ionicons name="warning" size={16} color={COLORS.warning} />
             <Text style={styles.unsavedBannerText}>
-              You have {unsavedChanges.size} unsaved change{unsavedChanges.size !== 1 ? 's' : ''}
+              {t('admin.systemSettings.unsavedChanges')}: {unsavedChanges.size}
             </Text>
           </View>
         )}

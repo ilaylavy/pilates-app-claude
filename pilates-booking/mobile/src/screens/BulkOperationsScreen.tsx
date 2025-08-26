@@ -20,6 +20,7 @@ import { COLORS, SPACING } from '../utils/config';
 import { AdminGuard } from '../components/AdminGuard';
 import { classesApi, ClassTemplate } from '../api/classes';
 import { adminApi } from '../api/admin';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface Instructor {
   id: number;
@@ -42,6 +43,7 @@ interface BulkOperationData {
 }
 
 const BulkOperationsScreen: React.FC = () => {
+  const { t, rtlText, rtlRow } = useTranslation();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   
@@ -97,7 +99,7 @@ const BulkOperationsScreen: React.FC = () => {
         } catch (error) {
           results.push({ 
             success: false, 
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : t('admin.bulkOperations.unknownError'),
             classData 
           });
         }
@@ -110,11 +112,11 @@ const BulkOperationsScreen: React.FC = () => {
       const failed = results.filter(r => !r.success).length;
       
       Alert.alert(
-        'Bulk Operation Complete',
-        `Successfully created ${successful} classes.${failed > 0 ? ` ${failed} failed.` : ''}`,
+        t('admin.bulkOperations.bulkOperationComplete'),
+        t('admin.bulkOperations.classesCreatedSuccessfully', { count: successful }),
         [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => navigation.goBack(),
           }
         ]
@@ -122,9 +124,9 @@ const BulkOperationsScreen: React.FC = () => {
     },
     onError: (error: unknown) => {
       const errorMessage = error && typeof error === 'object' && 'response' in error 
-        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to create classes'
-        : 'Failed to create classes';
-      Alert.alert('Error', errorMessage);
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || t('admin.bulkOperations.failedToCreateClasses')
+        : t('admin.bulkOperations.failedToCreateClasses');
+      Alert.alert(t('common.error'), errorMessage);
     },
   });
 
@@ -132,19 +134,19 @@ const BulkOperationsScreen: React.FC = () => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.template_id) {
-      newErrors.template_id = 'Please select a class template';
+      newErrors.template_id = t('admin.bulkOperations.pleaseSelectTemplate');
     }
     
     if (!formData.instructor_id) {
-      newErrors.instructor_id = 'Please select an instructor';
+      newErrors.instructor_id = t('admin.bulkOperations.pleaseSelectInstructor');
     }
     
     if (formData.selected_days.length === 0) {
-      newErrors.selected_days = 'Please select at least one day';
+      newErrors.selected_days = t('admin.bulkOperations.pleaseSelectDays');
     }
     
     if (formData.start_date >= formData.end_date) {
-      newErrors.date_range = 'End date must be after start date';
+      newErrors.date_range = t('admin.bulkOperations.endDateMustBeAfterStart');
     }
     
     setErrors(newErrors);
@@ -206,17 +208,17 @@ const BulkOperationsScreen: React.FC = () => {
     const classes = generateClassSchedule();
     
     if (classes.length === 0) {
-      Alert.alert('No Classes', 'No classes would be created with the current settings.');
+      Alert.alert(t('admin.bulkOperations.noClassesToCreate'), t('admin.bulkOperations.noClassesMessage'));
       return;
     }
     
     Alert.alert(
-      'Confirm Bulk Creation',
+      t('admin.bulkOperations.confirmBulkCreation'),
       `This will create ${classes.length} classes. Do you want to continue?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Create',
+          text: t('admin.bulkOperations.createClasses'),
           onPress: () => bulkCreateMutation.mutate(classes),
         },
       ]

@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ....models.package import Package, UserPackage, UserPackageStatus, PaymentStatus, PaymentMethod as ModelPaymentMethod
+from ....models.payment import Payment, PaymentStatus as PaymentPaymentStatus, PaymentMethod, PaymentType
 from ....models.user import User
 from ....schemas.package import (PackageCreate, PackagePurchase,
                                  PackageResponse, PackageUpdate,
                                  UserPackageResponse, PaymentMethod)
+from ....services.package_service import PackageService
 from ..deps import get_admin_user, get_current_active_user, get_db
 
 router = APIRouter()
@@ -70,27 +72,18 @@ async def handle_cash_purchase(
     current_user: User,
     db: AsyncSession,
 ):
-    """Handle cash package purchase - credits are immediately available, payment confirmation comes later."""
+    """Handle cash package purchase using PackageService for data integrity."""
     
-    # Create UserPackage as ACTIVE - user can use credits immediately
-    # Admin will confirm payment later
-    expiry_date = datetime.now(timezone.utc) + timedelta(days=package.validity_days)
-    
-    user_package = UserPackage(
+    # Use PackageService to ensure proper payment-package dependency
+    user_package, payment = await PackageService.create_user_package(
+        db=db,
         user_id=current_user.id,
         package_id=package.id,
-        credits_remaining=package.credits,
-        expiry_date=expiry_date,
-        status=UserPackageStatus.ACTIVE,  # Active immediately
-        is_active=True,
-        payment_status=PaymentStatus.PENDING,  # Admin needs to confirm payment
-        payment_method=ModelPaymentMethod.CASH,
+        payment_method=PaymentMethod.CASH,
+        payment_status=PaymentPaymentStatus.PENDING,  # Admin needs to confirm
         payment_reference=purchase_data.payment_reference,
+        external_transaction_id=purchase_data.payment_reference
     )
-    
-    db.add(user_package)
-    await db.commit()
-    await db.refresh(user_package)
     
     # Generate a unique reference code for the cash payment
     reference_code = f"CASH-{user_package.id}-{current_user.id}"
@@ -112,7 +105,7 @@ async def handle_cash_purchase(
             "Show this reference code to the staff: " + reference_code,
             "Payment confirmation will be updated in your account after payment"
         ],
-        "expires_at": expiry_date.isoformat()
+        "expires_at": user_package.expiry_date.isoformat()
     }
 
 

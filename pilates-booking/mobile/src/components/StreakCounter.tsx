@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface StreakCounterProps {
   weekStreak: number;
@@ -9,6 +10,8 @@ interface StreakCounterProps {
 }
 
 const StreakCounter: React.FC<StreakCounterProps> = ({ weekStreak, isActive = false }) => {
+  const { t, rtlText } = useTranslation();
+  
   const getStreakColor = () => {
     if (weekStreak === 0) return COLORS.textSecondary;
     if (weekStreak >= 4) return COLORS.success;
@@ -17,11 +20,11 @@ const StreakCounter: React.FC<StreakCounterProps> = ({ weekStreak, isActive = fa
   };
 
   const getStreakMessage = () => {
-    if (weekStreak === 0) return 'Start your streak!';
-    if (weekStreak === 1) return 'Keep it up!';
-    if (weekStreak >= 8) return 'Amazing streak!';
-    if (weekStreak >= 4) return 'Great consistency!';
-    return 'Building momentum!';
+    if (weekStreak === 0) return t('streak.startStreak');
+    if (weekStreak === 1) return t('streak.keepUp');
+    if (weekStreak >= 8) return t('streak.amazingStreak');
+    if (weekStreak >= 4) return t('streak.greatConsistency');
+    return t('streak.buildingMomentum');
   };
 
   return (
@@ -36,10 +39,10 @@ const StreakCounter: React.FC<StreakCounterProps> = ({ weekStreak, isActive = fa
           {weekStreak}
         </Text>
       </View>
-      <Text style={styles.streakLabel}>
-        Week{weekStreak !== 1 ? 's' : ''} in a row
+      <Text style={[styles.streakLabel, rtlText()]}>
+        {t('streak.weeksInARow', { count: weekStreak })}
       </Text>
-      <Text style={styles.streakMessage}>
+      <Text style={[styles.streakMessage, rtlText()]}>
         {getStreakMessage()}
       </Text>
     </View>

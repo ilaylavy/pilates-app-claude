@@ -21,8 +21,10 @@ import { AdminGuard } from '../components/AdminGuard';
 import { adminApi } from '../api/admin';
 import { UserListItem } from '../types';
 import StudentDetailModal from '../components/StudentDetailModal';
+import { useTranslation } from '../hooks/useTranslation';
 
 const UserManagementScreen: React.FC = () => {
+  const { t, rtlText, rtlRow } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('student');
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
@@ -57,10 +59,10 @@ const UserManagementScreen: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       setIsModalVisible(false);
       setSelectedUser(null);
-      Alert.alert('Success', 'User updated successfully');
+      Alert.alert(t('common.success'), t('admin.userManagementScreen.userUpdatedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to update user');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.userManagementScreen.failedToUpdateUser'));
     },
   });
 
@@ -68,10 +70,10 @@ const UserManagementScreen: React.FC = () => {
     mutationFn: (userId: number) => adminApi.deactivateUser(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      Alert.alert('Success', 'User deactivated successfully');
+      Alert.alert(t('common.success'), t('admin.userManagementScreen.userDeactivatedSuccessfully'));
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to deactivate user');
+      Alert.alert(t('common.error'), error.response?.data?.detail || t('admin.userManagementScreen.failedToDeactivateUser'));
     },
   });
 
@@ -112,12 +114,12 @@ const UserManagementScreen: React.FC = () => {
 
   const handleDeactivateUser = (user: UserListItem) => {
     Alert.alert(
-      'Confirm Deactivation',
-      `Are you sure you want to deactivate ${user.first_name} ${user.last_name}?`,
+      t('common.confirm'),
+      `${t('admin.userManagementScreen.deactivateUser')} ${user.first_name} ${user.last_name}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Deactivate',
+          text: t('admin.userManagementScreen.deactivateUser'),
           style: 'destructive',
           onPress: () => deactivateUserMutation.mutate(user.id),
         },
@@ -162,10 +164,10 @@ const UserManagementScreen: React.FC = () => {
         </View>
         <Text style={styles.userEmail}>{item.email}</Text>
         <View style={styles.userStats}>
-          <Text style={styles.statText}>Bookings: {item.total_bookings}</Text>
-          <Text style={styles.statText}>Packages: {item.active_packages}</Text>
+          <Text style={styles.statText}>{t('admin.bookings')}: {item.total_bookings}</Text>
+          <Text style={styles.statText}>{t('admin.packages')}: {item.active_packages}</Text>
           <Text style={[styles.statText, { color: item.is_active ? COLORS.success : COLORS.error }]}>
-            {item.is_active ? 'Active' : 'Inactive'}
+            {item.is_active ? t('admin.userManagementScreen.active') : t('admin.userManagementScreen.inactive')}
           </Text>
         </View>
       </View>
@@ -190,7 +192,7 @@ const UserManagementScreen: React.FC = () => {
     <Modal visible={isModalVisible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.modalContainer}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Edit User</Text>
+          <Text style={styles.modalTitle}>{t('admin.userManagementScreen.editUser')}</Text>
           <TouchableOpacity onPress={() => setIsModalVisible(false)}>
             <Ionicons name="close" size={24} color={COLORS.text} />
           </TouchableOpacity>
@@ -199,32 +201,32 @@ const UserManagementScreen: React.FC = () => {
         <View style={styles.modalContent}>
           <TextInput
             style={styles.input}
-            placeholder="First Name"
+            placeholder={t('admin.userManagementScreen.firstName')}
             value={editForm.first_name}
             onChangeText={(text) => setEditForm({ ...editForm, first_name: text })}
           />
           <TextInput
             style={styles.input}
-            placeholder="Last Name"
+            placeholder={t('admin.userManagementScreen.lastName')}
             value={editForm.last_name}
             onChangeText={(text) => setEditForm({ ...editForm, last_name: text })}
           />
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('admin.userManagementScreen.email')}
             value={editForm.email}
             onChangeText={(text) => setEditForm({ ...editForm, email: text })}
             keyboardType="email-address"
           />
           <TextInput
             style={styles.input}
-            placeholder="Phone (optional)"
+            placeholder={`${t('admin.userManagementScreen.phone')} (${t('admin.bulkOperations.optional')})`}
             value={editForm.phone}
             onChangeText={(text) => setEditForm({ ...editForm, phone: text })}
           />
           
           {/* Role Selector */}
-          <Text style={styles.sectionTitle}>Role</Text>
+          <Text style={styles.sectionTitle}>{t('admin.userManagementScreen.role')}</Text>
           <View style={styles.roleSelector}>
             {['student', 'instructor', 'admin'].map((role) => (
               <TouchableOpacity
@@ -239,7 +241,7 @@ const UserManagementScreen: React.FC = () => {
                   styles.roleOptionText,
                   editForm.role === role && styles.selectedRoleOptionText
                 ]}>
-                  {role.charAt(0).toUpperCase() + role.slice(1)}
+                  {t(`admin.userManagementScreen.${role}`)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -251,7 +253,7 @@ const UserManagementScreen: React.FC = () => {
               style={styles.toggleItem}
               onPress={() => setEditForm({ ...editForm, is_active: !editForm.is_active })}
             >
-              <Text style={styles.toggleLabel}>Active</Text>
+              <Text style={styles.toggleLabel}>{t('admin.userManagementScreen.active')}</Text>
               <View style={[styles.toggle, editForm.is_active && styles.toggleActive]}>
                 {editForm.is_active && <View style={styles.toggleIndicator} />}
               </View>
@@ -261,7 +263,7 @@ const UserManagementScreen: React.FC = () => {
               style={styles.toggleItem}
               onPress={() => setEditForm({ ...editForm, is_verified: !editForm.is_verified })}
             >
-              <Text style={styles.toggleLabel}>Verified</Text>
+              <Text style={styles.toggleLabel}>{t('admin.userManagementScreen.verified')}</Text>
               <View style={[styles.toggle, editForm.is_verified && styles.toggleActive]}>
                 {editForm.is_verified && <View style={styles.toggleIndicator} />}
               </View>
@@ -274,7 +276,7 @@ const UserManagementScreen: React.FC = () => {
             style={[styles.modalButton, styles.cancelButton]}
             onPress={() => setIsModalVisible(false)}
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.modalButton, styles.saveButton]}
@@ -284,7 +286,7 @@ const UserManagementScreen: React.FC = () => {
             {updateUserMutation.isPending ? (
               <ActivityIndicator size="small" color={COLORS.white} />
             ) : (
-              <Text style={styles.saveButtonText}>Save</Text>
+              <Text style={styles.saveButtonText}>{t('common.save')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -295,7 +297,7 @@ const UserManagementScreen: React.FC = () => {
   return (
     <AdminGuard requiredRoles={['admin']}>
       <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Students</Text>
+        <Text style={styles.title}>{t('admin.userManagementScreen.title')}</Text>
         
         {/* Search and Filter */}
         <View style={styles.searchContainer}>
@@ -303,25 +305,25 @@ const UserManagementScreen: React.FC = () => {
             <Ionicons name="search" size={20} color={COLORS.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search users..."
+              placeholder={t('admin.userManagementScreen.searchPlaceholder')}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
           
           <View style={styles.filterContainer}>
-            <Text style={styles.filterLabel}>Show:</Text>
+            <Text style={styles.filterLabel}>{t('admin.userManagementScreen.filterByRole')}:</Text>
             <TouchableOpacity
               style={[styles.filterButton, selectedRole === 'student' && styles.activeFilter]}
               onPress={() => setSelectedRole('student')}
             >
-              <Text style={[styles.filterText, selectedRole === 'student' && styles.activeFilterText]}>Students Only</Text>
+              <Text style={[styles.filterText, selectedRole === 'student' && styles.activeFilterText]}>{t('admin.userManagementScreen.student')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.filterButton, !selectedRole && styles.activeFilter]}
               onPress={() => setSelectedRole('')}
             >
-              <Text style={[styles.filterText, !selectedRole && styles.activeFilterText]}>All Users</Text>
+              <Text style={[styles.filterText, !selectedRole && styles.activeFilterText]}>{t('admin.userManagementScreen.allRoles')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -337,7 +339,7 @@ const UserManagementScreen: React.FC = () => {
             contentContainerStyle={styles.listContainer}
             refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>No users found</Text>
+              <Text style={styles.emptyText}>{t('admin.userManagementScreen.noUsersFound')}</Text>
             }
           />
         )}

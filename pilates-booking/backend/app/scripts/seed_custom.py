@@ -28,6 +28,7 @@ from app.models.package import (Package, PaymentStatus, UserPackage,
                                  UserPackageStatus, ApprovalStatus)
 from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.user import User, UserRole
+# Note: This file uses outdated model enums and may need updating to match current schema
 
 
 class SeedingConfig:
