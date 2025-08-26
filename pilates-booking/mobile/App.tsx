@@ -22,8 +22,10 @@ LogBox.ignoreLogs([
   'Failed to flush logs',
 ]);
 
-// Also suppress console.warn for specific warnings
+// Also suppress console.warn for specific warnings and unwanted debug logs
 const originalWarn = console.warn;
+const originalLog = console.log;
+
 console.warn = (...args) => {
   const message = args[0];
   if (message && typeof message === 'string') {
@@ -35,6 +37,19 @@ console.warn = (...args) => {
     }
   }
   originalWarn(...args);
+};
+
+// Suppress package debug logs in development
+console.log = (...args) => {
+  const message = args[0];
+  if (message && typeof message === 'string') {
+    if (message.includes('📦 User Packages') || 
+        message.includes('User Packages Summary') ||
+        message.includes('User Packages Full Response')) {
+      return; // Suppress package debug logs
+    }
+  }
+  originalLog(...args);
 };
 
 const queryClient = new QueryClient({

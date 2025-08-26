@@ -39,7 +39,7 @@ export const packagesApi = {
 
   // Simple one-step approval
   confirmPayment: async (packageId: number, data: PaymentApprovalRequest): Promise<void> => {
-    await apiClient.post(`/api/v1/admin/packages/${packageId}/confirm-payment`, data);
+    await apiClient.post(`/api/v1/admin/packages/${packageId}/approve`, data);
   },
 
   rejectPackage: async (packageId: number, data: PaymentRejectionRequest): Promise<void> => {

@@ -24,12 +24,15 @@ import { bookingsApi } from '../api/bookings';
 import { packagesApi } from '../api/packages';
 import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessages';
 import { COLORS, SPACING } from '../utils/config';
+import { NotificationStorage, generateMessageId } from '../utils/notificationStorage';
 import { ClassInstance, Booking, UserPackage } from '../types';
 import ClassCard from '../components/ClassCard';
 import ClassDetailsModal from '../components/ClassDetailsModal';
 import BookingConfirmationModal from '../components/BookingConfirmationModal';
 import StudentDashboard from '../components/StudentDashboard';
 import InstructorAdminDashboard from '../components/InstructorAdminDashboard';
+import NotificationBell from '../components/NotificationBell';
+import DismissibleMessage from '../components/DismissibleMessage';
 
 const HomeScreen: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
@@ -64,6 +67,13 @@ const HomeScreen: React.FC = () => {
     enabled: isAuthenticated && isStudent, // Only fetch for students
   });
 
+  // Fetch user waitlist entries to show waitlist status
+  const { data: userWaitlistEntries = [] } = useQuery({
+    queryKey: ['userWaitlistEntries'],
+    queryFn: () => bookingsApi.getUserWaitlistEntries(),
+    enabled: isAuthenticated && isStudent, // Only fetch for students
+  });
+
   // Create a set of booked class IDs for quick lookup
   const bookedClassIds = React.useMemo(() => {
     return new Set(
@@ -71,6 +81,13 @@ const HomeScreen: React.FC = () => {
         .map(booking => booking.class_instance_id) || []
     );
   }, [userBookings]);
+
+  // Create a set of waitlisted class IDs for quick lookup
+  const waitlistedClassIds = React.useMemo(() => {
+    return new Set(
+      userWaitlistEntries?.map(entry => entry.class_instance_id) || []
+    );
+  }, [userWaitlistEntries]);
 
   const {
     data: userPackagesResponse,
@@ -124,6 +141,13 @@ const HomeScreen: React.FC = () => {
       queryClient.setQueryData(['userBookings'], (oldBookings: any[]) => {
         if (!oldBookings) return [];
         return oldBookings.filter(booking => booking.id !== bookingId);
+      });
+      
+      // Add to notifications
+      NotificationStorage.addNotification({
+        type: 'booking_cancelled',
+        title: 'Booking Cancelled',
+        message: 'Your class booking has been cancelled and your credit has been refunded.',
       });
       
       // Force immediate credit update by invalidating userPackages with forced refetch
@@ -218,6 +242,13 @@ const HomeScreen: React.FC = () => {
         // Find the class instance to show in the modal
         const classInstance = upcomingClasses?.find(cls => cls.id === classInstanceId);
         if (classInstance) {
+          // Add to notifications
+          NotificationStorage.addNotification({
+            type: 'booking_success',
+            title: 'Class Booked Successfully!',
+            message: `You're confirmed for ${classInstance.template.name} on ${new Date(classInstance.start_datetime).toLocaleDateString()}.`,
+          });
+          
           setCompletedBooking(result.booking);
           setBookedClassInstance(classInstance);
           setShowBookingModal(true);
@@ -242,7 +273,7 @@ const HomeScreen: React.FC = () => {
   // Join waitlist mutation
   const joinWaitlistMutation = useMutation({
     mutationFn: async (classInstanceId: number) => {
-      const result = await bookingsApi.joinWaitlist(classInstanceId);
+      const result = await bookingsApi.joinWaitlist(classInstanceId, activePackage?.id);
       if (!result.success) {
         throw new Error(result.message);
       }
@@ -252,10 +283,49 @@ const HomeScreen: React.FC = () => {
       setBookingInProgressId(classInstanceId);
     },
     onSuccess: (result, classInstanceId) => {
+      setBookingInProgressId(null);
+      
+      // Only update if we have real waitlist data from server
+      if (result) {
+        // Immediately update cache with real waitlist entry from server
+        queryClient.setQueryData(['userWaitlistEntries'], (oldEntries: any[]) => {
+          if (!oldEntries) return [result];
+          // Make sure we don't duplicate entries
+          const filtered = oldEntries.filter(entry => 
+            entry.class_instance_id !== classInstanceId
+          );
+          return [...filtered, result];
+        });
+      }
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['upcomingClasses'] });
-      setBookingInProgressId(null);
+      queryClient.invalidateQueries({ queryKey: ['userWaitlistEntries'] });
+      
+      // Force another userPackages refetch after delay to catch any delayed server updates
+      setTimeout(() => {
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      // Add to notifications
+      NotificationStorage.addNotification({
+        type: 'waitlist_joined',
+        title: 'Joined Waitlist',
+        message: 'Added to waitlist successfully! You\'ll be notified if a spot opens up.',
+      });
+      
       Alert.alert('Success', 'Added to waitlist successfully!');
     },
     onError: (error: any, classInstanceId) => {
@@ -286,11 +356,12 @@ const HomeScreen: React.FC = () => {
         
         if (nowActivePackages.length > 0) {
           const totalCredits = nowActivePackages.reduce((sum, pkg) => sum + pkg.credits_remaining, 0);
-          Alert.alert(
-            'Package Activated! 🎉',
-            `Your cash payment has been confirmed. ${totalCredits} credits are now available for booking classes.`,
-            [{ text: 'Great!', style: 'default' }]
-          );
+          // Add to notifications instead of showing alert
+          NotificationStorage.addNotification({
+            type: 'package_activation',
+            title: 'Package Activated! 🎉',
+            message: `Your cash payment has been confirmed. ${totalCredits} credits are now available for booking classes.`,
+          });
         }
       }
       
@@ -397,8 +468,13 @@ const HomeScreen: React.FC = () => {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.greeting}>Hello, {user?.first_name}!</Text>
-          <Text style={styles.subtitle}>{getSubtitle()}</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>Hello, {user?.first_name}!</Text>
+              <Text style={styles.subtitle}>{getSubtitle()}</Text>
+            </View>
+            <NotificationBell style={styles.notificationBell} />
+          </View>
         </View>
 
         {/* Role-based Dashboard Content */}
@@ -432,6 +508,7 @@ const HomeScreen: React.FC = () => {
                 classInstance={classInstance}
                 variant="list"
                 isBooked={bookedClassIds.has(classInstance.id)}
+                isWaitlisted={waitlistedClassIds.has(classInstance.id)}
                 availableSpots={classInstance.available_spots}
                 showActions={isStudent}
                 hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
@@ -502,6 +579,14 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: SPACING.lg,
   },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerText: {
+    flex: 1,
+  },
   greeting: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -511,6 +596,9 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: COLORS.textSecondary,
+  },
+  notificationBell: {
+    marginTop: 4,
   },
   statsContainer: {
     flexDirection: 'row',

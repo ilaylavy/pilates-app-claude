@@ -766,6 +766,106 @@ async def get_dashboard_metrics(
         )
 
 
+@router.get("/packages/pending-approvals")
+async def get_pending_approvals(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get all packages pending payment approval."""
+    try:
+        # Get user packages that are pending approval
+        stmt = (
+            select(UserPackage)
+            .options(
+                selectinload(UserPackage.user),
+                selectinload(UserPackage.package)
+            )
+            .where(UserPackage.payment_status == PaymentStatus.PENDING)
+            .order_by(UserPackage.created_at.asc())  # Oldest first
+        )
+        result = await db.execute(stmt)
+        pending_packages = result.scalars().all()
+
+        pending_approvals = []
+        for user_package in pending_packages:
+            # Calculate hours waiting
+            hours_waiting = (datetime.now(timezone.utc) - user_package.created_at).total_seconds() / 3600
+            
+            pending_approvals.append({
+                "id": user_package.id,
+                "user_id": user_package.user_id,
+                "user_name": f"{user_package.user.first_name} {user_package.user.last_name}",
+                "user_email": user_package.user.email,
+                "package_id": user_package.package_id,
+                "package_name": user_package.package.name,
+                "package_price": float(user_package.package.price),
+                "package_credits": user_package.package.credits,
+                "payment_status": user_package.payment_status.value,
+                "approval_status": "pending",  # Default for now
+                "payment_reference": getattr(user_package, 'payment_reference', None),
+                "hours_waiting": round(hours_waiting, 1),
+                "created_at": user_package.created_at.isoformat(),
+                "version": getattr(user_package, 'version', 1),
+            })
+
+        return pending_approvals
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get pending approvals: {str(e)}"
+        )
+
+
+@router.get("/packages/approval-stats")
+async def get_approval_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Get approval statistics for admin dashboard."""
+    try:
+        # Get total pending approvals
+        pending_stmt = select(func.count(UserPackage.id)).where(
+            UserPackage.payment_status == PaymentStatus.PENDING
+        )
+        result = await db.execute(pending_stmt)
+        total_pending = result.scalar() or 0
+
+        # Get pending over 24 hours
+        yesterday = datetime.now(timezone.utc) - timedelta(hours=24)
+        old_pending_stmt = select(func.count(UserPackage.id)).where(
+            and_(
+                UserPackage.payment_status == PaymentStatus.PENDING,
+                UserPackage.created_at < yesterday
+            )
+        )
+        result = await db.execute(old_pending_stmt)
+        pending_over_24h = result.scalar() or 0
+
+        # Get total approved today
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        approved_today_stmt = select(func.count(UserPackage.id)).where(
+            and_(
+                UserPackage.payment_status == PaymentStatus.CONFIRMED,
+                UserPackage.updated_at >= today_start
+            )
+        )
+        result = await db.execute(approved_today_stmt)
+        total_approved_today = result.scalar() or 0
+
+        return {
+            "total_pending": total_pending,
+            "pending_over_24h": pending_over_24h,
+            "total_approved_today": total_approved_today
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get approval stats: {str(e)}"
+        )
+
+
 # ===== DISABLED ENDPOINTS =====
 # The following endpoints are temporarily disabled until missing models/methods are implemented:
 # - get_pending_cash_reservations (requires reservation methods)

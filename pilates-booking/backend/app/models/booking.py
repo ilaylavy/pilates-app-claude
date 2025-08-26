@@ -111,6 +111,7 @@ class WaitlistEntry(Base):
     class_instance_id = Column(
         Integer, ForeignKey("class_instances.id"), nullable=False
     )
+    user_package_id = Column(Integer, ForeignKey("user_packages.id"), nullable=True)
     position = Column(Integer, nullable=False)
     joined_date = Column(DateTime(timezone=True), server_default=func.now())
     notified_date = Column(DateTime(timezone=True), nullable=True)
@@ -124,6 +125,7 @@ class WaitlistEntry(Base):
     # Relationships
     user = relationship("User", back_populates="waitlist_entries")
     class_instance = relationship("ClassInstance", back_populates="waitlist_entries")
+    user_package = relationship("UserPackage")
 
     def __repr__(self):
         # Use try-except for everything to prevent DetachedInstanceError

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ....models.booking import Booking, BookingStatus, WaitlistEntry
-from ....schemas.booking import WaitlistEntryResponse
+from ....schemas.booking import WaitlistJoinRequest, WaitlistEntryResponse
 from ....models.class_schedule import ClassInstance, ClassStatus, ClassTemplate
 from ....models.user import User, UserRole
 from ....schemas.class_schedule import (ClassInstanceCreate,
@@ -351,6 +351,7 @@ async def create_class_instance(
 @router.post("/{class_id}/waitlist", response_model=WaitlistEntryResponse)
 async def join_waitlist(
     class_id: int,
+    request: WaitlistJoinRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -362,7 +363,8 @@ async def join_waitlist(
     try:
         waitlist_entry = await booking_service.add_to_waitlist(
             user_id=current_user.id, 
-            class_instance_id=class_id
+            class_instance_id=class_id,
+            package_id=request.user_package_id
         )
         return waitlist_entry
     except Exception as e:

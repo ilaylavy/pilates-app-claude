@@ -445,3 +445,30 @@ export interface CreateAnnouncementRequest {
   target_roles?: ('student' | 'instructor' | 'admin')[];
   is_dismissible?: boolean;
 }
+
+// Notification System Types
+export interface Notification {
+  id: string;
+  type: 'package_activation' | 'booking_success' | 'booking_cancelled' | 'waitlist_joined' | 'general';
+  title: string;
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
+
+export type NotificationType = Notification['type'];
+
+export interface NotificationBellProps {
+  style?: any;
+}
+
+export interface DismissibleMessageProps {
+  id: string;
+  type?: 'success' | 'warning' | 'info' | 'error';
+  title: string;
+  message: string;
+  icon?: string;
+  onDismiss?: () => void;
+  autoHide?: boolean;
+  autoHideDelay?: number;
+}

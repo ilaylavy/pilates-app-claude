@@ -9,7 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
 import { useUserRole } from '../hooks/useUserRole';
-import { ClassInstance, Booking } from '../types';
+import { ClassInstance } from '../types';
 
 interface ClassCardProps {
   classInstance: ClassInstance;
@@ -20,6 +20,7 @@ interface ClassCardProps {
   onJoinWaitlist?: () => void;
   showActions?: boolean;
   isBooked?: boolean;
+  isWaitlisted?: boolean;
   availableSpots?: number;
   hasAvailableCredits?: boolean;
   isBookingInProgress?: boolean;
@@ -34,6 +35,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
   onJoinWaitlist,
   showActions = true,
   isBooked = false,
+  isWaitlisted = false,
   availableSpots,
   hasAvailableCredits = true,
   isBookingInProgress = false,
@@ -56,18 +58,6 @@ const ClassCard: React.FC<ClassCardProps> = ({
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled':
-        return COLORS.success;
-      case 'cancelled':
-        return COLORS.error;
-      case 'completed':
-        return COLORS.textSecondary;
-      default:
-        return COLORS.primary;
-    }
-  };
 
   const getCapacityInfo = () => {
     const totalCapacity = classInstance.actual_capacity || classInstance.template.capacity;
@@ -131,19 +121,32 @@ const ClassCard: React.FC<ClassCardProps> = ({
                   <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
                   <Text style={styles.bookedText}>Booked</Text>
                 </View>
+              ) : isWaitlisted ? (
+                // Show waitlisted status when waitlisted
+                <View style={styles.bookedBadge}>
+                  <Ionicons name="hourglass" size={20} color={COLORS.warning} />
+                  <Text style={[styles.bookedText, { color: COLORS.warning }]}>Joined Waitlist</Text>
+                </View>
               ) : (
                 // Show book/waitlist button when not booked
                 <>
                   {classInstance.is_full ? (
                     onJoinWaitlist && (
                       <TouchableOpacity 
-                        style={[styles.actionButton, styles.studentWaitlistButton]}
+                        style={[
+                          styles.actionButton, 
+                          !hasAvailableCredits ? styles.disabledActionButton : styles.studentWaitlistButton
+                        ]}
                         onPress={onJoinWaitlist}
                         disabled={isBookingInProgress || !hasAvailableCredits}
                       >
-                        <Ionicons name="hourglass" size={16} color={COLORS.warning} />
-                        <Text style={styles.studentWaitlistButtonText}>
-                          {isBookingInProgress ? 'Joining...' : 'Join Waitlist'}
+                        <Ionicons 
+                          name={!hasAvailableCredits ? "card" : "hourglass"} 
+                          size={16} 
+                          color={!hasAvailableCredits ? COLORS.white : COLORS.warning} 
+                        />
+                        <Text style={!hasAvailableCredits ? styles.studentBookButtonText : styles.studentWaitlistButtonText}>
+                          {isBookingInProgress ? 'Joining...' : !hasAvailableCredits ? 'No Credits' : 'Join Waitlist'}
                         </Text>
                       </TouchableOpacity>
                     )
@@ -158,7 +161,7 @@ const ClassCard: React.FC<ClassCardProps> = ({
                         onPress={onBook}
                         disabled={isBookingInProgress || !hasAvailableCredits}
                       >
-                        <Ionicons name="add" size={16} color={COLORS.white} />
+                        <Ionicons name={!hasAvailableCredits ? "card" : "add"} size={16} color={COLORS.white} />
                         <Text style={styles.studentBookButtonText}>
                           {isBookingInProgress ? 'Booking...' : !hasAvailableCredits ? 'No Credits' : 'Book Class'}
                         </Text>

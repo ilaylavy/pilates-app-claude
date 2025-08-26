@@ -18,17 +18,18 @@ import NewScheduleScreen from '../screens/NewScheduleScreen'; // Updated unified
 import BookingsScreen from '../screens/BookingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import PackagesScreen from '../screens/PackagesScreen';
+import PackageNavigator from './PackageNavigator';
 import SettingsScreen from '../screens/SettingsScreen';
 import PaymentScreen from '../screens/PaymentScreen';
 import PaymentHistoryScreen from '../screens/PaymentHistoryScreen';
 import PurchaseConfirmationScreen from '../screens/PurchaseConfirmationScreen';
+import PackageHistoryScreen from '../screens/packages/PackageHistoryScreen';
 
 // Admin screens
 import UserManagementScreen from '../screens/UserManagementScreen';
-import PackageManagementScreen from '../screens/PackageManagementScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SystemSettingsScreen from '../screens/SystemSettingsScreen';
-import AdminApprovalScreen from '../screens/AdminApprovalScreen';
+import AdminPackagesScreen from '../screens/AdminPackagesScreen';
 // Removed: AddClassScreen, EditClassScreen, TemplateManagementScreen, BulkOperationsScreen
 // These are now integrated into the unified NewScheduleScreen
 
@@ -43,7 +44,7 @@ export type RootStackParamList = {
   PackageManagement: undefined;
   Reports: undefined;
   SystemSettings: undefined;
-  AdminApproval: undefined;
+  PackageHistory: undefined;
   // Removed: AddClass, EditClass, TemplateManagement, BulkOperations - integrated into Schedule
   Payment: { 
     packageId: number; 
@@ -73,11 +74,11 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Schedule: undefined;
+  Packages?: undefined; // For students - new enhanced packages hub
   Profile: undefined;
   Users?: undefined; // Only for admin/instructor
-  Packages?: undefined; // Only for admin
+  AdminPackages?: undefined; // Only for admin - unified packages and approvals
   Reports?: undefined; // Only for admin
-  Approvals?: undefined; // Only for admin
 };
 
 const RootStack = createStackNavigator<RootStackParamList>();
@@ -107,9 +108,9 @@ const MainNavigator = () => {
       'Schedule': ['calendar', 'calendar-outline'],
       'Profile': ['person', 'person-outline'],
       'Users': ['people', 'people-outline'],
-      'Packages': ['cube', 'cube-outline'],
+      'Packages': ['storefront', 'storefront-outline'],
+      'AdminPackages': ['construct', 'construct-outline'], // Changed to construction/admin icon
       'Reports': ['analytics', 'analytics-outline'],
-      'Approvals': ['checkmark-circle', 'checkmark-circle-outline'],
     };
 
     const [focusedIcon, unfocusedIcon] = iconMap[routeName] || ['help-outline', 'help-outline'];
@@ -135,6 +136,7 @@ const MainNavigator = () => {
       {isStudent && (
         <>
           <MainTab.Screen name="Schedule" component={NewScheduleScreen} />
+          <MainTab.Screen name="Packages" component={PackageNavigator} />
         </>
       )}
 
@@ -151,8 +153,7 @@ const MainNavigator = () => {
         <>
           <MainTab.Screen name="Schedule" component={NewScheduleScreen} options={{ title: 'Schedule' }} />
           <MainTab.Screen name="Users" component={UserManagementScreen} options={{ title: 'Students' }} />
-          <MainTab.Screen name="Packages" component={PackageManagementScreen} />
-          <MainTab.Screen name="Approvals" component={AdminApprovalScreen} options={{ title: 'Approvals' }} />
+          <MainTab.Screen name="AdminPackages" component={AdminPackagesScreen} options={{ title: 'Admin' }} />
           <MainTab.Screen name="Reports" component={ReportsScreen} />
         </>
       )}
@@ -192,7 +193,7 @@ const Navigation = () => {
           />
           <RootStack.Screen 
             name="PackageManagement" 
-            component={PackageManagementScreen}
+            component={AdminPackagesScreen}
             options={{ headerShown: true, title: 'Package Management' }}
           />
           <RootStack.Screen 
@@ -206,11 +207,6 @@ const Navigation = () => {
             options={{ headerShown: true, title: 'System Settings' }}
           />
           <RootStack.Screen 
-            name="AdminApproval" 
-            component={AdminApprovalScreen}
-            options={{ headerShown: true, title: 'Cash Payment Approvals' }}
-          />
-          <RootStack.Screen 
             name="Settings" 
             component={SettingsScreen}
             options={{ headerShown: true, title: 'Settings' }}
@@ -222,7 +218,7 @@ const Navigation = () => {
           />
           <RootStack.Screen 
             name="AdminPackages" 
-            component={PackageManagementScreen}
+            component={AdminPackagesScreen}
             options={{ headerShown: true, title: 'Manage Packages' }}
           />
           <RootStack.Screen 
@@ -234,6 +230,11 @@ const Navigation = () => {
             name="PaymentHistory" 
             component={PaymentHistoryScreen}
             options={{ headerShown: true, title: 'Payment History' }}
+          />
+          <RootStack.Screen 
+            name="PackageHistory" 
+            component={PackageHistoryScreen}
+            options={{ headerShown: true, title: 'Package History' }}
           />
           <RootStack.Screen 
             name="PurchaseConfirmation" 

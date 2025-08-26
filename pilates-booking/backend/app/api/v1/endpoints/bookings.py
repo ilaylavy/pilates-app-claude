@@ -1,10 +1,12 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....core.logging_config import get_logger
 from ....models.audit_log import AuditActionType, SecurityLevel
+from ....models.class_schedule import ClassInstance
 from ....models.user import User
 from ....schemas.booking import (BookingCancelRequest, BookingCreate,
                                  BookingResponse, WaitlistEntryResponse)
@@ -369,4 +371,63 @@ async def get_my_bookings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve bookings",
+        )
+
+
+@router.get("/waitlist", response_model=List[WaitlistEntryResponse])
+async def get_user_waitlist_entries(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get current user's active waitlist entries."""
+    from sqlalchemy.orm import selectinload
+    from app.models.booking import WaitlistEntry
+    
+    client_ip = _get_client_ip(request)
+    
+    try:
+        logger.info(
+            "User waitlist entries retrieval request",
+            user_id=str(current_user.id),
+            email=current_user.email,
+            client_ip=client_ip,
+        )
+
+        # Get user's active waitlist entries
+        result = await db.execute(
+            select(WaitlistEntry)
+            .filter(
+                WaitlistEntry.user_id == current_user.id,
+                WaitlistEntry.is_active == True
+            )
+            .options(
+                selectinload(WaitlistEntry.class_instance).selectinload(ClassInstance.template),
+                selectinload(WaitlistEntry.user)
+            )
+            .order_by(WaitlistEntry.joined_date.asc())
+        )
+        
+        waitlist_entries = result.scalars().all()
+
+        logger.info(
+            "User waitlist entries retrieved successfully",
+            user_id=str(current_user.id),
+            client_ip=client_ip,
+            results_count=len(waitlist_entries),
+        )
+
+        return waitlist_entries
+
+    except Exception as e:
+        logger.error(
+            "User waitlist entries retrieval failed",
+            exc_info=True,
+            user_id=str(current_user.id),
+            client_ip=client_ip,
+            error=str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve waitlist entries",
         )

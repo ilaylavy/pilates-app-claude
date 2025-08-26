@@ -142,15 +142,12 @@ const ProfileScreen: React.FC = () => {
         <View style={styles.actionGrid}>
           <TouchableOpacity 
             style={styles.actionButton} 
-            onPress={() => handleNavigation('Packages')}
+            onPress={() => handleNavigation('PaymentHistory')}
           >
             <View style={styles.actionIconContainer}>
-              <Ionicons name="card" size={24} color={COLORS.primary} />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>8</Text>
-              </View>
+              <Ionicons name="receipt" size={24} color={COLORS.primary} />
             </View>
-            <Text style={styles.actionText}>My Packages</Text>
+            <Text style={styles.actionText}>Payment History</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 

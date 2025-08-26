@@ -1,4 +1,4 @@
-from .booking import BookingCreate, BookingResponse, WaitlistEntryResponse
+from .booking import BookingCreate, BookingResponse, WaitlistJoinRequest, WaitlistEntryResponse
 from .class_schedule import (ClassInstanceCreate, ClassInstanceResponse,
                              ClassInstanceUpdate, ClassTemplateCreate,
                              ClassTemplateResponse, ClassTemplateUpdate)
@@ -38,6 +38,7 @@ __all__ = [
     "ApprovalStatsResponse",
     "BookingCreate",
     "BookingResponse",
+    "WaitlistJoinRequest",
     "WaitlistEntryResponse",
     "PaymentCreate",
     "PaymentResponse",

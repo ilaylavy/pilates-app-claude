@@ -17,8 +17,7 @@ import { getFriendlyErrorMessage, getErrorAlertTitle } from '../utils/errorMessa
 import { classesApi, ParticipantResponse } from '../api/classes';
 import { bookingsApi } from '../api/bookings';
 import { packagesApi } from '../api/packages';
-import { socialApi, Attendee } from '../api/social';
-import { useCancelBooking } from '../hooks/useBookings';
+import { socialApi } from '../api/social';
 import { ClassInstance } from '../types';
 import AttendeeAvatars from './AttendeeAvatars';
 
@@ -51,6 +50,14 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
     queryFn: () => bookingsApi.getUserBookings(),
   });
 
+  // Get user waitlist entries to check waitlist status
+  const {
+    data: userWaitlistEntries = [],
+  } = useQuery({
+    queryKey: ['userWaitlistEntries'],
+    queryFn: () => bookingsApi.getUserWaitlistEntries(),
+  });
+
   // Get user packages to check credit availability
   const {
     data: userPackagesResponse,
@@ -68,6 +75,11 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   // Find user's booking for this class
   const userBooking = userBookings.find(
     booking => booking.class_instance_id === classInstance?.id && booking.status === 'confirmed'
+  );
+
+  // Find user's waitlist entry for this class
+  const userWaitlistEntry = userWaitlistEntries.find(
+    entry => entry.class_instance_id === classInstance?.id
   );
 
   // Check if user has available credits
@@ -216,21 +228,100 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   const joinWaitlistMutation = useMutation({
     mutationFn: async () => {
       if (!classInstance) throw new Error('No class selected');
-      const result = await bookingsApi.joinWaitlist(classInstance.id);
+      const result = await bookingsApi.joinWaitlist(classInstance.id, activePackage?.id);
       if (!result.success) {
         throw new Error(result.message);
       }
       return result.waitlist_entry;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Only update if we have real waitlist data from server
+      if (result && classInstance) {
+        // Immediately update cache with real waitlist entry from server
+        queryClient.setQueryData(['userWaitlistEntries'], (oldEntries: any[]) => {
+          if (!oldEntries) return [result];
+          // Make sure we don't duplicate entries
+          const filtered = oldEntries.filter(entry => 
+            entry.class_instance_id !== classInstance.id
+          );
+          return [...filtered, result];
+        });
+      }
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['userWaitlistEntries'] });
       queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
+      
+      // Force another userPackages refetch after delay to catch any delayed server updates
+      setTimeout(() => {
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
       Alert.alert('Success', 'Added to waitlist successfully!');
       onClose();
     },
     onError: (error: any) => {
       const errorMessage = error.message || 'Failed to join waitlist';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
+
+  // Cancel waitlist mutation
+  const cancelWaitlistMutation = useMutation({
+    mutationFn: async () => {
+      if (!classInstance) throw new Error('No class selected');
+      const result = await bookingsApi.leaveWaitlist(classInstance.id);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      // Immediately remove waitlist entry from cache
+      queryClient.setQueryData(['userWaitlistEntries'], (oldEntries: any[]) => {
+        if (!oldEntries) return [];
+        return oldEntries.filter(entry => entry.class_instance_id !== classInstance?.id);
+      });
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['bookings'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+        queryClient.invalidateQueries({ queryKey: ['userWaitlistEntries'] });
+        queryClient.invalidateQueries({ queryKey: ['attendees', classInstance?.id] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      Alert.alert('Success', 'Left waitlist successfully!');
+      onClose();
+    },
+    onError: (error: any) => {
+      const errorMessage = error.message || 'Failed to leave waitlist';
       const friendlyMessage = getFriendlyErrorMessage(errorMessage);
       const alertTitle = getErrorAlertTitle(errorMessage);
       Alert.alert(alertTitle, friendlyMessage);
@@ -314,6 +405,23 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
               bookingId: userBooking.id,
               reason: 'User cancelled'
             });
+          }
+        }
+      ]
+    );
+  };
+
+  const handleCancelWaitlist = () => {
+    Alert.alert(
+      'Leave Waitlist',
+      'Are you sure you want to leave the waitlist for this class?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Leave',
+          style: 'destructive',
+          onPress: () => {
+            cancelWaitlistMutation.mutate();
           }
         }
       ]
@@ -541,6 +649,25 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                       : !userBooking.can_cancel
                         ? 'Cannot Cancel'
                         : 'Cancel Booking'
+                    }
+                  </Text>
+                </TouchableOpacity>
+              ) : userWaitlistEntry ? (
+                // Show leave waitlist option if user is waitlisted
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.dangerButton]}
+                  onPress={handleCancelWaitlist}
+                  disabled={cancelWaitlistMutation.isPending}
+                >
+                  <Ionicons 
+                    name="hourglass" 
+                    size={20} 
+                    color={COLORS.white} 
+                  />
+                  <Text style={styles.actionButtonText}>
+                    {cancelWaitlistMutation.isPending
+                      ? 'Leaving...'
+                      : 'Leave Waitlist'
                     }
                   </Text>
                 </TouchableOpacity>

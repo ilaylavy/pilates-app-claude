@@ -138,9 +138,22 @@ class BookingService:
                         user_id=str(user.id),
                     )
                 else:
+                    # Only allow bookings without packages for admin users
+                    if user.role.value != "admin":
+                        self.logger.warning(
+                            "Booking attempt without package by non-admin user",
+                            user_id=str(user.id),
+                            class_id=class_instance_id,
+                            user_role=user.role.value,
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Package required for booking. Please purchase a package first.",
+                        )
+                    
                     user_package_id = None
                     self.logger.info(
-                        "Booking without package (direct payment)",
+                        "Admin booking without package (direct payment)",
                         user_id=str(user.id),
                         class_id=class_instance_id,
                     )
@@ -423,7 +436,7 @@ class BookingService:
             user_package.refund_credit()
 
     async def _add_to_waitlist(
-        self, user_id: int, class_instance_id: int
+        self, user_id: int, class_instance_id: int, package_id: Optional[int] = None
     ) -> WaitlistEntry:
         """Add user to waitlist for a class."""
 
@@ -450,6 +463,11 @@ class BookingService:
             existing_entry.is_new_entry = False
             return existing_entry
 
+        # Consume credit from user package
+        user_package = None
+        if package_id:
+            user_package = await self._validate_and_use_package(user_id, package_id)
+
         # Get next position
         stmt = select(func.max(WaitlistEntry.position)).where(
             and_(
@@ -463,6 +481,7 @@ class BookingService:
         waitlist_entry = WaitlistEntry(
             user_id=user_id,
             class_instance_id=class_instance_id,
+            user_package_id=user_package.id if user_package else None,
             position=max_position + 1,
         )
 
@@ -511,9 +530,9 @@ class BookingService:
 
             # TODO: Send notification to user about promotion
 
-    async def add_to_waitlist(self, user_id: int, class_instance_id: int) -> WaitlistEntry:
+    async def add_to_waitlist(self, user_id: int, class_instance_id: int, package_id: Optional[int] = None) -> WaitlistEntry:
         """Public method to add user to waitlist for a class."""
-        return await self._add_to_waitlist(user_id, class_instance_id)
+        return await self._add_to_waitlist(user_id, class_instance_id, package_id)
     
     async def remove_from_waitlist(self, user_id: int, class_instance_id: int):
         """Remove user from waitlist for a class."""
@@ -533,6 +552,10 @@ class BookingService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found on waitlist for this class"
             )
+        
+        # Refund credit if a package was used
+        if waitlist_entry.user_package_id:
+            await self._refund_package_credit(waitlist_entry.user_package_id)
         
         # Mark as inactive instead of deleting for audit trail
         waitlist_entry.is_active = False

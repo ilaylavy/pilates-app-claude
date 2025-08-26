@@ -81,9 +81,11 @@ export const bookingsApi = {
     }
   },
 
-  joinWaitlist: async (classInstanceId: number): Promise<WaitlistJoinResult> => {
+  joinWaitlist: async (classInstanceId: number, packageId?: number): Promise<WaitlistJoinResult> => {
     try {
-      const response = await apiClient.post<WaitlistEntry>(`/api/v1/classes/${classInstanceId}/waitlist`);
+      const response = await apiClient.post<WaitlistEntry>(`/api/v1/classes/${classInstanceId}/waitlist`, {
+        user_package_id: packageId || null
+      });
       return { success: true, waitlist_entry: response.data };
     } catch (error: any) {
       return {

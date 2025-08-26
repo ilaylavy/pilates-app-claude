@@ -49,6 +49,11 @@ export const adminApi = {
   },
 
   // Package management
+  getAllPackages: async (): Promise<Package[]> => {
+    const response = await apiClient.get('/api/v1/packages/');
+    return response.data;
+  },
+
   createPackage: async (packageData: {
     name: string;
     description?: string;

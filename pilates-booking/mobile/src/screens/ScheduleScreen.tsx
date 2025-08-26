@@ -94,6 +94,13 @@ const ScheduleScreen: React.FC = () => {
     enabled: isAuthenticated,
   });
 
+  // Fetch user waitlist entries to show waitlist status
+  const { data: userWaitlistEntries = [] } = useQuery({
+    queryKey: ['userWaitlistEntries'],
+    queryFn: () => bookingsApi.getUserWaitlistEntries(),
+    enabled: isAuthenticated,
+  });
+
   // Fetch user packages to check credit availability
   const { data: userPackagesResponse } = useQuery({
     queryKey: ['userPackages'],
@@ -113,6 +120,13 @@ const ScheduleScreen: React.FC = () => {
         .map(booking => booking.class_instance_id) || []
     );
   }, [userBookings]);
+
+  // Create a set of waitlisted class IDs for quick lookup
+  const waitlistedClassIds = React.useMemo(() => {
+    return new Set(
+      userWaitlistEntries?.map(entry => entry.class_instance_id) || []
+    );
+  }, [userWaitlistEntries]);
 
   const activePackage = userPackages?.find(pkg => pkg.is_valid);
 
@@ -252,24 +266,134 @@ const ScheduleScreen: React.FC = () => {
   // Join waitlist mutation
   const joinWaitlistMutation = useMutation({
     mutationFn: async (classInstanceId: number) => {
-      const result = await bookingsApi.joinWaitlist(classInstanceId);
+      const result = await bookingsApi.joinWaitlist(classInstanceId, activePackage?.id);
       if (!result.success) {
         throw new Error(result.message);
       }
       return result.waitlist_entry;
     },
-    onMutate: (classInstanceId) => {
+    onMutate: async (classInstanceId) => {
       setBookingInProgressId(classInstanceId);
+      
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['userWaitlistEntries'] });
+      
+      // Snapshot the previous value for error rollback
+      const previousWaitlistEntries = queryClient.getQueryData(['userWaitlistEntries']);
+      
+      return { previousWaitlistEntries, classInstanceId };
     },
     onSuccess: (result, classInstanceId) => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] });
-      queryClient.invalidateQueries({ queryKey: ['userBookings'] });
       setBookingInProgressId(null);
+      
+      // Only update if we have real waitlist data from server
+      if (result) {
+        // Immediately update cache with real waitlist entry from server
+        queryClient.setQueryData(['userWaitlistEntries'], (oldEntries: any[]) => {
+          if (!oldEntries) return [result];
+          // Make sure we don't duplicate entries
+          const filtered = oldEntries.filter(entry => 
+            entry.class_instance_id !== classInstanceId
+          );
+          return [...filtered, result];
+        });
+      }
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+        queryClient.invalidateQueries({ queryKey: ['userWaitlistEntries'] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
       Alert.alert('Success', 'Added to waitlist successfully!');
     },
-    onError: (error: any, classInstanceId) => {
+    onError: (error: any, classInstanceId, context) => {
       setBookingInProgressId(null);
+      
+      // Revert optimistic update
+      if (context?.previousWaitlistEntries) {
+        queryClient.setQueryData(['userWaitlistEntries'], context.previousWaitlistEntries);
+      }
+      
       const errorMessage = error.message || 'Failed to join waitlist';
+      const friendlyMessage = getFriendlyErrorMessage(errorMessage);
+      const alertTitle = getErrorAlertTitle(errorMessage);
+      Alert.alert(alertTitle, friendlyMessage);
+    },
+  });
+
+  // Cancel waitlist mutation
+  const cancelWaitlistMutation = useMutation({
+    mutationFn: async (classInstanceId: number) => {
+      const result = await bookingsApi.leaveWaitlist(classInstanceId);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result;
+    },
+    onMutate: async (classInstanceId) => {
+      setBookingInProgressId(classInstanceId);
+      
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['userWaitlistEntries'] });
+      
+      // Snapshot the previous value for error rollback
+      const previousWaitlistEntries = queryClient.getQueryData(['userWaitlistEntries']);
+      
+      return { previousWaitlistEntries, classInstanceId };
+    },
+    onSuccess: (result, classInstanceId) => {
+      setBookingInProgressId(null);
+      
+      // Immediately remove waitlist entry from cache after server confirms
+      queryClient.setQueryData(['userWaitlistEntries'], (oldEntries: any[]) => {
+        if (!oldEntries) return [];
+        return oldEntries.filter(entry => entry.class_instance_id !== classInstanceId);
+      });
+      
+      // Force immediate credit update by invalidating userPackages with forced refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['userPackages'],
+        refetchType: 'all' 
+      });
+      
+      // Invalidate all related queries to refetch updated data from server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['classes'] });
+        queryClient.invalidateQueries({ queryKey: ['userBookings'] });
+        queryClient.invalidateQueries({ queryKey: ['user-bookings'] });
+        queryClient.invalidateQueries({ queryKey: ['userWaitlistEntries'] });
+        // Force another userPackages refetch after delay to catch any delayed server updates
+        queryClient.invalidateQueries({ 
+          queryKey: ['userPackages'],
+          refetchType: 'all' 
+        });
+      }, 300);
+      
+      Alert.alert('Success', 'Left waitlist successfully!');
+    },
+    onError: (error: any, classInstanceId, context) => {
+      setBookingInProgressId(null);
+      
+      // Revert optimistic update
+      if (context?.previousWaitlistEntries) {
+        queryClient.setQueryData(['userWaitlistEntries'], context.previousWaitlistEntries);
+      }
+      
+      const errorMessage = error.message || 'Failed to leave waitlist';
       const friendlyMessage = getFriendlyErrorMessage(errorMessage);
       const alertTitle = getErrorAlertTitle(errorMessage);
       Alert.alert(alertTitle, friendlyMessage);
@@ -378,6 +502,22 @@ const ScheduleScreen: React.FC = () => {
     );
   };
 
+  const handleCancelWaitlist = (classInstance: ClassInstance) => {
+    Alert.alert(
+      'Leave Waitlist',
+      'Are you sure you want to leave the waitlist for this class?',
+      [
+        { text: 'No', style: 'cancel' },
+        { 
+          text: 'Yes, Leave',
+          style: 'destructive',
+          onPress: () => {
+            cancelWaitlistMutation.mutate(classInstance.id);
+          }
+        }
+      ]
+    );
+  };
 
   const handleDeleteClass = (classInstance: ClassInstance) => {
     Alert.alert(
@@ -645,6 +785,7 @@ const ScheduleScreen: React.FC = () => {
                             classInstance={classInstance}
                             variant="list"
                             isBooked={bookedClassIds.has(classInstance.id)}
+                            isWaitlisted={waitlistedClassIds.has(classInstance.id)}
                             availableSpots={classInstance.available_spots}
                             showActions={isStudent}
                             hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}

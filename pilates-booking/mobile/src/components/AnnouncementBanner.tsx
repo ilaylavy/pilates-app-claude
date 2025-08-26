@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '../utils/config';
+import { NotificationStorage, generateMessageId } from '../utils/notificationStorage';
 
 export interface Announcement {
   id: number;
@@ -23,6 +24,16 @@ const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({
   onDismiss 
 }) => {
   const [dismissedIds, setDismissedIds] = useState<number[]>([]);
+  const [permanentlyDismissed, setPermanentlyDismissed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    // Check for permanently dismissed announcements on mount
+    const checkDismissed = async () => {
+      const dismissed = await NotificationStorage.getDismissedMessages();
+      setPermanentlyDismissed(dismissed);
+    };
+    checkDismissed();
+  }, []);
 
   const getTypeConfig = (type: Announcement['type']) => {
     switch (type) {
@@ -57,14 +68,30 @@ const AnnouncementBanner: React.FC<AnnouncementBannerProps> = ({
     }
   };
 
-  const handleDismiss = (announcementId: number) => {
+  const handleDismiss = async (announcementId: number) => {
+    const announcement = announcements.find(a => a.id === announcementId);
+    if (announcement) {
+      // Save to notifications before dismissing
+      await NotificationStorage.addNotification({
+        type: announcement.type === 'success' ? 'package_activation' : 'general',
+        title: announcement.title,
+        message: announcement.message,
+      });
+      
+      // Mark as permanently dismissed
+      const messageId = generateMessageId('announcement', announcementId.toString());
+      await NotificationStorage.dismissMessage(messageId);
+    }
+    
     setDismissedIds(prev => [...prev, announcementId]);
     onDismiss?.(announcementId);
   };
 
-  const visibleAnnouncements = announcements.filter(
-    announcement => !dismissedIds.includes(announcement.id)
-  );
+  const visibleAnnouncements = announcements.filter(announcement => {
+    const messageId = generateMessageId('announcement', announcement.id.toString());
+    return !dismissedIds.includes(announcement.id) && 
+           !permanentlyDismissed.has(messageId);
+  });
 
   if (visibleAnnouncements.length === 0) {
     return null;

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING } from '../utils/config';
+import { COLORS, SPACING, API_ENDPOINTS } from '../utils/config';
 import { apiClient } from '../api/client';
 import ProgressRing from './ProgressRing';
 import StreakCounter from './StreakCounter';
@@ -36,7 +36,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const { data: extendedStats } = useQuery<ExtendedUserStats>({
     queryKey: ['user-extended-stats'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/v1/users/me/stats/extended');
+      const response = await apiClient.get(API_ENDPOINTS.USERS.STATS_EXTENDED);
       return response.data;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -45,7 +45,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const { data: announcements } = useQuery<Announcement[]>({
     queryKey: ['user-announcements'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/v1/users/me/announcements');
+      const response = await apiClient.get(API_ENDPOINTS.USERS.ANNOUNCEMENTS);
       return response.data;
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
@@ -83,19 +83,32 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
     );
   };
 
+  // Calculate total credits from all active packages (same as packages screen)
+  const activeUserPackages = userPackages.filter(pkg => pkg.is_valid);
+  const totalCredits = activeUserPackages.reduce((sum, pkg) => sum + (pkg.credits_remaining || 0), 0);
+  const hasUnlimited = activeUserPackages.some(pkg => pkg.package?.is_unlimited);
+
   const getCreditsExpiryColor = () => {
-    if (!activePackage) return COLORS.textSecondary;
+    if (activeUserPackages.length === 0) return COLORS.textSecondary;
+    if (totalCredits <= 2 && !hasUnlimited) return COLORS.warning;
+    if (totalCredits === 0 && !hasUnlimited) return COLORS.error;
     
-    const daysUntilExpiry = activePackage.days_until_expiry;
-    if (daysUntilExpiry <= 3) return COLORS.error;
-    if (daysUntilExpiry <= 7) return COLORS.warning;
+    // Check earliest expiry among active packages
+    const earliestExpiry = Math.min(...activeUserPackages.map(pkg => pkg.days_until_expiry || 0));
+    if (earliestExpiry <= 3) return COLORS.error;
+    if (earliestExpiry <= 7) return COLORS.warning;
     return COLORS.success;
   };
 
   const getCreditsExpiryMessage = () => {
-    if (!activePackage) return 'No active package';
+    if (activeUserPackages.length === 0) return 'No active package';
     
-    const daysUntilExpiry = activePackage.days_until_expiry;
+    // Find the package expiring soonest
+    const earliestExpiryPackage = activeUserPackages.reduce((earliest, current) => 
+      (current.days_until_expiry || 0) < (earliest.days_until_expiry || 0) ? current : earliest
+    );
+    
+    const daysUntilExpiry = earliestExpiryPackage?.days_until_expiry || 0;
     if (daysUntilExpiry <= 0) return 'Expired';
     if (daysUntilExpiry === 1) return 'Expires tomorrow!';
     if (daysUntilExpiry <= 3) return `Expires in ${daysUntilExpiry} days!`;
@@ -150,9 +163,9 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({
         <View style={styles.statCard}>
           <Ionicons name="card" size={24} color={getCreditsExpiryColor()} />
           <Text style={[styles.statNumber, { color: getCreditsExpiryColor() }]}>
-            {activePackage?.credits_remaining || 0}
+            {hasUnlimited ? '∞' : totalCredits}
           </Text>
-          <Text style={styles.statLabel}>Credits Left</Text>
+          <Text style={styles.statLabel}>Credits Available</Text>
           <Text style={[styles.expiryText, { color: getCreditsExpiryColor() }]}>
             {getCreditsExpiryMessage()}
           </Text>

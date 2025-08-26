@@ -43,10 +43,15 @@ class BookingCancelRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class WaitlistJoinRequest(BaseModel):
+    user_package_id: Optional[int] = None
+
+
 class WaitlistEntryResponse(BaseModel):
     id: int
     user_id: int
     class_instance_id: int
+    user_package_id: Optional[int] = None
     position: int
     joined_date: datetime
     notified_date: Optional[datetime] = None

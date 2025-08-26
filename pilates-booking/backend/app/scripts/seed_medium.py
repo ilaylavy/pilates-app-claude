@@ -24,8 +24,7 @@ from app.models.class_schedule import (ClassInstance, ClassLevel, ClassStatus,
                                        ClassTemplate, WeekDay)
 from app.models.friendship import Friendship, FriendshipStatus
 from app.models.package import (Package, UserPackage,
-                                 UserPackageStatus)
-from app.models.package import PaymentStatus as PackagePaymentStatus
+                                 UserPackageStatus, PaymentStatus as PackagePaymentStatus)
 from app.models.payment import Payment, PaymentMethod, PaymentType, PaymentStatus
 from app.models.user import User, UserRole
 
@@ -293,10 +292,9 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
         expiry_date=datetime.now() + timedelta(days=59),
         status=UserPackageStatus.ACTIVE,
         payment_status=PackagePaymentStatus.PENDING,
-        approval_status=ApprovalStatus.PENDING,
     ))
     
-    # Carol has an authorized package (waiting for payment confirmation)
+    # Carol has a confirmed package
     user_packages.append(UserPackage(
         user_id=students[2].id,  # Carol
         package_id=packages[1].id,  # 5-class package
@@ -304,10 +302,9 @@ async def create_user_packages(session: AsyncSession, users: List[User], package
         purchase_date=datetime.now() - timedelta(hours=2),
         expiry_date=datetime.now() + timedelta(days=60),
         status=UserPackageStatus.ACTIVE,
-        payment_status=PackagePaymentStatus.AUTHORIZED,
-        approval_status=ApprovalStatus.AUTHORIZED,
-        authorized_by=users[0].id,  # Admin
-        authorized_at=datetime.now() - timedelta(hours=1),
+        payment_status=PackagePaymentStatus.CONFIRMED,
+        approved_by=users[0].id,  # Admin
+        approved_at=datetime.now() - timedelta(hours=1),
     ))
     
     # David has an expired package
@@ -390,44 +387,67 @@ async def create_class_instances(session: AsyncSession, instructors: List[User],
 
 
 async def create_bookings(session: AsyncSession, users: List[User], instances: List[ClassInstance]):
-    """Create sample bookings."""
+    """Create sample bookings with proper user_package_id references."""
     students = [u for u in users if u.role == UserRole.STUDENT]
     
-    # Create some bookings for the first few classes
+    # Get user packages to link bookings properly
+    from sqlalchemy import select
+    stmt = select(UserPackage).where(UserPackage.status == UserPackageStatus.ACTIVE)
+    result = await session.execute(stmt)
+    user_packages = result.scalars().all()
+    
+    # Create mapping of user_id to their active packages
+    user_package_map = {}
+    for pkg in user_packages:
+        if pkg.user_id not in user_package_map:
+            user_package_map[pkg.user_id] = []
+        user_package_map[pkg.user_id].append(pkg)
+    
     bookings = []
     
-    # Alice books several classes
+    # Alice books several classes using her 10-class package
+    alice_package = next((pkg for pkg in user_package_map.get(students[0].id, []) if pkg.package_id == 3), None)  # 10-class package
     for i in range(3):
-        if i < len(instances):
+        if i < len(instances) and alice_package:
             booking = Booking(
                 user_id=students[0].id,  # Alice
                 class_instance_id=instances[i].id,
+                user_package_id=alice_package.id,  # Proper package reference
                 status=BookingStatus.CONFIRMED,
                 booking_date=datetime.now() - timedelta(days=2),
             )
             bookings.append(booking)
+            # Deduct credits from package
+            alice_package.credits_remaining -= 1
     
     # Emma books classes with her unlimited package
+    emma_package = next((pkg for pkg in user_package_map.get(students[4].id, []) if pkg.package.is_unlimited), None)  # Unlimited package
     for i in range(2, 5):
-        if i < len(instances):
+        if i < len(instances) and emma_package:
             booking = Booking(
                 user_id=students[4].id,  # Emma
                 class_instance_id=instances[i].id,
+                user_package_id=emma_package.id,  # Proper package reference
                 status=BookingStatus.CONFIRMED,
                 booking_date=datetime.now() - timedelta(days=1),
             )
             bookings.append(booking)
+            # No credit deduction for unlimited packages
     
-    # Add a cancelled booking
-    if len(instances) > 5:
+    # Add a cancelled booking for Carol using her confirmed package
+    carol_package = next((pkg for pkg in user_package_map.get(students[2].id, []) if pkg.package_id == 2), None)  # 5-class package
+    if len(instances) > 5 and carol_package:
         cancelled_booking = Booking(
-            user_id=students[1].id,  # Bob
+            user_id=students[2].id,  # Carol (not Bob)
             class_instance_id=instances[5].id,
+            user_package_id=carol_package.id,  # Proper package reference
             status=BookingStatus.CANCELLED,
             booking_date=datetime.now() - timedelta(days=3),
             cancellation_date=datetime.now() - timedelta(days=1),
         )
         bookings.append(cancelled_booking)
+        # Refund credit on cancelled booking
+        carol_package.credits_remaining += 1
 
     for booking in bookings:
         session.add(booking)

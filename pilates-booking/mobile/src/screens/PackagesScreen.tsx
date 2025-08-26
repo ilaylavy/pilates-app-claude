@@ -8,53 +8,67 @@ import {
   RefreshControl,
   FlatList,
   Alert,
+  // Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
+
 import { COLORS, SPACING } from '../utils/config';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../api/client';
 import { packagesApi } from '../api/packages';
-import { useUserRole } from '../hooks/useUserRole';
+import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-import { Ionicons } from '@expo/vector-icons';
-import PackageCard from '../components/PackageCard';
+import { useUserRole } from '../hooks/useUserRole';
+import type { UserPackagesResponse, Package } from '../types';
+import EnhancedPackageCard from '../components/packages/EnhancedPackageCard';
+import QuickPurchaseModal from '../components/packages/QuickPurchaseModal';
+import SimplePendingCard from '../components/SimplePendingCard';
 import PackageEditModal from '../components/PackageEditModal';
 import Button from '../components/common/Button';
 import PurchaseModal from '../components/PurchaseModal';
-import PaymentStatusBadge from '../components/PaymentStatusBadge';
-import PendingApprovalCard from '../components/PendingApprovalCard';
-import type { Package, UserPackage, UserPackagesResponse } from '../types';
 
+// const { width } = Dimensions.get('window');
 
 type RootStackParamList = {
+  PackageHistory: undefined;
   Payment: {
     packageId: number;
     packageName: string;
     price: number;
     currency: string;
   };
-  Profile: undefined;
-  BookClass: undefined;
 };
 
 type PackagesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const PackagesScreen: React.FC = () => {
-  const { isAdmin } = useUserRole();
   const { isAuthenticated } = useAuth();
+  const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const navigation = useNavigation<PackagesScreenNavigationProp>();
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentView, setCurrentView] = useState<'active' | 'browse'>('active');
+  const [packageToPurchase, setPackageToPurchase] = useState<Package | null>(null);
+  const [showAllPending, setShowAllPending] = useState(false);
+  
+  // Admin states
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-  const [packageToPurchase, setPackageToPurchase] = useState<Package | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Queries
-  const { data: availablePackages, isLoading: packagesLoading } = useQuery<Package[]>({
+  const { data: userPackagesData, isLoading: userPackagesLoading } = useQuery<UserPackagesResponse>({
+    queryKey: ['userPackages'],
+    queryFn: () => packagesApi.getUserPackages(),
+    enabled: isAuthenticated && !isAdminMode,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 60 * 1000, // Auto-refresh every minute
+  });
+
+  const { data: availablePackages } = useQuery<Package[]>({
     queryKey: ['packages', isAdminMode ? 'all' : 'available'],
     queryFn: async () => {
       const endpoint = isAdminMode ? '/api/v1/packages/' : '/api/v1/packages/catalog';
@@ -64,21 +78,15 @@ const PackagesScreen: React.FC = () => {
     enabled: isAuthenticated,
   });
 
-  const { data: userPackagesData, isLoading: userPackagesLoading } = useQuery<UserPackagesResponse>({
-    queryKey: ['userPackages'],
-    queryFn: () => packagesApi.getUserPackages(),
-    enabled: isAuthenticated,
-  });
-
-  // Extract organized data from the new response structure
   const activePackages = userPackagesData?.active_packages || [];
   const pendingPackages = userPackagesData?.pending_packages || [];
   const historicalPackages = userPackagesData?.historical_packages || [];
-  const primaryPackage = activePackages.find(pkg => pkg.is_primary);
   const totalCredits = userPackagesData?.total_credits || 0;
   const hasUnlimited = userPackagesData?.has_unlimited || false;
+  const primaryPackage = activePackages.find(pkg => pkg.is_primary);
 
-  // Mutations
+
+  // Mutations for admin
   const togglePackageMutation = useMutation({
     mutationFn: async (packageId: number) => {
       await apiClient.patch(`/api/v1/packages/${packageId}/toggle`);
@@ -99,11 +107,20 @@ const PackagesScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await queryClient.invalidateQueries({ queryKey: ['packages'] });
     await queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+    await queryClient.invalidateQueries({ queryKey: ['packages'] });
     setRefreshing(false);
   };
 
+  const handlePurchase = (pkg: Package) => {
+    setPackageToPurchase(pkg);
+  };
+
+  const handleViewHistory = () => {
+    navigation.navigate('PackageHistory');
+  };
+
+  // Admin handlers
   const handleEditPackage = (pkg: Package) => {
     setSelectedPackage(pkg);
     setShowEditModal(true);
@@ -137,89 +154,144 @@ const PackagesScreen: React.FC = () => {
     togglePackageMutation.mutate(pkg.id);
   };
 
-  const formatExpiry = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) return 'Expired';
-    if (diffDays === 0) return 'Expires today';
-    if (diffDays === 1) return 'Expires tomorrow';
-    return `Expires in ${diffDays} days`;
-  };
-
-  const getHistoryStatusText = (userPackage: UserPackage) => {
-    if (userPackage.payment_status === 'rejected') return 'Rejected';
-    if (userPackage.credits_remaining === 0) return 'Completed';
-    if (userPackage.is_expired) return 'Expired';
-    return 'Inactive';
-  };
-
-  const renderCurrentBalance = () => {
-    if (activePackages.length === 0) {
-      return (
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceHeader}>
-            <Ionicons name="card" size={24} color={COLORS.textSecondary} />
-            <Text style={styles.balanceTitle}>No Active Packages</Text>
+  // Header with toggle buttons (for student view) or admin toggle
+  const renderHeader = () => (
+    <View style={styles.header}>
+      {isAdmin ? (
+        <View style={styles.adminHeader}>
+          <Text style={styles.adminTitle}>Package Management</Text>
+          <TouchableOpacity
+            style={[styles.adminToggle, isAdminMode && styles.adminToggleActive]}
+            onPress={() => setIsAdminMode(!isAdminMode)}
+          >
+            <Text style={[styles.adminToggleText, isAdminMode && styles.adminToggleTextActive]}>
+              {isAdminMode ? 'Admin View' : 'Student View'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.headerTitle}>My Packages</Text>
+          
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[styles.toggleButton, currentView === 'active' && styles.toggleButtonActive]}
+              onPress={() => setCurrentView('active')}
+            >
+              <Ionicons 
+                name="flash" 
+                size={16} 
+                color={currentView === 'active' ? COLORS.background : COLORS.textSecondary} 
+              />
+              <Text style={[
+                styles.toggleButtonText,
+                currentView === 'active' && styles.toggleButtonTextActive
+              ]}>
+                My Packages
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.toggleButton, currentView === 'browse' && styles.toggleButtonActive]}
+              onPress={() => setCurrentView('browse')}
+            >
+              <Ionicons 
+                name="storefront" 
+                size={16} 
+                color={currentView === 'browse' ? COLORS.background : COLORS.textSecondary} 
+              />
+              <Text style={[
+                styles.toggleButtonText,
+                currentView === 'browse' && styles.toggleButtonTextActive
+              ]}>
+                Buy Packages
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.balanceSubtitle}>
-            Purchase a package to start booking classes
-          </Text>
-        </View>
-      );
-    }
+        </>
+      )}
+    </View>
+  );
 
+  // Credits overview card
+  const renderCreditsOverview = () => {
+    if (activePackages.length === 0) return null;
+    
+    const isLowCredits = totalCredits <= 2 && !hasUnlimited;
+    
     return (
-      <View style={styles.balanceCard}>
-        <View style={styles.balanceHeader}>
-          <Ionicons name="card" size={24} color={COLORS.primary} />
-          <Text style={styles.balanceTitle}>Total Balance</Text>
-        </View>
-        
-        <View style={styles.balanceContent}>
-          <Text style={styles.creditsNumber}>
-            {hasUnlimited ? '∞' : totalCredits}
-          </Text>
-          <Text style={styles.creditsLabel}>Credits Available</Text>
+      <View style={[styles.creditsCard, isLowCredits && styles.lowCreditsCard]}>
+        <View style={styles.creditsHeader}>
+          <View style={styles.creditsIconContainer}>
+            <Ionicons 
+              name={hasUnlimited ? "infinite" : "flash"} 
+              size={28} 
+              color={isLowCredits ? COLORS.warning : COLORS.primary} 
+            />
+          </View>
+          <View style={styles.creditsContent}>
+            <Text style={[styles.creditsNumber, isLowCredits && { color: COLORS.warning }]}>
+              {hasUnlimited ? '∞' : totalCredits}
+            </Text>
+            <Text style={styles.creditsLabel}>Credits Available</Text>
+          </View>
+          <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+            <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
         
         {primaryPackage && (
-          <View style={styles.balanceFooter}>
-            <Text style={styles.primaryPackageText}>
-              Primary: {primaryPackage.package.name}
+          <View style={styles.primaryInfo}>
+            <Text style={styles.primaryLabel}>Primary Package</Text>
+            <Text style={styles.primaryName}>{primaryPackage.package.name}</Text>
+            <Text style={styles.primaryExpiry}>
+              {primaryPackage.days_until_expiry > 0 
+                ? `Expires in ${primaryPackage.days_until_expiry} days`
+                : 'Expired'}
             </Text>
-            <Text style={styles.expiryText}>{formatExpiry(primaryPackage.expiry_date)}</Text>
           </View>
         )}
         
-        {activePackages.length > 1 && (
-          <Text style={styles.multiplePackagesText}>
-            +{activePackages.length - 1} more package{activePackages.length > 2 ? 's' : ''}
-          </Text>
+        {isLowCredits && (
+          <View style={styles.lowCreditsAlert}>
+            <Ionicons name="warning" size={16} color={COLORS.warning} />
+            <Text style={styles.lowCreditsText}>Running low! Consider purchasing more credits.</Text>
+          </View>
         )}
       </View>
     );
   };
 
+  // Pending packages section
   const renderPendingPackages = () => {
     if (pendingPackages.length === 0) return null;
+
+    const displayedPackages = showAllPending ? pendingPackages : pendingPackages.slice(0, 2);
+    const hasMorePending = pendingPackages.length > 2;
 
     return (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Pending Payments</Text>
-          <TouchableOpacity
-            style={styles.viewAllButton}
-            onPress={() => navigation.navigate('PendingApprovals' as any)}
-          >
-            <Text style={styles.viewAllText}>View All</Text>
-            <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Pending Payments ({pendingPackages.length})</Text>
+          {hasMorePending && (
+            <TouchableOpacity 
+              style={styles.viewAllButton}
+              onPress={() => setShowAllPending(!showAllPending)}
+            >
+              <Text style={styles.viewAllText}>
+                {showAllPending ? 'Show Less' : 'View All'}
+              </Text>
+              <Ionicons 
+                name={showAllPending ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color={COLORS.primary} 
+              />
+            </TouchableOpacity>
+          )}
         </View>
         
-        {pendingPackages.slice(0, 2).map((userPackage) => (
-          <PendingApprovalCard
+        {displayedPackages.map((userPackage) => (
+          <SimplePendingCard
             key={userPackage.id}
             userPackage={userPackage}
             onRefresh={() => {
@@ -231,138 +303,191 @@ const PackagesScreen: React.FC = () => {
     );
   };
 
-  const renderPackageHistory = () => {
-    if (historicalPackages.length === 0) return null;
-
-    return (
+  // Active packages view (student)
+  const renderActiveView = () => (
+    <ScrollView
+      style={styles.scrollView}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      showsVerticalScrollIndicator={false}
+    >
+      {renderCreditsOverview()}
+      
+      {/* Pending Packages Section */}
+      {renderPendingPackages()}
+      
       <View style={styles.section}>
-        <TouchableOpacity style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Package History ({historicalPackages.length})</Text>
-          <Ionicons name="chevron-down" size={20} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-        
-        {historicalPackages.slice(0, 3).map((userPackage) => (
-          <View key={userPackage.id} style={styles.historyItem}>
-            <View style={styles.historyContent}>
-              <Text style={styles.historyName}>{userPackage.package.name}</Text>
-              <Text style={styles.historyDate}>
-                Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
-              </Text>
-            </View>
-            <View style={styles.historyStatusContainer}>
-              {userPackage.payment_status && (
-                <PaymentStatusBadge 
-                  status={userPackage.payment_status}
-                  size="small"
-                />
-              )}
-              <Text style={[styles.historyStatus, { color: COLORS.textSecondary }]}>
-                {getHistoryStatusText(userPackage)}
-              </Text>
-            </View>
-          </View>
-        ))}
-        
-        {historicalPackages.length > 3 && (
-          <TouchableOpacity style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>
-              View all {historicalPackages.length} packages
-            </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Active Packages ({activePackages.length})</Text>
+          <TouchableOpacity style={styles.historyButton} onPress={handleViewHistory}>
+            <Ionicons name="time" size={16} color={COLORS.primary} />
+            <Text style={styles.historyButtonText}>History</Text>
           </TouchableOpacity>
+        </View>
+        
+        {userPackagesLoading ? (
+          <View style={styles.loadingState}>
+            <Text style={styles.loadingText}>Loading packages...</Text>
+          </View>
+        ) : activePackages.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="cube-outline" size={64} color={COLORS.textSecondary} />
+            <Text style={styles.emptyTitle}>No Active Packages</Text>
+            <Text style={styles.emptySubtext}>Purchase a package to start booking classes</Text>
+            <TouchableOpacity 
+              style={styles.browseButton}
+              onPress={() => setCurrentView('browse')}
+            >
+              <Text style={styles.browseButtonText}>Browse Packages</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.packageGrid}>
+            {activePackages.map((userPackage) => (
+              <View key={userPackage.id} style={styles.activePackageCard}>
+                <View style={styles.activePackageHeader}>
+                  <View style={styles.activePackageIcon}>
+                    <Ionicons 
+                      name={userPackage.package.is_unlimited ? "infinite" : "flash"} 
+                      size={20} 
+                      color={COLORS.primary} 
+                    />
+                  </View>
+                  <View style={styles.activePackageInfo}>
+                    <Text style={styles.activePackageName}>{userPackage.package.name}</Text>
+                    <Text style={styles.activePackageCredits}>
+                      {userPackage.package.is_unlimited ? '∞' : userPackage.credits_remaining} of {userPackage.package.is_unlimited ? '∞' : userPackage.package.credits} credits
+                    </Text>
+                  </View>
+                  {userPackage.is_primary && (
+                    <View style={styles.primaryBadge}>
+                      <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                    </View>
+                  )}
+                </View>
+                
+                {!userPackage.package.is_unlimited && (
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBar}>
+                      <View 
+                        style={[
+                          styles.progressFill,
+                          { width: `${(userPackage.credits_remaining / userPackage.package.credits) * 100}%` }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {Math.round((userPackage.credits_remaining / userPackage.package.credits) * 100)}% remaining
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={styles.activePackageFooter}>
+                  <Text style={styles.expiryText}>
+                    {userPackage.days_until_expiry > 0 
+                      ? `Expires in ${userPackage.days_until_expiry} days`
+                      : 'Expired'}
+                  </Text>
+                  <Text style={styles.purchaseDate}>
+                    Purchased {new Date(userPackage.purchase_date).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
       </View>
-    );
-  };
+    </ScrollView>
+  );
+
+  // Browse packages view (student)
+  const renderBrowseView = () => (
+    <ScrollView
+      style={styles.scrollView}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Available Packages</Text>
+        <Text style={styles.sectionSubtitle}>
+          Choose the perfect package for your fitness journey
+        </Text>
+        
+        <FlatList
+          data={availablePackages}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => (
+            <EnhancedPackageCard
+              package={item}
+              onQuickPurchase={() => handlePurchase(item)}
+              style={styles.packageCard}
+            />
+          )}
+          scrollEnabled={false}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+    </ScrollView>
+  );
+
+  // Admin view
+  const renderAdminView = () => (
+    <ScrollView
+      style={styles.scrollView}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.adminSection}>
+        <View style={styles.adminActions}>
+          <Button
+            title="Add New Package"
+            onPress={() => {
+              setSelectedPackage(null);
+              setShowEditModal(true);
+            }}
+            style={styles.addButton}
+          />
+        </View>
+
+        <FlatList
+          data={availablePackages}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => (
+            <EnhancedPackageCard
+              package={item}
+              style={styles.adminPackageCard}
+            />
+          )}
+          scrollEnabled={false}
+        />
+      </View>
+    </ScrollView>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Admin Toggle */}
-        {isAdmin && (
-          <View style={styles.adminHeader}>
-            <Text style={styles.adminTitle}>Package Management</Text>
-            <TouchableOpacity
-              style={[styles.adminToggle, isAdminMode && styles.adminToggleActive]}
-              onPress={() => setIsAdminMode(!isAdminMode)}
-            >
-              <Text style={[styles.adminToggleText, isAdminMode && styles.adminToggleTextActive]}>
-                {isAdminMode ? 'Admin View' : 'Student View'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+      {renderHeader()}
+      
+      {isAdminMode ? (
+        renderAdminView()
+      ) : (
+        currentView === 'active' ? renderActiveView() : renderBrowseView()
+      )}
+      
+      {/* Purchase Modal */}
+      {packageToPurchase && !showPurchaseModal && (
+        <QuickPurchaseModal
+          visible={!!packageToPurchase}
+          package={packageToPurchase}
+          onClose={() => setPackageToPurchase(null)}
+          onPurchase={() => {
+            setPackageToPurchase(null);
+            queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+            setCurrentView('active'); // Switch to active view after purchase
+          }}
+        />
+      )}
 
-        {!isAdminMode && (
-          <>
-            {/* Current Balance Card */}
-            {renderCurrentBalance()}
-
-            {/* Pending Packages */}
-            {renderPendingPackages()}
-
-            {/* Available Packages */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Available Packages</Text>
-              <FlatList
-                data={availablePackages}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                  <PackageCard
-                    package={item}
-                    onPress={() => handlePurchasePackage(item)}
-                    onPurchase={() => handlePurchasePackage(item)}
-                    style={styles.packageCardHorizontal}
-                  />
-                )}
-                contentContainerStyle={styles.horizontalList}
-              />
-            </View>
-
-            {/* Package History */}
-            {renderPackageHistory()}
-          </>
-        )}
-
-        {/* Admin View */}
-        {isAdminMode && (
-          <View style={styles.adminSection}>
-            <View style={styles.adminActions}>
-              <Button
-                title="Add New Package"
-                onPress={() => {
-                  setSelectedPackage(null);
-                  setShowEditModal(true);
-                }}
-                style={styles.addButton}
-              />
-            </View>
-
-            <FlatList
-              data={availablePackages}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <PackageCard
-                  package={item}
-                  isAdminMode
-                  onEdit={() => handleEditPackage(item)}
-                  onDelete={() => handleDeletePackage(item)}
-                  onToggle={() => handleTogglePackage(item)}
-                  style={styles.adminPackageCard}
-                />
-              )}
-              scrollEnabled={false}
-            />
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Modals */}
+      {/* Admin Modals */}
       {showEditModal && (
         <PackageEditModal
           visible={showEditModal}
@@ -404,18 +529,55 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollView: {
+  header: {
+    backgroundColor: COLORS.card,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 4,
+  },
+  toggleButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 8,
+    gap: SPACING.xs,
+  },
+  toggleButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  toggleButtonTextActive: {
+    color: COLORS.background,
   },
   adminHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   adminTitle: {
     fontSize: 18,
@@ -440,75 +602,96 @@ const styles = StyleSheet.create({
   adminToggleTextActive: {
     color: COLORS.background,
   },
-  balanceCard: {
+  scrollView: {
+    flex: 1,
+  },
+  creditsCard: {
     backgroundColor: COLORS.card,
     margin: SPACING.lg,
     padding: SPACING.lg,
     borderRadius: 16,
-    elevation: 3,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  balanceHeader: {
+  lowCreditsCard: {
+    borderWidth: 2,
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warning + '05',
+  },
+  creditsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.md,
   },
-  balanceTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginLeft: SPACING.sm,
-  },
-  balanceContent: {
+  creditsIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary + '20',
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  creditsContent: {
+    flex: 1,
   },
   creditsNumber: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: 'bold',
     color: COLORS.primary,
   },
   creditsLabel: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-  },
-  balanceFooter: {
-    gap: SPACING.sm,
-  },
-  expiryText: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    marginTop: 2,
   },
-  progressBarContainer: {
-    height: 6,
-    backgroundColor: COLORS.border,
-    borderRadius: 3,
-    overflow: 'hidden',
+  refreshButton: {
+    padding: SPACING.sm,
   },
-  progressBar: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+  primaryInfo: {
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: 8,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
   },
-  balanceSubtitle: {
+  primaryLabel: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  primaryName: {
     fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  primaryExpiry: {
+    fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACING.sm,
+    marginTop: 2,
+  },
+  lowCreditsAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.warning + '20',
+    borderRadius: 8,
+    padding: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  lowCreditsText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.warning,
+    fontWeight: '500',
   },
   section: {
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.md,
+    paddingBottom: SPACING.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -516,40 +699,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.md,
   },
-  horizontalList: {
-    paddingLeft: SPACING.lg,
-  },
-  packageCardHorizontal: {
-    marginRight: SPACING.md,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    padding: SPACING.md,
-    borderRadius: 8,
-    marginBottom: SPACING.sm,
-  },
-  historyContent: {
-    flex: 1,
-  },
-  historyName: {
-    fontSize: 16,
-    fontWeight: '600',
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: COLORS.text,
   },
-  historyDate: {
+  sectionSubtitle: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginBottom: SPACING.lg,
   },
-  historyStatus: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  historyStatusContainer: {
-    alignItems: 'flex-end',
+  historyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '15',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
     gap: SPACING.xs,
+  },
+  historyButtonText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
   viewAllButton: {
     flexDirection: 'row',
@@ -560,6 +732,123 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xl * 2,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.md,
+  },
+  emptySubtext: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  browseButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: 12,
+  },
+  browseButtonText: {
+    color: COLORS.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  packageGrid: {
+    gap: SPACING.md,
+  },
+  activePackageCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  activePackageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  activePackageIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  activePackageInfo: {
+    flex: 1,
+  },
+  activePackageName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  activePackageCredits: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  primaryBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+  },
+  primaryBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.background,
+    letterSpacing: 0.5,
+  },
+  progressContainer: {
+    marginBottom: SPACING.md,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: COLORS.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: SPACING.xs,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+  },
+  progressText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'right',
+  },
+  activePackageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  expiryText: {
+    fontSize: 14,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  purchaseDate: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  packageCard: {
+    marginBottom: SPACING.md,
   },
   adminSection: {
     padding: SPACING.lg,
@@ -573,29 +862,14 @@ const styles = StyleSheet.create({
   adminPackageCard: {
     marginBottom: SPACING.md,
   },
-  primaryPackageText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  multiplePackagesText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACING.xs,
-  },
-  viewAllButton: {
-    padding: SPACING.sm,
+  loadingState: {
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    marginTop: SPACING.sm,
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
   },
-  viewAllText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: '500',
+  loadingText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
   },
 });
 

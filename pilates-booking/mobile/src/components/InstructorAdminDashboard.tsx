@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING } from '../utils/config';
+import { COLORS, SPACING, API_ENDPOINTS } from '../utils/config';
 import { apiClient } from '../api/client';
 import { useUserRole } from '../hooks/useUserRole';
 import ProgressRing from './ProgressRing';
@@ -59,7 +59,7 @@ const InstructorAdminDashboard: React.FC<InstructorAdminDashboardProps> = ({ use
   const { data: announcements } = useQuery<Announcement[]>({
     queryKey: ['user-announcements'],
     queryFn: async () => {
-      const response = await apiClient.get('/api/v1/users/me/announcements');
+      const response = await apiClient.get(API_ENDPOINTS.USERS.ANNOUNCEMENTS);
       return response.data;
     },
     staleTime: 2 * 60 * 1000,
@@ -68,7 +68,7 @@ const InstructorAdminDashboard: React.FC<InstructorAdminDashboardProps> = ({ use
   const { data: extendedStats } = useQuery({
     queryKey: ['user-extended-stats'],
     queryFn: async () => {
-      const response = await apiClient.get('/users/me/stats/extended');
+      const response = await apiClient.get(API_ENDPOINTS.USERS.STATS_EXTENDED);
       return response.data;
     },
     staleTime: 5 * 60 * 1000,
