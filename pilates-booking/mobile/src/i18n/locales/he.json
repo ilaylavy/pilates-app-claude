@@ -31,7 +31,12 @@
     "description": "תיאור",
     "notes": "הערות",
     "send": "שלח",
-    "deletePackage": "מחיקת חבילה"
+    "deletePackage": "מחיקת חבילה",
+    "pullToRefresh": "משוך לרענון",
+    "unknown": "לא ידוע",
+    "today": "היום",
+    "yesterday": "אתמול", 
+    "tomorrow": "מחר"
   },
   "auth": {
     "login": "התחברות",
@@ -100,6 +105,9 @@
     "available": "זמין",
     "full": "מלא",
     "cancelled": "מבוטל",
+    "passed": "עבר",
+    "participated": "השתתף",
+    "ongoing": "מתקיים עכשיו",
     "all_levels": "כל הרמות",
     "spots": {
       "one": "מקום {{count}}",
@@ -507,12 +515,111 @@
     "contactSupport": "אנא פנה לתמיכה אם הבעיה נמשכת"
   },
   "notifications": {
+    "title": "התראות",
+    "noNotifications": "אין התראות עדיין",
+    "noNotificationsDescription": "כאן תראה עדכונים על ההזמנות, החבילות ועוד",
+    "markAllRead": "סמן הכל כנקרא",
+    "clearAll": "נקה הכל",
+    "clearAllTitle": "נקה את כל ההתראות",
+    "clearAllMessage": "האם אתה בטוח שברצונך לנקות את כל ההתראות? פעולה זו לא ניתנת לביטול.",
+    "loadError": "טעינת ההתראות נכשלה",
+    "markAllReadError": "סימון כל ההתראות כנקראו נכשל",
+    "loadMore": "טען עוד",
+    "synced": "מסונכרן",
+    "syncing": "מסנכרן...",
+    "offline": "לא מקוון",
+    "error": "שגיאה",
+    "expires": "פג תוקף",
+    "critical": "קריטי",
+    
+    "dateGroups": {
+      "today": "היום",
+      "yesterday": "אתמול",
+      "thisweek": "השבוע", 
+      "earlier": "מוקדם יותר"
+    },
+    
+    "categories": {
+      "booking": "הזמנות",
+      "payment": "תשלומים", 
+      "package": "חבילות",
+      "system": "מערכת",
+      "announcement": "הודעות"
+    },
+    
+    "channels": {
+      "email": "אימייל",
+      "push": "התראות דחיפה",
+      "inApp": "באפליקציה"
+    },
+    
+    "types": {
+      "bookingSuccess": "אישורי הזמנה",
+      "bookingSuccessDesc": "כאשר הזמנת השיעור מאושרת",
+      "bookingCancelled": "ביטולי הזמנה", 
+      "bookingCancelledDesc": "כאשר הזמנת השיעור מבוטלת",
+      "waitlistPromoted": "עליה מרשימת המתנה",
+      "waitlistPromotedDesc": "כאשר אתה עולה מרשימת המתנה",
+      "classReminder": "תזכורות שיעור",
+      "classReminderDesc": "תזכורות לפני השיעורים המתוכננים שלך",
+      "paymentProcessed": "תשלום הצליח",
+      "paymentProcessedDesc": "כאשר התשלום מעובד בהצלחה",
+      "paymentFailed": "תשלום נכשל", 
+      "paymentFailedDesc": "כאשר התשלום נכשל או נדחה",
+      "packageActivated": "הפעלת חבילה",
+      "packageActivatedDesc": "כאשר החבילה שלך מופעלת ומוכנה לשימוש",
+      "accountVerified": "אימות חשבון",
+      "accountVerifiedDesc": "כאשר החשבון שלך מאומת",
+      "passwordReset": "איפוס סיסמה",
+      "passwordResetDesc": "כאשר אתה מבקש איפוס סיסמה",
+      "systemMaintenance": "תחזוקת מערכת",
+      "systemMaintenanceDesc": "עדכונים חשובים ומסרי תחזוקת מערכת",
+      "adminAnnouncement": "הודעות מהמנהל",
+      "adminAnnouncementDesc": "הודעות חשובות מהסטודיו",
+      "urgentAnnouncement": "הודעות דחופות", 
+      "urgentAnnouncementDesc": "הודעות קריטיות הדורשות תשומת לב מיידית",
+      "generalAnnouncement": "הודעות כלליות",
+      "generalAnnouncementDesc": "עדכונים ומידע כללי מהסטודיו"
+    },
+    
+    "preferences": {
+      "title": "העדפות התראות",
+      "subtitle": "בחר אילו התראות תרצה לקבל וכיצד תרצה לקבל אותן",
+      "loading": "טוען העדפות...",
+      "loadError": "טעינת ההעדפות נכשלה",
+      "loadErrorDesc": "לא הצלחנו לטעון את העדפות ההתראות שלך. אנא נסה שוב.",
+      "updateError": "עדכון ההעדפה נכשל",
+      "footerText": "אתה יכול לשנות את ההעדפות האלה בכל עת. התראות קריטיות של המערכת עדיין יישלחו ללא קשר להעדפות שלך."
+    },
+    
     "classReminder": "תזכורת לשיעור",
-    "bookingConfirmed": "ההזמנה אושרה",
+    "bookingConfirmed": "ההזמנה אושרה", 
     "waitlistPromotion": "עלית מרשימת ההמתנה!",
     "classCancelled": "השיעור בוטל",
     "packageExpiring": "החבילה תפוג בקרוב",
-    "friendRequest": "בקשת חברות חדשה"
+    "friendRequest": "בקשת חברות חדשה",
+    
+    "messages": {
+      "bookingConfirmed": "ההזמנה אושרה!",
+      "bookingConfirmedBody": "ההזמנה שלך ל{{className}} אושרה.",
+      "bookingCancelled": "ההזמנה בוטלה",
+      "bookingCancelledBody": "ההזמנה שלך ל{{className}} בוטלה. הקרדיט הוחזר.",
+      "paymentSuccess": "התשלום הושלם בהצלחה", 
+      "paymentSuccessBody": "התשלום שלך עובד בהצלחה.",
+      "paymentFailed": "התשלום נכשל",
+      "paymentFailedBody": "לא הצלחנו לעבד את התשלום שלך. אנא נסה שוב.",
+      "packageActivated": "החבילה הופעלה",
+      "packageActivatedBody": "החבילה שלך פעילה ומוכנה לשימוש.",
+      "waitlistPromoted": "נכנסת!",
+      "waitlistPromotedBody": "חדשות טובות! התפנה מקום וההזמנה שלך אושרה.",
+      "classReminder": "תזכורת לשיעור",
+      "classReminderBody": "אל תשכח! השיעור שלך מתחיל בקרוב.",
+      "adminAnnouncement": "עדכון מהסטודיו",
+      "generalAnnouncement": "הודעה", 
+      "urgentAnnouncement": "עדכון חשוב",
+      "systemMaintenance": "תחזוקת המערכת",
+      "accountVerified": "החשבון אומת"
+    }
   },
   "accessibility": {
     "tapToBook": "הקש כדי להזמין שיעור זה",
@@ -826,7 +933,9 @@
     "searchPlaceholder": "חפש שיעורים או מדריכים...",
     "loadingBookings": "טוען את ההזמנות שלך...",
     "loadingClasses": "טוען שיעורים...",
-    "errorLoading": "נכשל בטעינת שיעורים"
+    "errorLoading": "שגיאה בטעינת שיעורים",
+    "showPast": "הצג עבר",
+    "hidePast": "הסתר עבר"
   },
   "booking": {
     "successTitle": "שיעור הוזמן בהצלחה!",
@@ -910,6 +1019,13 @@
     "emailNotificationsSubtitle": "קבל התראות באימייל",
     "smsNotifications": "התראות SMS",
     "smsNotificationsSubtitle": "קבל התראות בהודעות טקסט",
+    "pushNotifications": "התראות דחיפה",
+    "pushNotificationsSubtitle": "קבל התראות מיידיות במכשיר שלך",
+    "pushEnabled": "התראות דחיפה מופעלות",
+    "pushDisabled": "התראות דחיפה מושבתות",
+    "enable": "הפעל",
+    "disable": "השבת",
+    "disablePushMessage": "זה יעצור את כל התראות הדחיפה. תוכל להפעיל אותן שוב בכל עת בהגדרות.",
     "bookingReminders": "תזכורות הזמנות",
     "bookingRemindersSubtitle": "קבל תזכורות על שיעורים קרובים",
     "classUpdates": "עדכוני שיעורים",

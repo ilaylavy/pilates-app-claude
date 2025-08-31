@@ -189,18 +189,40 @@ const BookingsScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const renderBookingItem = ({ item }: { item: Booking }) => (
-    <ClassCard
-      classInstance={item.class_instance}
-      booking={item}
-      variant="list"
-      onPress={() => handleBookingPress(item)}
-      onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
-      isBooked={item.status === 'confirmed'}
-      availableSpots={item.class_instance.available_spots}
-      showActions={true}
-    />
-  );
+    // Utility function to determine class timing status
+  const getClassTimingStatus = (classInstance: any) => {
+    const now = new Date();
+    const startTime = new Date(classInstance.start_datetime);
+    const endTime = new Date(classInstance.end_datetime);
+    
+    if (now < startTime) {
+      return 'future';
+    } else if (now >= startTime && now <= endTime) {
+      return 'ongoing';
+    } else {
+      return 'past';
+    }
+  };
+
+  const renderBookingItem = ({ item }: { item: Booking }) => {
+    const timingStatus = getClassTimingStatus(item.class_instance);
+    const userParticipated = item.status === 'completed' || item.status === 'confirmed';
+    
+    return (
+      <ClassCard
+        classInstance={item.class_instance}
+        booking={item}
+        variant="list"
+        onPress={() => handleBookingPress(item)}
+        onCancel={item.status === 'confirmed' && timingStatus === 'future' ? () => handleCancelBooking(item.id) : undefined}
+        isBooked={item.status === 'confirmed'}
+        availableSpots={item.class_instance.available_spots}
+        showActions={true}
+        classTimingStatus={timingStatus}
+        didUserParticipate={userParticipated}
+      />
+    );
+  };
 
   const FilterModal = () => (
     <Modal
@@ -348,6 +370,7 @@ const BookingsScreen: React.FC = () => {
           setDetailsModalVisible(false);
           setSelectedClass(null);
         }}
+        showAdminActions={false}
       />
     </SafeAreaView>
   );

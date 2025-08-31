@@ -1,0 +1,86 @@
+{% extends "base_en.html" %}
+
+{% block content %}
+<div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400E;">
+        <strong>📅 Cancellation Confirmed</strong><br>
+        Your class booking has been successfully cancelled.
+    </p>
+</div>
+
+<div class="info-box">
+    <h3>📋 Cancelled Booking Details</h3>
+    
+    {% if notification.data.class_name %}
+    <div class="info-row">
+        <span class="info-label">Class:</span>
+        <span class="info-value">{{ notification.data.class_name }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.class_date %}
+    <div class="info-row">
+        <span class="info-label">Date:</span>
+        <span class="info-value">{{ notification.data.class_date }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.class_time %}
+    <div class="info-row">
+        <span class="info-label">Time:</span>
+        <span class="info-value">{{ notification.data.class_time }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.booking_id %}
+    <div class="info-row">
+        <span class="info-label">Booking ID:</span>
+        <span class="info-value">#{{ notification.data.booking_id }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.cancelled_at %}
+    <div class="info-row">
+        <span class="info-label">Cancelled At:</span>
+        <span class="info-value">{{ notification.data.cancelled_at }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if notification.data.credit_refunded %}
+<div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #065F46;">
+        <strong>💰 Credit Refunded</strong><br>
+        {% if notification.data.refund_amount %}
+        {{ notification.data.refund_amount }} credit has been refunded to your account.
+        {% else %}
+        1 class credit has been refunded to your account.
+        {% endif %}
+        You can use this credit to book another class.
+    </p>
+</div>
+{% else %}
+<div style="background-color: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991B1B;">
+        <strong>⚠️ No Refund</strong><br>
+        This cancellation was made within the 24-hour window, so no credit refund is available.
+        Please review our cancellation policy for future bookings.
+    </p>
+</div>
+{% endif %}
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ notification.data.book_new_class_url or '#' }}" class="button">
+        Book Another Class
+    </a>
+    <a href="{{ notification.data.view_schedule_url or '#' }}" class="button button-secondary">
+        View Schedule
+    </a>
+</div>
+
+<p style="font-size: 14px; color: #6B7280; margin-top: 20px;">
+    <strong>Questions about cancellation policy?</strong> Contact our support team for more information.
+    We understand that life happens and we're here to help!
+</p>
+
+{% endblock %}

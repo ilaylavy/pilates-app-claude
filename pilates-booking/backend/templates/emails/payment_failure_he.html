@@ -1,0 +1,67 @@
+{% extends "base_he.html" %}
+
+{% block content %}
+<div style="background-color: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991B1B;">
+        <strong>💳 התגלתה בעיה בתשלום</strong><br>
+        היתה בעיה בעיבוד התשלום שלך. נדרש טיפול.
+    </p>
+</div>
+
+<div class="info-box">
+    <h3>📋 פרטי התשלום</h3>
+    
+    {% if notification.data.amount %}
+    <div class="info-row">
+        <span class="info-label">סכום:</span>
+        <span class="info-value">₪{{ notification.data.amount }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.card_last4 %}
+    <div class="info-row">
+        <span class="info-label">כרטיס מסתיים ב:</span>
+        <span class="info-value">****{{ notification.data.card_last4 }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.failure_reason %}
+    <div class="info-row">
+        <span class="info-label">סיבה:</span>
+        <span class="info-value">{{ notification.data.failure_reason }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.attempt_date %}
+    <div class="info-row">
+        <span class="info-label">תאריך הניסיון:</span>
+        <span class="info-value">{{ notification.data.attempt_date }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ notification.data.retry_payment_url or '#' }}" class="button">
+        🔄 נסי שוב
+    </a>
+    <a href="{{ notification.data.update_card_url or '#' }}" class="button button-secondary">
+        עדכני אמצעי תשלום
+    </a>
+</div>
+
+<div style="background-color: #FFFBEB; border: 1px solid #FED7AA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400E;">
+        <strong>💡 פתרונות נפוצים:</strong><br>
+        • בדקי שפרטי הכרטיס שלך נכונים<br>
+        • ודאי שיש מספיק כסף בחשבון<br>
+        • נסי אמצעי תשלום אחר<br>
+        • צרי קשר עם הבנק אם הבעיה נמשכת
+    </p>
+</div>
+
+<p style="font-size: 14px; color: #6B7280; margin-top: 20px;">
+    <strong>צריכה עזרה?</strong> צוות התמיכה שלנו כאן לעזור לך עם בעיות תשלום.
+    צרי אלינו קשר ואנחנו נפתור את זה במהירות כדי שתוכלי לחזור למסע הכושר שלך.
+</p>
+
+{% endblock %}

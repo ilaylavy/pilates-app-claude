@@ -30,6 +30,7 @@ interface ClassDetailsModalProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onBookingSuccess?: (booking: any, classInstance: ClassInstance) => void;
+  showAdminActions?: boolean;
 }
 
 const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
@@ -39,6 +40,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   onEdit,
   onDelete,
   onBookingSuccess,
+  showAdminActions = true,
 }) => {
   const [showParticipants, setShowParticipants] = useState(false);
   const { isAdmin, isInstructor, isStudent } = useUserRole();
@@ -88,6 +90,34 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
   // Check if user has available credits
   const activePackage = userPackages.find(pkg => pkg.is_valid);
   const hasAvailableCredits = !!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited);
+
+  // Utility function to determine class timing status
+  const getClassTimingStatus = () => {
+    if (!classInstance) return 'future';
+    const now = new Date();
+    const startTime = new Date(classInstance.start_datetime);
+    const endTime = new Date(classInstance.end_datetime);
+    
+    if (now < startTime) {
+      return 'future';
+    } else if (now >= startTime && now <= endTime) {
+      return 'ongoing';
+    } else {
+      return 'past';
+    }
+  };
+
+  // Check if user participated in this class
+  const didUserParticipate = () => {
+    if (!classInstance) return false;
+    return userBookings.some(booking => 
+      booking.class_instance_id === classInstance.id && 
+      (booking.status === 'completed' || booking.status === 'confirmed')
+    );
+  };
+
+  const timingStatus = getClassTimingStatus();
+  const userParticipated = didUserParticipate();
 
   // Cancel booking mutation with immediate updates
   const cancelBookingMutation = useMutation({
@@ -466,7 +496,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('sections.classDetails')}</Text>
           <View style={styles.headerActions}>
-            {isAdmin && (
+            {isAdmin && showAdminActions && (
               <>
                 {onEdit && (
                   <TouchableOpacity onPress={onEdit} style={styles.headerAction}>
@@ -621,8 +651,31 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           {/* Student Actions */}
           {isStudent && classInstance.status === 'scheduled' && (
             <>
-              {userBooking ? (
-                // Show cancel option if user has a booking
+              {timingStatus === 'past' ? (
+                // Show past status for completed classes
+                <View style={[styles.actionButton, styles.statusButton]}>
+                  <Ionicons 
+                    name={userParticipated ? "checkmark-circle" : "time"} 
+                    size={20} 
+                    color={userParticipated ? COLORS.success : COLORS.textSecondary} 
+                  />
+                  <Text style={[
+                    styles.statusButtonText, 
+                    { color: userParticipated ? COLORS.success : COLORS.textSecondary }
+                  ]}>
+                    {userParticipated ? t('classes.participated') : t('classes.passed')}
+                  </Text>
+                </View>
+              ) : timingStatus === 'ongoing' ? (
+                // Show ongoing status
+                <View style={[styles.actionButton, styles.statusButton]}>
+                  <Ionicons name="radio-button-on" size={20} color={COLORS.primary} />
+                  <Text style={[styles.statusButtonText, { color: COLORS.primary }]}>
+                    {t('classes.ongoing')}
+                  </Text>
+                </View>
+              ) : userBooking ? (
+                // Show cancel option if user has a booking (future classes)
                 <TouchableOpacity
                   style={[styles.actionButton, styles.dangerButton]}
                   onPress={handleCancelBooking}
@@ -643,7 +696,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                   </Text>
                 </TouchableOpacity>
               ) : userWaitlistEntry ? (
-                // Show leave waitlist option if user is waitlisted
+                // Show leave waitlist option if user is waitlisted (future classes)
                 <TouchableOpacity
                   style={[styles.actionButton, styles.dangerButton]}
                   onPress={handleCancelWaitlist}
@@ -662,7 +715,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
                   </Text>
                 </TouchableOpacity>
               ) : (
-                // Show book/waitlist option if user doesn't have a booking
+                // Show book/waitlist option if user doesn't have a booking (future classes only)
                 <TouchableOpacity
                   style={[
                     styles.actionButton, 
@@ -692,7 +745,7 @@ const ClassDetailsModal: React.FC<ClassDetailsModalProps> = ({
           )}
 
           {/* Admin Actions */}
-          {isAdmin && (
+          {isAdmin && showAdminActions && (
             <View style={styles.adminActionsRow}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.secondaryButton, { flex: 1, marginRight: SPACING.sm }]}
@@ -977,6 +1030,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
+  },
+  statusButton: {
+    backgroundColor: COLORS.background,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  statusButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   friendsText: {
     fontSize: 14,

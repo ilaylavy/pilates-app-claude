@@ -33,7 +33,7 @@ interface ScheduleFilter {
 
 const ScheduleTab: React.FC = () => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
-  const { t, rtlText, rtlRow } = useTranslation();
+  const { t, rtlText, rtlRow, isRTL } = useTranslation();
   
   // If user is a student, show the student-specific schedule
   if (isStudent && !isAdmin && !isInstructor) {
@@ -72,7 +72,7 @@ const ScheduleTab: React.FC = () => {
     refetch
   } = useQuery({
     queryKey: ['classes', 'week', weekStart.toISOString().split('T')[0]],
-    queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0]),
+    queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0], true),
   });
 
   // Fetch instructors for filtering
@@ -237,7 +237,7 @@ const ScheduleTab: React.FC = () => {
   const renderWeekHeader = () => (
     <View style={[styles.weekHeader, rtlRow()]}>
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('prev')}>
-        <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-forward-outline" : "chevron-back-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
       
       <View style={styles.weekInfo}>
@@ -246,7 +246,7 @@ const ScheduleTab: React.FC = () => {
       </View>
       
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('next')}>
-        <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-back-outline" : "chevron-forward-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
     </View>
   );
@@ -258,12 +258,12 @@ const ScheduleTab: React.FC = () => {
         newDate.setMonth(newDate.getMonth() - 1);
         setCurrentMonth(newDate);
       }}>
-        <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-forward-outline" : "chevron-back-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
       
       <View style={styles.weekInfo}>
         <Text style={styles.weekRange}>
-          {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          {currentMonth.toLocaleDateString(isRTL ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' })}
         </Text>
       </View>
       
@@ -272,7 +272,7 @@ const ScheduleTab: React.FC = () => {
         newDate.setMonth(newDate.getMonth() + 1);
         setCurrentMonth(newDate);
       }}>
-        <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-back-outline" : "chevron-forward-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
     </View>
   );

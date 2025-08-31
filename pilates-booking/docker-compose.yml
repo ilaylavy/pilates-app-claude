@@ -70,6 +70,8 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      # Mount Firebase service account key (create this file from Firebase Console)
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro
     # Security: run as non-root user  
     user: "1000:1000"
     # Resource limits

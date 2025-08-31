@@ -1,0 +1,42 @@
+{% extends "base_he.html" %}
+
+{% block content %}
+<!-- תבנית התראה כללית - מציגה נתוני התראה כזוגות מפתח-ערך -->
+
+{% if notification.data and notification.data|length > 0 %}
+<div class="info-box">
+    <h3>📋 מידע נוסף</h3>
+    
+    {% for key, value in notification.data.items() %}
+    {% if value and key not in ['notification_id', 'created_at'] %}
+    <div class="info-row">
+        <span class="info-label">{{ key|title|replace('_', ' ') }}:</span>
+        <span class="info-value">
+            {% if value is string and (value.startswith('http://') or value.startswith('https://')) %}
+                <a href="{{ value }}" style="color: #6366F1;">{{ value }}</a>
+            {% else %}
+                {{ value }}
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ notification.data.action_url or '#' }}" class="button">
+        {% if notification.data.action_text %}
+            {{ notification.data.action_text }}
+        {% else %}
+            פתחי את האפליקציה
+        {% endif %}
+    </a>
+</div>
+
+<p style="font-size: 14px; color: #6B7280; margin-top: 20px;">
+    ההתראה הזאת נשלחה דרך המערכת האוטומטית שלנו. אם יש לך שאלות,
+    אל תהססי לפנות לצוות התמיכה שלנו.
+</p>
+
+{% endblock %}

@@ -25,6 +25,8 @@ interface ClassCardProps {
   availableSpots?: number;
   hasAvailableCredits?: boolean;
   isBookingInProgress?: boolean;
+  classTimingStatus?: 'future' | 'ongoing' | 'past';
+  didUserParticipate?: boolean;
 }
 
 const ClassCard: React.FC<ClassCardProps> = ({
@@ -40,6 +42,8 @@ const ClassCard: React.FC<ClassCardProps> = ({
   availableSpots,
   hasAvailableCredits = true,
   isBookingInProgress = false,
+  classTimingStatus = 'future',
+  didUserParticipate = false,
 }) => {
   const { isAdmin, isInstructor, isStudent } = useUserRole();
   const { t, formatTime: formatTimeI18n, formatDate: formatDateI18n, rtlText, rtlRow, rtlAlign } = useTranslation();
@@ -109,20 +113,41 @@ const ClassCard: React.FC<ClassCardProps> = ({
           {/* Student booking actions positioned like capacity */}
           {(isStudent || isAdmin) && showActions && classInstance.status === 'scheduled' && (
             <View style={styles.listStudentActions}>
-              {isBooked ? (
-                // Show booked status when booked
+              {classTimingStatus === 'past' ? (
+                // Show past status for completed classes
+                <View style={styles.bookedBadge}>
+                  <Ionicons 
+                    name={didUserParticipate ? "checkmark-circle" : "time"} 
+                    size={20} 
+                    color={didUserParticipate ? COLORS.success : COLORS.textSecondary} 
+                  />
+                  <Text style={[
+                    styles.bookedText, 
+                    { color: didUserParticipate ? COLORS.success : COLORS.textSecondary }
+                  ]}>
+                    {didUserParticipate ? t('classes.participated') : t('classes.passed')}
+                  </Text>
+                </View>
+              ) : classTimingStatus === 'ongoing' ? (
+                // Show ongoing status
+                <View style={styles.bookedBadge}>
+                  <Ionicons name="radio-button-on" size={20} color={COLORS.primary} />
+                  <Text style={[styles.bookedText, { color: COLORS.primary }]}>{t('classes.ongoing')}</Text>
+                </View>
+              ) : isBooked ? (
+                // Show booked status when booked (future classes)
                 <View style={styles.bookedBadge}>
                   <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
                   <Text style={styles.bookedText}>{t('classes.bookingConfirmed')}</Text>
                 </View>
               ) : isWaitlisted ? (
-                // Show waitlisted status when waitlisted
+                // Show waitlisted status when waitlisted (future classes)
                 <View style={styles.bookedBadge}>
                   <Ionicons name="hourglass" size={20} color={COLORS.warning} />
                   <Text style={[styles.bookedText, { color: COLORS.warning }]}>{t('classes.addedToWaitlist')}</Text>
                 </View>
               ) : (
-                // Show book/waitlist button when not booked
+                // Show book/waitlist button when not booked (future classes only)
                 <>
                   {classInstance.is_full ? (
                     onJoinWaitlist && (

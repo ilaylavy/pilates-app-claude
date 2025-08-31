@@ -1,0 +1,67 @@
+{% extends "base_en.html" %}
+
+{% block content %}
+<div style="background-color: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991B1B;">
+        <strong>💳 Payment Issue Detected</strong><br>
+        There was a problem processing your payment. Action required.
+    </p>
+</div>
+
+<div class="info-box">
+    <h3>📋 Payment Details</h3>
+    
+    {% if notification.data.amount %}
+    <div class="info-row">
+        <span class="info-label">Amount:</span>
+        <span class="info-value">${{ notification.data.amount }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.card_last4 %}
+    <div class="info-row">
+        <span class="info-label">Card Ending:</span>
+        <span class="info-value">****{{ notification.data.card_last4 }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.failure_reason %}
+    <div class="info-row">
+        <span class="info-label">Reason:</span>
+        <span class="info-value">{{ notification.data.failure_reason }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.attempt_date %}
+    <div class="info-row">
+        <span class="info-label">Attempt Date:</span>
+        <span class="info-value">{{ notification.data.attempt_date }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ notification.data.retry_payment_url or '#' }}" class="button">
+        🔄 Retry Payment
+    </a>
+    <a href="{{ notification.data.update_card_url or '#' }}" class="button button-secondary">
+        Update Payment Method
+    </a>
+</div>
+
+<div style="background-color: #FFFBEB; border: 1px solid #FED7AA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400E;">
+        <strong>💡 Common Solutions:</strong><br>
+        • Check that your card details are correct<br>
+        • Ensure sufficient funds are available<br>
+        • Try a different payment method<br>
+        • Contact your bank if the issue persists
+    </p>
+</div>
+
+<p style="font-size: 14px; color: #6B7280; margin-top: 20px;">
+    <strong>Need Help?</strong> Our support team is here to assist you with payment issues. 
+    Contact us and we'll resolve this quickly so you can get back to your fitness journey.
+</p>
+
+{% endblock %}

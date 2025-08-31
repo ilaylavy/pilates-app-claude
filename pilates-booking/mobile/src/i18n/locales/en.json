@@ -31,7 +31,12 @@
     "description": "Description",
     "deletePackage": "Delete Package",
     "notes": "Notes",
-    "send": "Send"
+    "send": "Send",
+    "pullToRefresh": "Pull to refresh",
+    "unknown": "Unknown",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow"
   },
   "auth": {
     "login": "Login",
@@ -100,6 +105,9 @@
     "available": "Available",
     "full": "Full",
     "cancelled": "Cancelled",
+    "passed": "Passed",
+    "participated": "Participated",
+    "ongoing": "Ongoing",
     "all_levels": "All Levels",
     "spots": {
       "one": "{{count}} spot",
@@ -497,12 +505,111 @@
     "contactSupport": "Please contact support if the problem persists"
   },
   "notifications": {
+    "title": "Notifications",
+    "noNotifications": "No notifications yet",
+    "noNotificationsDescription": "You'll see updates about your bookings, packages, and more here",
+    "markAllRead": "Mark All Read",
+    "clearAll": "Clear All",
+    "clearAllTitle": "Clear All Notifications",
+    "clearAllMessage": "Are you sure you want to clear all notifications? This action cannot be undone.",
+    "loadError": "Failed to load notifications",
+    "markAllReadError": "Failed to mark all notifications as read",
+    "loadMore": "Load More",
+    "synced": "Synced",
+    "syncing": "Syncing...",
+    "offline": "Offline",
+    "error": "Error",
+    "expires": "Expires",
+    "critical": "Critical",
+    
+    "dateGroups": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisweek": "This Week", 
+      "earlier": "Earlier"
+    },
+    
+    "categories": {
+      "booking": "Booking",
+      "payment": "Payment", 
+      "package": "Package",
+      "system": "System",
+      "announcement": "Announcements"
+    },
+    
+    "channels": {
+      "email": "Email",
+      "push": "Push",
+      "inApp": "In-App"
+    },
+    
+    "types": {
+      "bookingSuccess": "Booking Confirmations",
+      "bookingSuccessDesc": "When your class booking is confirmed",
+      "bookingCancelled": "Booking Cancellations", 
+      "bookingCancelledDesc": "When your class booking is cancelled",
+      "waitlistPromoted": "Waitlist Promotions",
+      "waitlistPromotedDesc": "When you're promoted from the waitlist",
+      "classReminder": "Class Reminders",
+      "classReminderDesc": "Reminders before your scheduled classes",
+      "paymentProcessed": "Payment Success",
+      "paymentProcessedDesc": "When your payment is processed successfully",
+      "paymentFailed": "Payment Failed", 
+      "paymentFailedDesc": "When your payment fails or is declined",
+      "packageActivated": "Package Activation",
+      "packageActivatedDesc": "When your package is activated and ready to use",
+      "accountVerified": "Account Verification",
+      "accountVerifiedDesc": "When your account is verified",
+      "passwordReset": "Password Reset",
+      "passwordResetDesc": "When you request a password reset",
+      "systemMaintenance": "System Maintenance",
+      "systemMaintenanceDesc": "Important system updates and maintenance notices",
+      "adminAnnouncement": "Admin Announcements",
+      "adminAnnouncementDesc": "Important announcements from the studio",
+      "urgentAnnouncement": "Urgent Announcements", 
+      "urgentAnnouncementDesc": "Critical announcements requiring immediate attention",
+      "generalAnnouncement": "General Announcements",
+      "generalAnnouncementDesc": "General studio updates and information"
+    },
+    
+    "preferences": {
+      "title": "Notification Preferences",
+      "subtitle": "Choose which notifications you'd like to receive and how you'd like to receive them",
+      "loading": "Loading preferences...",
+      "loadError": "Failed to load preferences",
+      "loadErrorDesc": "We couldn't load your notification preferences. Please try again.",
+      "updateError": "Failed to update preference",
+      "footerText": "You can change these preferences at any time. Critical system notifications may still be sent regardless of your preferences."
+    },
+    
     "classReminder": "Class reminder",
-    "bookingConfirmed": "Booking confirmed",
+    "bookingConfirmed": "Booking confirmed", 
     "waitlistPromotion": "You've been promoted from the waitlist!",
     "classCancelled": "Class cancelled",
     "packageExpiring": "Package expiring soon",
-    "friendRequest": "New friend request"
+    "friendRequest": "New friend request",
+    
+    "messages": {
+      "bookingConfirmed": "Booking Confirmed!",
+      "bookingConfirmedBody": "Your booking for {{className}} has been confirmed.",
+      "bookingCancelled": "Booking Cancelled",
+      "bookingCancelledBody": "Your booking for {{className}} has been cancelled. Your credit has been refunded.",
+      "paymentSuccess": "Payment Successful", 
+      "paymentSuccessBody": "Your payment has been processed successfully.",
+      "paymentFailed": "Payment Failed",
+      "paymentFailedBody": "Your payment could not be processed. Please try again.",
+      "packageActivated": "Package Activated",
+      "packageActivatedBody": "Your package is now active and ready to use.",
+      "waitlistPromoted": "You're In!",
+      "waitlistPromotedBody": "Great news! A spot opened up and your booking is confirmed.",
+      "classReminder": "Class Reminder",
+      "classReminderBody": "Don't forget! Your class starts soon.",
+      "adminAnnouncement": "Studio Update",
+      "generalAnnouncement": "Announcement", 
+      "urgentAnnouncement": "Important Update",
+      "systemMaintenance": "System Maintenance",
+      "accountVerified": "Account Verified"
+    }
   },
   "accessibility": {
     "tapToBook": "Tap to book this class",
@@ -824,7 +931,9 @@
     "searchPlaceholder": "Search classes or instructors...",
     "loadingBookings": "Loading your bookings...",
     "loadingClasses": "Loading classes...",
-    "errorLoading": "Failed to load classes"
+    "errorLoading": "Failed to load classes",
+    "showPast": "Show Past",
+    "hidePast": "Hide Past"
   },
   "booking": {
     "successTitle": "Class Booked Successfully!",
@@ -908,6 +1017,13 @@
     "emailNotificationsSubtitle": "Receive notifications via email",
     "smsNotifications": "SMS Notifications", 
     "smsNotificationsSubtitle": "Receive text message notifications",
+    "pushNotifications": "Push Notifications",
+    "pushNotificationsSubtitle": "Get instant notifications on your device",
+    "pushEnabled": "Push notifications are enabled",
+    "pushDisabled": "Push notifications are disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "disablePushMessage": "This will stop all push notifications. You can re-enable them anytime in settings.",
     "bookingReminders": "Booking Reminders",
     "bookingRemindersSubtitle": "Get reminded about upcoming classes",
     "classUpdates": "Class Updates",

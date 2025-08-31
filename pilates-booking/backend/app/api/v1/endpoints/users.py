@@ -257,45 +257,127 @@ async def get_extended_user_stats(
     )
 
 
-@router.get("/me/announcements", response_model=List[Announcement])
+@router.get("/me/announcements", response_model=List[Dict[Any, Any]])
 async def get_user_announcements(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get active announcements for the current user."""
-    from datetime import datetime
-    from sqlalchemy import and_, desc, or_
-    from ....models.announcement import Announcement as AnnouncementModel
+    """
+    Get active announcements for the current user.
     
-    # Get announcements that are:
-    # 1. Active and not deleted
-    # 2. Not expired
-    # 3. Target the user's role or are for all roles
-    now = datetime.utcnow()
+    This endpoint maintains backward compatibility by serving both:
+    - Legacy announcements (during transition period)
+    - New notifications displayed as announcements
     
-    stmt = select(AnnouncementModel).where(
-        and_(
-            AnnouncementModel.is_active == True,
-            AnnouncementModel.deleted_at.is_(None),
-            # Not expired (either no expiry or expiry is in future)
-            or_(
-                AnnouncementModel.expires_at.is_(None),
-                AnnouncementModel.expires_at > now
-            )
+    The mobile app will receive the same format it expects.
+    """
+    from ....services.announcement_compatibility_service import AnnouncementCompatibilityService
+    
+    try:
+        compatibility_service = AnnouncementCompatibilityService(db)
+        announcements = await compatibility_service.get_user_announcements_legacy(
+            user=current_user,
+            include_dismissed=False
         )
-    ).order_by(desc(AnnouncementModel.created_at))
+        
+        return announcements
+        
+    except Exception as e:
+        # Fallback to original implementation if compatibility service fails
+        import logging
+        logger = logging.getLogger("announcement_compatibility")
+        logger.error(f"Compatibility service failed for user {current_user.id}, falling back: {str(e)}")
+        
+        # Original implementation as fallback
+        from datetime import datetime
+        from sqlalchemy import and_, desc, or_
+        from ....models.announcement import Announcement as AnnouncementModel
+        
+        now = datetime.utcnow()
+        
+        stmt = select(AnnouncementModel).where(
+            and_(
+                AnnouncementModel.is_active == True,
+                AnnouncementModel.deleted_at.is_(None),
+                or_(
+                    AnnouncementModel.expires_at.is_(None),
+                    AnnouncementModel.expires_at > now
+                )
+            )
+        ).order_by(desc(AnnouncementModel.created_at))
+        
+        result = await db.execute(stmt)
+        announcements = result.scalars().all()
+        
+        # Filter by role and return as dict format for compatibility
+        user_role = current_user.role.value
+        filtered_announcements = []
+        
+        for ann in announcements:
+            if ann.is_for_role(user_role):
+                filtered_announcements.append({
+                    "id": ann.id,
+                    "title": ann.title,
+                    "message": ann.message,
+                    "type": ann.type,
+                    "created_at": ann.created_at.isoformat(),
+                    "expires_at": ann.expires_at.isoformat() if ann.expires_at else None,
+                    "is_active": ann.is_active,
+                    "is_dismissible": ann.is_dismissible,
+                    "target_roles": ann.target_roles,
+                    "created_by": ann.created_by,
+                    "deleted_at": None,
+                    "_notification_id": None,
+                    "_is_notification": False,
+                    "_is_read": False,
+                    "_is_dismissed": False,
+                    "_priority": "normal"
+                })
+        
+        return filtered_announcements
+
+
+@router.post("/me/announcements/{announcement_id}/dismiss")
+async def dismiss_announcement(
+    announcement_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dismiss an announcement for the current user.
     
-    result = await db.execute(stmt)
-    announcements = result.scalars().all()
+    This endpoint maintains backward compatibility and handles both:
+    - Legacy announcements (stored in mobile app local storage)
+    - New notifications (stored in database)
+    """
+    from ....services.announcement_compatibility_service import AnnouncementCompatibilityService
     
-    # Filter by role
-    user_role = current_user.role.value
-    filtered_announcements = [
-        ann for ann in announcements 
-        if ann.is_for_role(user_role)
-    ]
-    
-    return filtered_announcements
+    try:
+        compatibility_service = AnnouncementCompatibilityService(db)
+        success = await compatibility_service.dismiss_announcement_legacy(
+            announcement_id=announcement_id,
+            user=current_user
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Announcement not found or cannot be dismissed"
+            )
+        
+        return {"message": "Announcement dismissed successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("announcement_compatibility")
+        logger.error(f"Failed to dismiss announcement {announcement_id} for user {current_user.id}: {str(e)}")
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dismiss announcement"
+        )
 
 
 async def calculate_weekly_streak(db: AsyncSession, user_id: int) -> int:

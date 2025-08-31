@@ -7,11 +7,13 @@ from typing import Generator, Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.user import User, UserRole
 from app.services.auth_service import AuthService
+from app.core.config import settings
 
 security = HTTPBearer()
 
@@ -107,3 +109,8 @@ async def get_optional_current_user(
     auth_service = AuthService(db)
     user = await auth_service.get_user_by_id(int(user_id))
     return user if user and user.is_active else None
+
+
+async def get_redis() -> redis.Redis:
+    """Get Redis connection."""
+    return redis.from_url(settings.REDIS_URL)

@@ -37,6 +37,7 @@ const StudentScheduleTab: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('schedule');
+  const [showPastClasses, setShowPastClasses] = useState(true);
   const [selectedClass, setSelectedClass] = useState<ClassInstance | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [bookingInProgressId, setBookingInProgressId] = useState<number | null>(null);
@@ -67,8 +68,8 @@ const StudentScheduleTab: React.FC = () => {
     error,
     refetch
   } = useQuery({
-    queryKey: ['student-classes', 'week', weekStart.toISOString().split('T')[0]],
-    queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0]),
+    queryKey: ['student-classes', 'week', weekStart.toISOString().split('T')[0], showPastClasses],
+    queryFn: () => classesApi.getWeekClasses(weekStart.toISOString().split('T')[0], showPastClasses),
   });
 
   // Fetch month classes for month view
@@ -137,6 +138,29 @@ const StudentScheduleTab: React.FC = () => {
   }, [userWaitlistEntries]);
 
   const activePackage = userPackages?.find(pkg => pkg.is_valid);
+
+  // Utility function to determine class timing status
+  const getClassTimingStatus = (classInstance: ClassInstance) => {
+    const now = new Date();
+    const startTime = new Date(classInstance.start_datetime);
+    const endTime = new Date(classInstance.end_datetime);
+    
+    if (now < startTime) {
+      return 'future';
+    } else if (now >= startTime && now <= endTime) {
+      return 'ongoing';
+    } else {
+      return 'past';
+    }
+  };
+
+  // Check if user participated in a past class
+  const didUserParticipate = (classInstanceId: number) => {
+    return userBookings?.some(booking => 
+      booking.class_instance_id === classInstanceId && 
+      (booking.status === 'completed' || booking.status === 'confirmed')
+    );
+  };
 
   // Filter bookings for bookings view
   const filteredBookings = useMemo(() => {
@@ -586,18 +610,25 @@ const StudentScheduleTab: React.FC = () => {
     return (
       <FlatList
         data={filteredBookings}
-        renderItem={({ item }) => (
-          <ClassCard
-            classInstance={item.class_instance}
-            booking={item}
-            variant="list"
-            onPress={() => handleBookingPress(item)}
-            onCancel={item.status === 'confirmed' ? () => handleCancelBooking(item.id) : undefined}
-            isBooked={item.status === 'confirmed'}
-            availableSpots={item.class_instance.available_spots}
-            showActions={true}
-          />
-        )}
+        renderItem={({ item }) => {
+          const timingStatus = getClassTimingStatus(item.class_instance);
+          const userParticipated = didUserParticipate(item.class_instance.id);
+          
+          return (
+            <ClassCard
+              classInstance={item.class_instance}
+              booking={item}
+              variant="list"
+              onPress={() => handleBookingPress(item)}
+              onCancel={item.status === 'confirmed' && timingStatus === 'future' ? () => handleCancelBooking(item.id) : undefined}
+              isBooked={item.status === 'confirmed'}
+              availableSpots={item.class_instance.available_spots}
+              showActions={true}
+              classTimingStatus={timingStatus}
+              didUserParticipate={userParticipated}
+            />
+          );
+        }}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -620,30 +651,47 @@ const StudentScheduleTab: React.FC = () => {
   };
 
   const renderViewModeToggle = () => (
-    <View style={[styles.viewModeContainer, rtlRow()]}>
-      {(['week', 'month'] as ViewMode[]).map((mode) => (
-        <TouchableOpacity
-          key={mode}
-          style={[styles.viewModeButton, viewMode === mode && styles.activeViewMode]}
-          onPress={() => setViewMode(mode)}
-        >
-          <Ionicons
-            name={mode === 'week' ? 'calendar' : 'grid'}
-            size={18}
-            color={viewMode === mode ? COLORS.white : COLORS.textSecondary}
-          />
-          <Text style={[styles.viewModeText, viewMode === mode && styles.activeViewModeText]}>
-            {t(`schedule.${mode}`)}
-          </Text>
-        </TouchableOpacity>
-      ))}
+    <View style={styles.viewModeAndFiltersContainer}>
+      <View style={[styles.viewModeContainer, rtlRow()]}>
+        {(['week', 'month'] as ViewMode[]).map((mode) => (
+          <TouchableOpacity
+            key={mode}
+            style={[styles.viewModeButton, viewMode === mode && styles.activeViewMode]}
+            onPress={() => setViewMode(mode)}
+          >
+            <Ionicons
+              name={mode === 'week' ? 'calendar' : 'grid'}
+              size={18}
+              color={viewMode === mode ? COLORS.white : COLORS.textSecondary}
+            />
+            <Text style={[styles.viewModeText, viewMode === mode && styles.activeViewModeText]}>
+              {t(`schedule.${mode}`)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      
+      {/* Past Classes Toggle */}
+      <TouchableOpacity 
+        style={[styles.pastToggleButton, rtlRow()]}
+        onPress={() => setShowPastClasses(!showPastClasses)}
+      >
+        <Ionicons 
+          name={showPastClasses ? "eye" : "eye-off"} 
+          size={16} 
+          color={COLORS.textSecondary} 
+        />
+        <Text style={styles.pastToggleText}>
+          {showPastClasses ? t('schedule.hidePast') : t('schedule.showPast')}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 
   const renderWeekHeader = () => (
     <View style={[styles.weekHeader, rtlRow()]}>
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('prev')}>
-        <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-forward-outline" : "chevron-back-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
       
       <View style={styles.weekInfo}>
@@ -652,7 +700,7 @@ const StudentScheduleTab: React.FC = () => {
       </View>
       
       <TouchableOpacity style={styles.navButton} onPress={() => navigateWeek('next')}>
-        <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-back-outline" : "chevron-forward-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
     </View>
   );
@@ -664,7 +712,7 @@ const StudentScheduleTab: React.FC = () => {
         newDate.setMonth(newDate.getMonth() - 1);
         setCurrentMonth(newDate);
       }}>
-        <Ionicons name="chevron-back" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-forward-outline" : "chevron-back-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
       
       <View style={styles.weekInfo}>
@@ -678,7 +726,7 @@ const StudentScheduleTab: React.FC = () => {
         newDate.setMonth(newDate.getMonth() + 1);
         setCurrentMonth(newDate);
       }}>
-        <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
+        <Ionicons name={isRTL ? "chevron-back-outline" : "chevron-forward-outline"} size={24} color={COLORS.primary} />
       </TouchableOpacity>
     </View>
   );
@@ -722,21 +770,28 @@ const StudentScheduleTab: React.FC = () => {
                     <Text style={styles.emptyDayText}>{t('schedule.noClasses')}</Text>
                   </View>
                 ) : (
-                  dayClasses.map((classInstance) => (
-                    <ClassCard
-                      key={classInstance.id}
-                      classInstance={classInstance}
-                      isBooked={bookedClassIds.has(classInstance.id)}
-                      isWaitlisted={waitlistedClassIds.has(classInstance.id)}
-                      availableSpots={classInstance.available_spots}
-                      showActions={true}
-                      hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
-                      isBookingInProgress={bookingInProgressId === classInstance.id}
-                      onPress={() => handleClassPress(classInstance)}
-                      onBook={() => handleBookClass(classInstance)}
-                      onJoinWaitlist={() => handleJoinWaitlist(classInstance)}
-                    />
-                  ))
+                  dayClasses.map((classInstance) => {
+                    const timingStatus = getClassTimingStatus(classInstance);
+                    const userParticipated = didUserParticipate(classInstance.id);
+                    
+                    return (
+                      <ClassCard
+                        key={classInstance.id}
+                        classInstance={classInstance}
+                        isBooked={bookedClassIds.has(classInstance.id)}
+                        isWaitlisted={waitlistedClassIds.has(classInstance.id)}
+                        availableSpots={classInstance.available_spots}
+                        showActions={true}
+                        hasAvailableCredits={!!activePackage && (activePackage.credits_remaining > 0 || activePackage.package.is_unlimited)}
+                        isBookingInProgress={bookingInProgressId === classInstance.id}
+                        classTimingStatus={timingStatus}
+                        didUserParticipate={userParticipated}
+                        onPress={() => handleClassPress(classInstance)}
+                        onBook={timingStatus === 'future' ? () => handleBookClass(classInstance) : undefined}
+                        onJoinWaitlist={timingStatus === 'future' ? () => handleJoinWaitlist(classInstance) : undefined}
+                      />
+                    );
+                  })
                 )}
               </View>
             </View>
@@ -772,15 +827,12 @@ const StudentScheduleTab: React.FC = () => {
 
     const getClassesForDay = (date: Date | null) => {
       if (!date) return [];
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
       return monthClasses.filter(classInstance => {
         const classDate = new Date(classInstance.start_datetime);
-        const classDay = new Date(classDate.getFullYear(), classDate.getMonth(), classDate.getDate());
         
-        // Only show classes for today and future dates
-        return classDate.toDateString() === date.toDateString() && classDay >= today;
+        // Show all classes for the given date (past, present, and future)
+        return classDate.toDateString() === date.toDateString();
       });
     };
 
@@ -981,9 +1033,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
-  viewModeContainer: {
+  viewModeAndFiltersContainer: {
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  viewModeContainer: {
     gap: SPACING.xs,
   },
   viewModeButton: {
@@ -994,6 +1049,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: COLORS.background,
     gap: SPACING.xs,
+  },
+  pastToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 6,
+    backgroundColor: COLORS.background,
+    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  pastToggleText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
   activeViewMode: {
     backgroundColor: COLORS.primary,

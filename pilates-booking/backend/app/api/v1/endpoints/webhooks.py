@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ....core.config import settings
 from ....models.payment import Payment, PaymentStatus, PaymentType
 from ....models.user import User
+from ....models.notification import NotificationType
 from ....services.stripe_service import StripeService
+from ....services.notification_routing_service import NotificationRoutingService
 from ..deps import get_db
 
 router = APIRouter()
@@ -133,7 +135,28 @@ async def handle_payment_intent_succeeded(payment_intent: dict, db: AsyncSession
 
             logger.info(f"Payment {payment.id} marked as completed via webhook")
 
-            # TODO: Send email confirmation
+            # Send multi-channel success notification
+            try:
+                routing_service = NotificationRoutingService(db)
+                await routing_service.create_and_route_notification(
+                    user_id=payment.user_id,
+                    notification_type=NotificationType.PAYMENT_PROCESSED,
+                    title="Payment Successful! 💳",
+                    body=f"Your payment of ${payment_intent.get('amount', 0) / 100:.2f} has been processed successfully.",
+                    data={
+                        "payment_id": payment.id,
+                        "amount": payment_intent.get('amount', 0) / 100,
+                        "currency": payment_intent.get('currency', 'usd').upper(),
+                        "payment_method": payment_intent.get('payment_method_types', [])[0] if payment_intent.get('payment_method_types') else 'card',
+                        "transaction_id": payment_intent.get('latest_charge'),
+                        "status": "completed",
+                        "payment_date": datetime.fromtimestamp(payment_intent["created"], tz=timezone.utc).isoformat()
+                    }
+                )
+                logger.info(f"Payment success notification sent for payment {payment.id}")
+            except Exception as e:
+                logger.error(f"Failed to send payment success notification: {e}")
+
             # TODO: Update user package credits if applicable
 
     except Exception as e:
@@ -177,7 +200,32 @@ async def handle_payment_intent_failed(payment_intent: dict, db: AsyncSession):
                 f"Payment {payment.id} marked as failed via webhook: {failure_reason}"
             )
 
-            # TODO: Send email notification about failed payment
+            # Send CRITICAL priority payment failure notification
+            try:
+                routing_service = NotificationRoutingService(db)
+                await routing_service.create_and_route_notification(
+                    user_id=payment.user_id,
+                    notification_type=NotificationType.PAYMENT_FAILED,
+                    title="Payment Failed ⚠️",
+                    body=f"Your payment of ${payment_intent.get('amount', 0) / 100:.2f} could not be processed. Please update your payment method.",
+                    data={
+                        "payment_id": payment.id,
+                        "amount": payment_intent.get('amount', 0) / 100,
+                        "currency": payment_intent.get('currency', 'usd').upper(),
+                        "failure_reason": failure_reason,
+                        "card_last4": payment_intent.get('charges', {}).get('data', [{}])[0].get('payment_method_details', {}).get('card', {}).get('last4'),
+                        "error_code": payment_intent.get('last_payment_error', {}).get('code'),
+                        "retry_payment_url": f"/payments/retry/{payment.id}",
+                        "update_card_url": "/payments/methods",
+                        "attempt_date": datetime.fromtimestamp(payment_intent["created"], tz=timezone.utc).isoformat()
+                    },
+                    # CRITICAL priority ensures email + push + in-app delivery
+                    force_channels=["email", "push", "in_app"]
+                )
+                logger.info(f"CRITICAL payment failure notification sent for payment {payment.id}")
+            except Exception as e:
+                logger.error(f"Failed to send payment failure notification: {e}")
+
             # TODO: Handle retry logic if applicable
 
     except Exception as e:
@@ -243,8 +291,31 @@ async def handle_invoice_payment_failed(invoice: dict, db: AsyncSession):
             if user:
                 logger.warning(f"Subscription payment failed for user {user.id}")
 
+                # Send CRITICAL subscription payment failure notification
+                try:
+                    routing_service = NotificationRoutingService(db)
+                    await routing_service.create_and_route_notification(
+                        user_id=user.id,
+                        notification_type=NotificationType.PAYMENT_FAILED,
+                        title="Subscription Payment Failed ⚠️",
+                        body="Your monthly subscription payment failed. Please update your payment method to continue your unlimited access.",
+                        data={
+                            "subscription_id": subscription_id,
+                            "amount": invoice.get('amount_due', 0) / 100,
+                            "currency": invoice.get('currency', 'usd').upper(),
+                            "failure_reason": "Subscription payment failed",
+                            "payment_type": "subscription",
+                            "retry_payment_url": "/subscriptions/billing",
+                            "update_card_url": "/payments/methods",
+                            "next_attempt": invoice.get('next_payment_attempt')
+                        },
+                        force_channels=["email", "push", "in_app"]
+                    )
+                    logger.info(f"CRITICAL subscription failure notification sent for user {user.id}")
+                except Exception as e:
+                    logger.error(f"Failed to send subscription failure notification: {e}")
+
                 # TODO: Implement dunning management
-                # TODO: Send email notification about failed payment
                 # TODO: Possibly suspend unlimited access after grace period
 
     except Exception as e:

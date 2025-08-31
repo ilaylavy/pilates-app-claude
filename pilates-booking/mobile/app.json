@@ -10,7 +10,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.pilatesbooking",
+      "bundleIdentifier": "com.ilays_apps.pilatesbooking",
       "infoPlist": {
         "CFBundleLocalizations": [
           "en",
@@ -20,19 +20,28 @@
       }
     },
     "android": {
-      "package": "com.yourcompany.pilatesbooking",
+      "package": "com.ilays_apps.pilatesbooking",
       "allowBackup": true,
       "supportsRtl": true,
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
-      ]
+      ],
+      "googleServicesFile": "./android/app/google-services.json"
     },
     "web": {},
     "plugins": [
       "expo-secure-store",
       "expo-local-authentication",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "scheme": "pilates",
     "experiments": {
@@ -41,6 +50,11 @@
     "extra": {
       "eas": {
         "projectId": "ac738aaf-0f9c-4512-aa87-9f26071bfbbc"
+      },
+      "firebase": {
+        "projectId": "pilates-app-98b07",
+        "appId": "1:581407140324:android:b0d1a9741ee99d34efbff1",
+        "messagingSenderId": "581407140324"
       }
     },
     "owner": "ilaylavy"

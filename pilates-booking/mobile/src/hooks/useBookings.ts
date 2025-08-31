@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bookingsApi, BookingResult, CancellationResult, BookingStatus, WaitlistJoinResult, WaitlistLeaveResult } from '../api/bookings';
 import { Booking, WaitlistEntry } from '../types';
+import { NOTIFICATION_QUERY_KEYS } from './useNotifications';
+import { Logger } from '../services/LoggingService';
+import { useTranslation } from './useTranslation';
 
 // Query keys
 export const bookingKeys = {
@@ -80,6 +83,28 @@ export const useBookClass = () => {
         queryClient.invalidateQueries({ queryKey: bookingKeys.lists() });
         queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
         queryClient.invalidateQueries({ queryKey: ['userPackages'] });
+        
+        // Trigger notification refresh after successful booking (immediate for now)
+        // Note: Backend should eventually create these notifications automatically
+        queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.notifications });
+        queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.unreadCount });
+        
+        // Force immediate refetch to show any backend-created notifications
+        setTimeout(() => {
+          queryClient.refetchQueries({ queryKey: NOTIFICATION_QUERY_KEYS.notifications });
+        }, 1000); // 1 second delay to allow backend processing
+        
+        Logger.info('Booking successful - notifications will be refreshed', {
+          bookingId: data.booking.id,
+          classId,
+          status: data.booking.status
+        });
+        
+        Logger.trackEvent('booking.success_notification_trigger', {
+          bookingId: data.booking.id,
+          classId,
+          isNewBooking: data.booking.is_new_booking !== false
+        });
       }
     },
   });
@@ -111,18 +136,40 @@ export const useCancelBooking = () => {
         queryClient.setQueryData(bookingsQuery, context.previousBookings);
       }
     },
-    onSuccess: (data: CancellationResult, variables) => {
+    onSuccess: (data: Booking, variables) => {
       // Invalidate and refetch all related queries
       queryClient.invalidateQueries({ queryKey: bookingKeys.all });
       queryClient.invalidateQueries({ queryKey: ['packages', 'balance'] });
       queryClient.invalidateQueries({ queryKey: ['userPackages'] });
 
       // Update booking status if we know the class ID
-      if (data.booking?.class_instance_id) {
+      if (data.class_instance_id) {
         queryClient.invalidateQueries({ 
-          queryKey: bookingKeys.status(data.booking.class_instance_id) 
+          queryKey: bookingKeys.status(data.class_instance_id) 
         });
       }
+      
+      // Trigger notification refresh after successful cancellation (immediate for now)
+      // Note: Backend should eventually create these notifications automatically  
+      queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.notifications });
+      queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.unreadCount });
+      
+      // Force immediate refetch to show any backend-created notifications
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: NOTIFICATION_QUERY_KEYS.notifications });
+      }, 1000); // 1 second delay to allow backend processing
+      
+      Logger.info('Booking cancelled - notifications will be refreshed', {
+        bookingId: variables.bookingId,
+        classId: data.class_instance_id,
+        reason: variables.reason
+      });
+      
+      Logger.trackEvent('booking.cancellation_notification_trigger', {
+        bookingId: variables.bookingId,
+        classId: data.class_instance_id,
+        hadReason: !!variables.reason
+      });
     },
   });
 };
@@ -150,17 +197,35 @@ export const useJoinWaitlist = () => {
       }
     },
     onSuccess: (data: WaitlistJoinResult, classId) => {
-      // Update booking status with real data
-      queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), (old) => ({
-        ...old,
-        has_booking: false,
-        on_waitlist: true,
-        waitlist_entry: data.waitlist_entry,
-        waitlist_position: data.position,
-      } as BookingStatus));
+      if (data.success && data.waitlist_entry) {
+        // Update booking status with real data
+        queryClient.setQueryData<BookingStatus>(bookingKeys.status(classId), (old) => ({
+          ...old,
+          has_booking: false,
+          on_waitlist: true,
+          waitlist_entry: data.waitlist_entry,
+          waitlist_position: data.position,
+        } as BookingStatus));
 
-      // Invalidate waitlist queries
-      queryClient.invalidateQueries({ queryKey: bookingKeys.waitlist() });
+        // Invalidate waitlist queries
+        queryClient.invalidateQueries({ queryKey: bookingKeys.waitlist() });
+        
+        // Trigger notification refresh after joining waitlist
+        queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.notifications });
+        queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEYS.unreadCount });
+        
+        Logger.info('Joined waitlist - notifications will be refreshed', {
+          waitlistId: data.waitlist_entry.id,
+          classId,
+          position: data.position
+        });
+        
+        Logger.trackEvent('waitlist.join_notification_trigger', {
+          waitlistId: data.waitlist_entry.id,
+          classId,
+          position: data.position
+        });
+      }
     },
   });
 };

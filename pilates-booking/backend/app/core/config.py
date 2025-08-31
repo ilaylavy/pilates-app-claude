@@ -1,6 +1,7 @@
 import secrets
 import os
 import sys
+from pathlib import Path
 from typing import List, Optional, Union
 from functools import cached_property
 
@@ -63,6 +64,28 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_CURRENCY: str = "ils"  # Israeli Shekel
     STRIPE_MONTHLY_SUBSCRIPTION_PRICE_ID: str = ""
+    
+    # SendGrid Email Configuration
+    SENDGRID_API_KEY: Optional[str] = None
+    SENDGRID_FROM_EMAIL: str = "noreply@pilates-studio.com"
+    SENDGRID_FROM_NAME: str = "Pilates Studio"
+    SENDGRID_ENABLED: bool = False
+    EMAIL_DAILY_QUOTA: int = 100
+    
+    # Studio Configuration
+    STUDIO_NAME: str = "Pilates Studio"
+    FRONTEND_URL: str = "https://pilates-studio.com"
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
+    
+    # Firebase FCM Configuration (for push notifications) - Modern Admin SDK
+    FIREBASE_PROJECT_ID: Optional[str] = None
+    FIREBASE_SERVICE_ACCOUNT_KEY: Optional[str] = None  # JSON string or file path
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None  # Path to service account JSON
+    
+    # Development email testing
+    USE_MAILHOG: bool = False
+    MAILHOG_HOST: str = "localhost"
+    MAILHOG_PORT: int = 1025
 
 
     @cached_property

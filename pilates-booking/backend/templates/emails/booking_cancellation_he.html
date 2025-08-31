@@ -1,0 +1,86 @@
+{% extends "base_he.html" %}
+
+{% block content %}
+<div style="background-color: #FEF3C7; border: 1px solid #F59E0B; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400E;">
+        <strong>📅 ביטול אושר</strong><br>
+        הזמנת השיעור שלך בוטלה בהצלחה.
+    </p>
+</div>
+
+<div class="info-box">
+    <h3>📋 פרטי ההזמנה המבוטלת</h3>
+    
+    {% if notification.data.class_name %}
+    <div class="info-row">
+        <span class="info-label">שיעור:</span>
+        <span class="info-value">{{ notification.data.class_name }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.class_date %}
+    <div class="info-row">
+        <span class="info-label">תאריך:</span>
+        <span class="info-value">{{ notification.data.class_date }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.class_time %}
+    <div class="info-row">
+        <span class="info-label">שעה:</span>
+        <span class="info-value">{{ notification.data.class_time }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.booking_id %}
+    <div class="info-row">
+        <span class="info-label">מספר הזמנה:</span>
+        <span class="info-value">#{{ notification.data.booking_id }}</span>
+    </div>
+    {% endif %}
+    
+    {% if notification.data.cancelled_at %}
+    <div class="info-row">
+        <span class="info-label">בוטל ב:</span>
+        <span class="info-value">{{ notification.data.cancelled_at }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if notification.data.credit_refunded %}
+<div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #065F46;">
+        <strong>💰 זיכוי הוחזר</strong><br>
+        {% if notification.data.refund_amount %}
+        {{ notification.data.refund_amount }} זיכוי הוחזר לחשבון שלך.
+        {% else %}
+        זיכוי לשיעור אחד הוחזר לחשבון שלך.
+        {% endif %}
+        את יכולה להשתמש בזיכוי הזה להזמנת שיעור אחר.
+    </p>
+</div>
+{% else %}
+<div style="background-color: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991B1B;">
+        <strong>⚠️ אין החזר</strong><br>
+        הביטול הזה בוצע בתוך חלון 24 השעות, לכן אין זיכוי זמין להחזר.
+        נא לעיין במדיניות הביטול שלנו להזמנות עתידיות.
+    </p>
+</div>
+{% endif %}
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ notification.data.book_new_class_url or '#' }}" class="button">
+        הזמיני שיעור אחר
+    </a>
+    <a href="{{ notification.data.view_schedule_url or '#' }}" class="button button-secondary">
+        צפי בלוח זמנים
+    </a>
+</div>
+
+<p style="font-size: 14px; color: #6B7280; margin-top: 20px;">
+    <strong>שאלות על מדיניות הביטול?</strong> צרי קשר עם צוות התמיכה שלנו למידע נוסף.
+    אנחנו מבינים שהחיים קורים ואנחנו כאן לעזור!
+</p>
+
+{% endblock %}

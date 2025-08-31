@@ -130,7 +130,15 @@ class I18nManager {
   }
 
   translate(key: string, options?: object): string {
-    return this.i18n.t(key, options);
+    const result = this.i18n.t(key, options);
+    
+    // Ensure we always return a string, never an object
+    if (typeof result === 'object') {
+      console.warn(`Translation key '${key}' returned an object instead of a string:`, result);
+      return key; // Return the key as fallback
+    }
+    
+    return result;
   }
 
   formatDate(date: Date): string {

@@ -71,6 +71,21 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+    # Notification features
+    notifications = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan",
+        foreign_keys="Notification.user_id"
+    )
+    notification_reads = relationship(
+        "NotificationRead", back_populates="user", cascade="all, delete-orphan"
+    )
+    notification_preferences = relationship(
+        "NotificationPreference", back_populates="user", cascade="all, delete-orphan"
+    )
+    device_tokens = relationship(
+        "DeviceToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"

@@ -14,6 +14,7 @@ import { COLORS, SPACING } from '../utils/config';
 import { useAuth } from '../hooks/useAuth';
 import { useUserRole } from '../hooks/useUserRole';
 import { useTranslation } from '../hooks/useTranslation';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { StyleUtils } from '../utils/styleUtils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -34,6 +35,7 @@ const SettingsScreen: React.FC = () => {
   const { isAdmin } = useUserRole();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
+  const pushNotifications = usePushNotifications();
 
   // Fetch user preferences
   const { data: preferences, isLoading } = useQuery<UserPreferences>({
@@ -97,6 +99,13 @@ const SettingsScreen: React.FC = () => {
       title: t('settings.smsNotifications'),
       subtitle: t('settings.smsNotificationsSubtitle'),
       icon: 'chatbubble',
+      type: 'switch' as const,
+    },
+    {
+      key: 'push_notifications',
+      title: t('settings.pushNotifications'),
+      subtitle: t('settings.pushNotificationsSubtitle'),
+      icon: 'notifications',
       type: 'switch' as const,
     },
     {
@@ -280,8 +289,11 @@ const SettingsScreen: React.FC = () => {
       );
     }
 
+
     const isSwitch = item.type === 'switch';
-    const value = preferences?.[item.key as keyof UserPreferences] ?? false;
+    const value = item.key === 'push_notifications' 
+      ? pushNotifications.isEnabled 
+      : preferences?.[item.key as keyof UserPreferences] ?? false;
 
     return (
       <TouchableOpacity
@@ -301,9 +313,28 @@ const SettingsScreen: React.FC = () => {
           {isSwitch ? (
             <Switch
               value={value}
-              onValueChange={(newValue) => 
-                handlePreferenceChange(item.key as keyof UserPreferences, newValue)
-              }
+              onValueChange={(newValue) => {
+                if (item.key === 'push_notifications') {
+                  if (newValue) {
+                    pushNotifications.initializePushNotifications();
+                  } else {
+                    Alert.alert(
+                      t('settings.pushNotifications'),
+                      t('settings.disablePushMessage'),
+                      [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        { 
+                          text: t('settings.disable'), 
+                          style: 'destructive',
+                          onPress: pushNotifications.deregisterPushNotifications
+                        }
+                      ]
+                    );
+                  }
+                } else {
+                  handlePreferenceChange(item.key as keyof UserPreferences, newValue);
+                }
+              }}
               trackColor={{ false: COLORS.border, true: COLORS.primary }}
               thumbColor={COLORS.background}
               disabled={updatePreferencesMutation.isPending}

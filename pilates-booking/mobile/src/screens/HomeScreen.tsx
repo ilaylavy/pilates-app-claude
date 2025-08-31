@@ -539,6 +539,7 @@ const HomeScreen: React.FC = () => {
               setDetailsModalVisible(false);
               setSelectedClass(null);
             }}
+            showAdminActions={false}
             onBookingSuccess={(booking, classInstance) => {
               setCompletedBooking(booking);
               setBookedClassInstance(classInstance);

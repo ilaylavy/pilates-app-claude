@@ -14,12 +14,15 @@ from ..models.class_schedule import ClassInstance
 from ..models.package import UserPackage
 from ..models.user import User
 from ..services.business_logging_service import business_logger
+from ..services.notification_routing_service import NotificationRoutingService
+from ..models.notification import NotificationType
 
 
 class BookingService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.logger = get_logger("app.booking")
+        self.notification_routing = NotificationRoutingService(db)
 
     async def create_booking(
         self, user: User, class_instance_id: int, user_package_id: Optional[int] = None
@@ -207,6 +210,38 @@ class BookingService:
                     status=BookingStatus.CONFIRMED.value,
                 )
 
+                # Create multi-channel booking success notification
+                try:
+                    class_name = booking.class_instance.template.name if booking.class_instance and booking.class_instance.template else "Class"
+                    class_date = booking.class_instance.start_datetime.strftime('%Y-%m-%d') if booking.class_instance else None
+                    class_time = booking.class_instance.start_datetime.strftime('%H:%M') if booking.class_instance else None
+                    instructor_name = booking.class_instance.instructor.full_name if booking.class_instance and booking.class_instance.instructor else None
+                    
+                    routing_result = await self.notification_routing.create_and_route_notification(
+                        user_id=user.id,
+                        notification_type=NotificationType.BOOKING_SUCCESS,
+                        title="Booking Confirmed! 🎉",
+                        body=f"Your booking for {class_name} has been confirmed. See you in class!",
+                        data={
+                            "booking_id": booking.id,
+                            "class_instance_id": class_instance_id,
+                            "class_name": class_name,
+                            "class_date": class_date,
+                            "class_time": class_time,
+                            "instructor_name": instructor_name,
+                            "status": "confirmed",
+                            "action_url": f"/classes/{class_instance_id}",
+                            "calendar_url": f"/calendar/add/{booking.id}"
+                        },
+                        language=user.preferences.get('language', 'en') if user.preferences else 'en'
+                    )
+                    
+                    self.logger.info(f"Multi-channel booking notification sent to user {user.id}: "
+                                   f"channels={routing_result.channels_successful}, delivered={routing_result.total_delivered}")
+                except Exception as e:
+                    # Don't fail the booking if notification fails
+                    self.logger.error(f"Failed to send booking notification: {e}")
+
                 return booking
 
             else:
@@ -298,6 +333,41 @@ class BookingService:
         # Promote from waitlist if auto-promotion is enabled
         if settings.WAITLIST_AUTO_PROMOTION:
             await self._promote_from_waitlist(booking.class_instance_id)
+
+        # Create multi-channel booking cancellation notification
+        try:
+            class_name = booking.class_instance.template.name if booking.class_instance and booking.class_instance.template else "Class"
+            class_date = booking.class_instance.start_datetime.strftime('%Y-%m-%d') if booking.class_instance else None
+            class_time = booking.class_instance.start_datetime.strftime('%H:%M') if booking.class_instance else None
+            credit_refunded = reason != CancellationReason.LATE_CANCELLATION
+            
+            routing_result = await self.notification_routing.create_and_route_notification(
+                user_id=booking.user_id,
+                notification_type=NotificationType.BOOKING_CANCELLED,
+                title="Booking Cancelled 📅",
+                body=f"Your booking for {class_name} has been cancelled." + 
+                     (" Your credit has been refunded." if credit_refunded else " No refund due to late cancellation."),
+                data={
+                    "booking_id": booking.id,
+                    "class_instance_id": booking.class_instance_id,
+                    "class_name": class_name,
+                    "class_date": class_date,
+                    "class_time": class_time,
+                    "status": "cancelled",
+                    "reason": reason.value if reason else "user_request",
+                    "credit_refunded": credit_refunded,
+                    "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                    "book_new_class_url": "/classes",
+                    "view_schedule_url": "/bookings"
+                },
+                language=booking.user.preferences.get('language', 'en') if booking.user.preferences else 'en'
+            )
+            
+            self.logger.info(f"Multi-channel cancellation notification sent to user {booking.user_id}: "
+                           f"channels={routing_result.channels_successful}, delivered={routing_result.total_delivered}")
+        except Exception as e:
+            # Don't fail the cancellation if notification fails
+            self.logger.error(f"Failed to send cancellation notification: {e}")
 
         return booking
 

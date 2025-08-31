@@ -51,8 +51,8 @@ export const classesApi = {
     return response.data;
   },
 
-  getWeekClasses: async (weekDate: string): Promise<ClassInstance[]> => {
-    const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/week/${weekDate}`);
+  getWeekClasses: async (weekDate: string, includePast: boolean = true): Promise<ClassInstance[]> => {
+    const response = await apiClient.get<ClassInstance[]>(`/api/v1/classes/week/${weekDate}?include_past=${includePast}`);
     return response.data;
   },
 
